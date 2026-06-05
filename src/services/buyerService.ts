@@ -65,9 +65,9 @@ export class BuyerService {
   async createBuyer(input: CreateBuyerInput) {
     const { email, phoneNumber } = input;
 
-    if (!phoneNumber) {
-      throw new Error('Phone number is required');
-    }
+    // if (!phoneNumber) {
+    //   throw new Error('Phone number is required');
+    // }
     if (!email) {
       throw new Error('Email is required');
     }
@@ -79,12 +79,12 @@ export class BuyerService {
       throw new Error('Buyer with provided email already exists');
     }
     // Also check if nin already exists
-    const existingNin = await prisma.buyer.findFirst({
-      where: { nin: input.nin },
-    });
-    if (existingNin) {
-      throw new Error('Nin already exists for another buyer');
-    }
+    // const existingNin = await prisma.buyer.findFirst({
+    //   where: { nin: input.nin },
+    // });
+    // if (existingNin) {
+    //   throw new Error('Nin already exists for another buyer');
+    // }
 
     const newUser = await authService.create({
       email: input.email,
