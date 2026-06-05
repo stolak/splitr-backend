@@ -22,7 +22,7 @@ const router = Router();
  *         id:
  *           type: string
  *           format: uuid
- *         liftpayId:
+ *         splitrId:
  *           type: string
  *         credit:
  *           type: number
@@ -350,19 +350,19 @@ router.get("/:id", authenticateJWT, revenueController.getRevenueById);
 
 /**
  * @swagger
- * /api/v1/revenues/liftpay/{liftpayId}:
+ * /api/v1/revenues/splitr/{splitrId}:
  *   get:
- *     summary: Get revenue by LiftPay ID
+ *     summary: Get revenue by splitr ID
  *     tags: [Revenue]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: liftpayId
+ *         name: splitrId
  *         required: true
  *         schema:
  *           type: string
- *         description: LiftPay ID
+ *         description: splitr ID
  *     responses:
  *       200:
  *         description: Revenue record retrieved successfully
@@ -382,9 +382,9 @@ router.get("/:id", authenticateJWT, revenueController.getRevenueById);
  *         description: Internal server error
  */
 router.get(
-  "/liftpay/:liftpayId",
+  "/splitr/:splitrId",
   authenticateJWT,
-  revenueController.getRevenueByLiftpayId
+  revenueController.getRevenueBysplitrId
 );
 
 /**

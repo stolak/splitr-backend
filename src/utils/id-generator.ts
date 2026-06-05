@@ -1,11 +1,11 @@
 /**
- * LiftPay Naming Convention Policy v2.0
+ * splitr Naming Convention Policy v2.0
  * Issued by: EF Technologies Ltd
- * Product: LiftPay BNPL Platform
+ * Product: splitr BNPL Platform
  * Effective: October 2025
  */
 
-type LiftPayPrefix =
+type splitrPrefix =
   | "LPM" // Merchant
   | "LPB" // Buyer
   | "LPL" // Loan
@@ -20,8 +20,8 @@ type LiftPayPrefix =
   | "LPF" // Feedback/Survey
   | "LPA"; // Audit/Compliance
 
-interface LiftPayIdOptions {
-  prefix: LiftPayPrefix;
+interface splitrIdOptions {
+  prefix: splitrPrefix;
   environment?: "PROD" | "STG" | "DEV";
 }
 
@@ -32,10 +32,10 @@ interface LiftPayIdOptions {
 const sequenceTracker: Record<string, number> = {};
 
 /**
- * Generate standardized LiftPay ID.
+ * Generate standardized splitr ID.
  * @param options {prefix, environment}
  */
-export function generateLiftPayId(options: LiftPayIdOptions): string {
+export function generatesplitrId(options: splitrIdOptions): string {
   const { prefix, environment = "PROD" } = options;
 
   // 1️⃣ Extract current year & month
@@ -72,52 +72,52 @@ export function generateLiftPayId(options: LiftPayIdOptions): string {
 
 // Merchant
 export const generateMerchantId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPM", environment: env });
+  generatesplitrId({ prefix: "LPM", environment: env });
 
 // Buyer
 export const generateBuyerId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPB", environment: env });
+  generatesplitrId({ prefix: "LPB", environment: env });
 
 // Loan
 export const generateLoanId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPL", environment: env });
+  generatesplitrId({ prefix: "LPL", environment: env });
 
 // Payment
 export const generatePaymentId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPP", environment: env });
+  generatesplitrId({ prefix: "LPP", environment: env });
 
 // Invoice
 export const generateInvoiceId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPI", environment: env });
+  generatesplitrId({ prefix: "LPI", environment: env });
 
 // Settlement
 export const generateSettlementId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPS", environment: env });
+  generatesplitrId({ prefix: "LPS", environment: env });
 
 // Ticket/Dispute
 export const generateTicketId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPT", environment: env });
+  generatesplitrId({ prefix: "LPT", environment: env });
 
 // Credit / Insurance
 export const generateCreditId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPC", environment: env });
+  generatesplitrId({ prefix: "LPC", environment: env });
 
 // Device Fingerprint
 export const generateDeviceId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPD", environment: env });
+  generatesplitrId({ prefix: "LPD", environment: env });
 
 // Notification
 export const generateNotificationId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPN", environment: env });
+  generatesplitrId({ prefix: "LPN", environment: env });
 
 // Promo / Referral
 export const generateReferralId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPX", environment: env });
+  generatesplitrId({ prefix: "LPX", environment: env });
 
 // Feedback / Survey
 export const generateFeedbackId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPF", environment: env });
+  generatesplitrId({ prefix: "LPF", environment: env });
 
 // Audit / Compliance
 export const generateAuditId = (env?: "PROD" | "STG" | "DEV") =>
-  generateLiftPayId({ prefix: "LPA", environment: env });
+  generatesplitrId({ prefix: "LPA", environment: env });

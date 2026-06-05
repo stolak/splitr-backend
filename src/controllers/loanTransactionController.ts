@@ -87,13 +87,13 @@ export const loanTransactionController = {
   },
 
   /**
-   * Get loan transaction by liftpayId
+   * Get loan transaction by splitrId
    */
-  async getLoanTransactionByLiftpayId(req: Request, res: Response) {
+  async getLoanTransactionBysplitrId(req: Request, res: Response) {
     try {
-      const { liftpayId } = req.params;
+      const { splitrId } = req.params;
 
-      const result = await loanService.getLoanTransactionByLiftpayId(liftpayId);
+      const result = await loanService.getLoanTransactionBysplitrId(splitrId);
 
       if (!result.success) {
         return res.status(404).json(result);

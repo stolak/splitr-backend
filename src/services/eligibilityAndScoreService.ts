@@ -113,7 +113,7 @@ export class EligibilityAndScoreService {
         buyer: {
           select: {
             id: true,
-            liftpayId: true,
+            splitrId: true,
             firstName: true,
             lastName: true,
             email: true,
@@ -144,7 +144,7 @@ export class EligibilityAndScoreService {
         buyer: {
           select: {
             id: true,
-            liftpayId: true,
+            splitrId: true,
             firstName: true,
             lastName: true,
             email: true,
@@ -181,7 +181,7 @@ export class EligibilityAndScoreService {
         buyer: {
           select: {
             id: true,
-            liftpayId: true,
+            splitrId: true,
             firstName: true,
             lastName: true,
             email: true,
@@ -220,7 +220,7 @@ export class EligibilityAndScoreService {
         buyer: {
           select: {
             id: true,
-            liftpayId: true,
+            splitrId: true,
             firstName: true,
             lastName: true,
             email: true,

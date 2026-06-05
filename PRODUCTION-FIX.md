@@ -73,9 +73,9 @@ npm run build
 ls -la dist/templates/emailTemplates/
 
 # 5. Restart your application
-pm2 restart liftpay-api
+pm2 restart splitr-api
 # or
-sudo systemctl restart liftpay
+sudo systemctl restart splitr
 # or
 node dist/server.js
 ```
@@ -188,10 +188,10 @@ curl -X POST http://localhost:5000/api/v1/email/test
 
 ```bash
 # After deployment, test email functionality
-curl -X POST https://api.liftpay.co/api/v1/email/test
+curl -X POST https://api.splitr.co/api/v1/email/test
 
 # Check application logs
-pm2 logs liftpay-api --lines 50
+pm2 logs splitr-api --lines 50
 ```
 
 ## 📦 What Gets Copied

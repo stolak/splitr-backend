@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
-import { liftpayIdService } from "../services/liftpayIdService";
+import { splitrIdService } from "../services/splitrIdService";
 
 /**
  * @openapi
- * /api/v1/liftpay-id/generate:
+ * /api/v1/splitr-id/generate:
  *   post:
- *     summary: Generate a new LiftPay ID
- *     tags: [LiftPay ID]
+ *     summary: Generate a new splitr ID
+ *     tags: [splitr ID]
  *     requestBody:
  *       required: true
  *       content:
@@ -24,7 +24,7 @@ import { liftpayIdService } from "../services/liftpayIdService";
  *                 maxLength: 10
  *     responses:
  *       200:
- *         description: LiftPay ID generated successfully
+ *         description: splitr ID generated successfully
  *         content:
  *           application/json:
  *             schema:
@@ -37,17 +37,17 @@ import { liftpayIdService } from "../services/liftpayIdService";
  *                 data:
  *                   type: object
  *                   properties:
- *                     liftpayId:
+ *                     splitrId:
  *                       type: string
- *                       description: Generated LiftPay ID
+ *                       description: Generated splitr ID
  *                       example: "LPM-2510-100001"
  *       400:
  *         description: Invalid prefix or generation failed
  *       500:
  *         description: Server error
  */
-export const liftpayIdController = {
-  generateLiftPayId: async (req: Request, res: Response) => {
+export const splitrIdController = {
+  generatesplitrId: async (req: Request, res: Response) => {
     try {
       const { prefix } = req.body;
 
@@ -58,24 +58,24 @@ export const liftpayIdController = {
         });
       }
 
-      const result = await liftpayIdService.generateLiftPayId(prefix);
+      const result = await splitrIdService.generatesplitrId(prefix);
 
       if (!result.success) {
         return res.status(400).json({
           success: false,
-          message: result.error || "Failed to generate LiftPay ID",
+          message: result.error || "Failed to generate splitr ID",
         });
       }
 
       res.json({
         success: true,
-        message: "LiftPay ID generated successfully",
+        message: "splitr ID generated successfully",
         data: {
-          liftpayId: result.liftpayId,
+          splitrId: result.splitrId,
         },
       });
     } catch (error: any) {
-      console.error("Error in generateLiftPayId:", error);
+      console.error("Error in generatesplitrId:", error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -86,10 +86,10 @@ export const liftpayIdController = {
 
   /**
    * @openapi
-   * /api/v1/liftpay-id/validate:
+   * /api/v1/splitr-id/validate:
    *   post:
-   *     summary: Validate a LiftPay ID format
-   *     tags: [LiftPay ID]
+   *     summary: Validate a splitr ID format
+   *     tags: [splitr ID]
    *     requestBody:
    *       required: true
    *       content:
@@ -97,11 +97,11 @@ export const liftpayIdController = {
    *           schema:
    *             type: object
    *             required:
-   *               - liftpayId
+   *               - splitrId
    *             properties:
-   *               liftpayId:
+   *               splitrId:
    *                 type: string
-   *                 description: LiftPay ID to validate
+   *                 description: splitr ID to validate
    *                 example: "LPM-2510-100001"
    *     responses:
    *       200:
@@ -134,32 +134,32 @@ export const liftpayIdController = {
    *       500:
    *         description: Server error
    */
-  validateLiftPayId: async (req: Request, res: Response) => {
+  validatesplitrId: async (req: Request, res: Response) => {
     try {
-      const { liftpayId } = req.body;
+      const { splitrId } = req.body;
 
-      if (!liftpayId) {
+      if (!splitrId) {
         return res.status(400).json({
           success: false,
-          message: "LiftPay ID is required",
+          message: "splitr ID is required",
         });
       }
 
-      const isValid = liftpayIdService.validateLiftPayId(liftpayId);
+      const isValid = splitrIdService.validatesplitrId(splitrId);
       const parsed = isValid
-        ? liftpayIdService.parseLiftPayId(liftpayId)
+        ? splitrIdService.parsesplitrId(splitrId)
         : null;
 
       res.json({
         success: true,
-        message: isValid ? "LiftPay ID is valid" : "LiftPay ID is invalid",
+        message: isValid ? "splitr ID is valid" : "splitr ID is invalid",
         data: {
           isValid,
           parsed,
         },
       });
     } catch (error: any) {
-      console.error("Error in validateLiftPayId:", error);
+      console.error("Error in validatesplitrId:", error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -170,10 +170,10 @@ export const liftpayIdController = {
 
   /**
    * @openapi
-   * /api/v1/liftpay-id/sequences/{prefix}:
+   * /api/v1/splitr-id/sequences/{prefix}:
    *   get:
    *     summary: Get sequences for a specific prefix
-   *     tags: [LiftPay ID]
+   *     tags: [splitr ID]
    *     parameters:
    *       - in: path
    *         name: prefix
@@ -224,7 +224,7 @@ export const liftpayIdController = {
         });
       }
 
-      const sequences = await liftpayIdService.getSequencesForPrefix(prefix);
+      const sequences = await splitrIdService.getSequencesForPrefix(prefix);
 
       res.json({
         success: true,
@@ -246,10 +246,10 @@ export const liftpayIdController = {
 
   /**
    * @openapi
-   * /api/v1/liftpay-id/statistics:
+   * /api/v1/splitr-id/statistics:
    *   get:
-   *     summary: Get LiftPay ID generation statistics
-   *     tags: [LiftPay ID]
+   *     summary: Get splitr ID generation statistics
+   *     tags: [splitr ID]
    *     responses:
    *       200:
    *         description: Statistics retrieved successfully
@@ -283,7 +283,7 @@ export const liftpayIdController = {
    */
   getStatistics: async (req: Request, res: Response) => {
     try {
-      const statistics = await liftpayIdService.getStatistics();
+      const statistics = await splitrIdService.getStatistics();
 
       res.json({
         success: true,
@@ -302,10 +302,10 @@ export const liftpayIdController = {
 
   /**
    * @openapi
-   * /api/v1/liftpay-id/health:
+   * /api/v1/splitr-id/health:
    *   get:
-   *     summary: Check LiftPay ID service health
-   *     tags: [LiftPay ID]
+   *     summary: Check splitr ID service health
+   *     tags: [splitr ID]
    *     responses:
    *       200:
    *         description: Service is healthy
@@ -326,11 +326,11 @@ export const liftpayIdController = {
     try {
       res.json({
         success: true,
-        message: "LiftPay ID service is running",
+        message: "splitr ID service is running",
         timestamp: new Date().toISOString(),
       });
     } catch (error: any) {
-      console.error("Error in LiftPay ID health check:", error);
+      console.error("Error in splitr ID health check:", error);
       res.status(500).json({
         success: false,
         message: "Service unavailable",

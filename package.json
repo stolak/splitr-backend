@@ -13,8 +13,8 @@
     "create-tables": "node scripts/create-tables.js",
     "migrate": "npx prisma migrate",
     "migrate:init": "npx prisma migrate dev --name init",
-    "liftpay:ids": "node scripts/setup-liftpay-simple.js",
-    "test-liftpay-ids": "node scripts/test-liftpay-ids.js",
+    "splitr:ids": "node scripts/setup-splitr-simple.js",
+    "test-splitr-ids": "node scripts/test-splitr-ids.js",
     "test-validate-account": "node scripts/test-validate-and-create-account.js",
     "db:reset": "npx prisma migrate reset",
     "generate": "npx prisma generate"

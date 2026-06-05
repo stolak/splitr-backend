@@ -76,7 +76,7 @@ async function testValidateAndCreateAccount() {
       where: { id: buyerId },
       select: {
         id: true,
-        liftpayId: true,
+        splitrId: true,
         firstName: true,
         lastName: true,
         email: true,
@@ -89,7 +89,7 @@ async function testValidateAndCreateAccount() {
     } else {
       console.log(`   ✅ Buyer found: ${buyer.firstName || ''} ${buyer.lastName || ''}`.trim());
       console.log(`      ID: ${buyer.id}`);
-      console.log(`      LiftPay ID: ${buyer.liftpayId}`);
+      console.log(`      splitr ID: ${buyer.splitrId}`);
       console.log(`      Email: ${buyer.email}`);
     }
     console.log('');

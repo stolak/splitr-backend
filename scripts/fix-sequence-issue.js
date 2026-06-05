@@ -7,7 +7,7 @@ async function fixSequenceIssue() {
   let connection;
   
   try {
-    console.log('🔍 Diagnosing LiftPay ID sequence issue...\n');
+    console.log('🔍 Diagnosing splitr ID sequence issue...\n');
 
     // Get database connection details from Prisma
     const databaseUrl = process.env.DATABASE_URL;
@@ -32,7 +32,7 @@ async function fixSequenceIssue() {
     // Check current sequences
     console.log('📊 Current sequence table:');
     const [sequences] = await connection.execute(`
-      SELECT prefix, \`year_month\`, seq FROM liftpay_sequence ORDER BY prefix, \`year_month\`
+      SELECT prefix, \`year_month\`, seq FROM splitr_sequence ORDER BY prefix, \`year_month\`
     `);
     
     if (sequences.length > 0) {
@@ -43,67 +43,67 @@ async function fixSequenceIssue() {
       console.log('   No sequences found');
     }
 
-    // Check existing merchants and their liftpayIds
+    // Check existing merchants and their splitrIds
     console.log('\n🏢 Existing merchants:');
     const [merchants] = await connection.execute(`
-      SELECT id, liftpayId, businessName FROM Merchant ORDER BY createdAt
+      SELECT id, splitrId, businessName FROM Merchant ORDER BY createdAt
     `);
     
     merchants.forEach(merchant => {
-      console.log(`   ${merchant.liftpayId} - ${merchant.businessName}`);
+      console.log(`   ${merchant.splitrId} - ${merchant.businessName}`);
     });
 
-    // Check existing buyers and their liftpayIds
+    // Check existing buyers and their splitrIds
     console.log('\n👤 Existing buyers:');
     const [buyers] = await connection.execute(`
-      SELECT id, liftpayId, firstName, lastName FROM Buyer ORDER BY createdAt
+      SELECT id, splitrId, firstName, lastName FROM Buyer ORDER BY createdAt
     `);
     
     buyers.forEach(buyer => {
       const name = `${buyer.firstName || ''} ${buyer.lastName || ''}`.trim() || 'Unknown';
-      console.log(`   ${buyer.liftpayId} - ${name}`);
+      console.log(`   ${buyer.splitrId} - ${name}`);
     });
 
-    // Check for duplicate liftpayIds
-    console.log('\n🔍 Checking for duplicate liftpayIds...');
+    // Check for duplicate splitrIds
+    console.log('\n🔍 Checking for duplicate splitrIds...');
     const [duplicateMerchants] = await connection.execute(`
-      SELECT liftpayId, COUNT(*) as count 
+      SELECT splitrId, COUNT(*) as count 
       FROM Merchant 
-      WHERE liftpayId IS NOT NULL AND liftpayId != ''
-      GROUP BY liftpayId 
+      WHERE splitrId IS NOT NULL AND splitrId != ''
+      GROUP BY splitrId 
       HAVING COUNT(*) > 1
     `);
 
     const [duplicateBuyers] = await connection.execute(`
-      SELECT liftpayId, COUNT(*) as count 
+      SELECT splitrId, COUNT(*) as count 
       FROM Buyer 
-      WHERE liftpayId IS NOT NULL AND liftpayId != ''
-      GROUP BY liftpayId 
+      WHERE splitrId IS NOT NULL AND splitrId != ''
+      GROUP BY splitrId 
       HAVING COUNT(*) > 1
     `);
 
     if (duplicateMerchants.length > 0) {
-      console.log('❌ Found duplicate merchant liftpayIds:');
+      console.log('❌ Found duplicate merchant splitrIds:');
       duplicateMerchants.forEach(dup => {
-        console.log(`   ${dup.liftpayId}: ${dup.count} occurrences`);
+        console.log(`   ${dup.splitrId}: ${dup.count} occurrences`);
       });
     }
 
     if (duplicateBuyers.length > 0) {
-      console.log('❌ Found duplicate buyer liftpayIds:');
+      console.log('❌ Found duplicate buyer splitrIds:');
       duplicateBuyers.forEach(dup => {
-        console.log(`   ${dup.liftpayId}: ${dup.count} occurrences`);
+        console.log(`   ${dup.splitrId}: ${dup.count} occurrences`);
       });
     }
 
     if (duplicateMerchants.length === 0 && duplicateBuyers.length === 0) {
-      console.log('✅ No duplicate liftpayIds found');
+      console.log('✅ No duplicate splitrIds found');
     }
 
     // Test the function
-    console.log('\n🧪 Testing generate_liftpay_id function...');
+    console.log('\n🧪 Testing generate_splitr_id function...');
     try {
-      const [testResult] = await connection.execute(`SELECT generate_liftpay_id('LPM') as test_id`);
+      const [testResult] = await connection.execute(`SELECT generate_splitr_id('LPM') as test_id`);
       console.log(`✅ Function test result: ${testResult[0].test_id}`);
     } catch (error) {
       console.log(`❌ Function test failed: ${error.message}`);
@@ -118,13 +118,13 @@ async function fixSequenceIssue() {
 
     // Find the highest sequence for each prefix
     const [maxSequences] = await connection.execute(`
-      SELECT prefix, MAX(CAST(SUBSTRING(liftpayId, LENGTH(prefix) + 2 + 5) AS UNSIGNED)) as max_seq
+      SELECT prefix, MAX(CAST(SUBSTRING(splitrId, LENGTH(prefix) + 2 + 5) AS UNSIGNED)) as max_seq
       FROM (
-        SELECT 'LPM' as prefix, liftpayId FROM Merchant WHERE liftpayId IS NOT NULL AND liftpayId != ''
+        SELECT 'LPM' as prefix, splitrId FROM Merchant WHERE splitrId IS NOT NULL AND splitrId != ''
         UNION ALL
-        SELECT 'LPB' as prefix, liftpayId FROM Buyer WHERE liftpayId IS NOT NULL AND liftpayId != ''
+        SELECT 'LPB' as prefix, splitrId FROM Buyer WHERE splitrId IS NOT NULL AND splitrId != ''
       ) as all_ids
-      WHERE liftpayId LIKE CONCAT(prefix, '-', '${currentYearMonth}', '-%')
+      WHERE splitrId LIKE CONCAT(prefix, '-', '${currentYearMonth}', '-%')
       GROUP BY prefix
     `);
 
@@ -140,7 +140,7 @@ async function fixSequenceIssue() {
         console.log(`\n🔄 Updating ${max.prefix} sequence to ${newSeq}...`);
         
         await connection.execute(`
-          INSERT INTO liftpay_sequence (prefix, \`year_month\`, seq)
+          INSERT INTO splitr_sequence (prefix, \`year_month\`, seq)
           VALUES ('${max.prefix}', '${currentYearMonth}', ${newSeq})
           ON DUPLICATE KEY UPDATE seq = ${newSeq}
         `);
@@ -151,8 +151,8 @@ async function fixSequenceIssue() {
 
     // Final test
     console.log('\n🧪 Final test - generating new IDs...');
-    const [finalTestMerchant] = await connection.execute(`SELECT generate_liftpay_id('LPM') as test_id`);
-    const [finalTestBuyer] = await connection.execute(`SELECT generate_liftpay_id('LPB') as test_id`);
+    const [finalTestMerchant] = await connection.execute(`SELECT generate_splitr_id('LPM') as test_id`);
+    const [finalTestBuyer] = await connection.execute(`SELECT generate_splitr_id('LPB') as test_id`);
     
     console.log(`✅ New Merchant ID: ${finalTestMerchant[0].test_id}`);
     console.log(`✅ New Buyer ID: ${finalTestBuyer[0].test_id}`);

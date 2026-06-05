@@ -126,7 +126,7 @@ router.get(
  *                         properties:
  *                           id:
  *                             type: string
- *                           liftpayId:
+ *                           splitrId:
  *                             type: string
  *                           amount:
  *                             type: number

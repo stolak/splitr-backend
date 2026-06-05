@@ -1,20 +1,20 @@
 import prisma from "../utils/prisma";
 
-export interface LiftPayIdResult {
+export interface splitrIdResult {
   success: boolean;
-  liftpayId?: string;
+  splitrId?: string;
   error?: string;
 }
 
-export class LiftPayIdService {
+export class SplitrIdService {
   private prisma = prisma;
 
   /**
-   * Generate a LiftPay ID using the database function
+   * Generate a splitr ID using the database function
    * @param prefix - The prefix for the ID (e.g., 'LPM', 'LPB', 'LPL', 'LPP')
-   * @returns Promise<LiftPayIdResult>
+   * @returns Promise<splitrIdResult>
    */
-  async generateLiftPayId(prefix: string): Promise<LiftPayIdResult> {
+  async generatesplitrId(prefix: string): Promise<splitrIdResult> {
     try {
       // Validate prefix
       if (!prefix || prefix.length > 10) {
@@ -25,23 +25,23 @@ export class LiftPayIdService {
       }
 
       // Call the database function
-      const result = await this.prisma.$queryRaw<[{ liftpayId: string }]>`
-        SELECT generate_liftpay_id(${prefix}) as liftpayId
+      const result = await this.prisma.$queryRaw<[{ splitrId: string }]>`
+        SELECT generate_splitr_id(${prefix}) as splitrId
       `;
 
       if (result && result.length > 0) {
         return {
           success: true,
-          liftpayId: result[0].liftpayId,
+          splitrId: result[0].splitrId,
         };
       }
 
       return {
         success: false,
-        error: "Failed to generate LiftPay ID",
+        error: "Failed to generate splitr ID",
       };
     } catch (error) {
-      console.error("Error generating LiftPay ID:", error);
+      console.error("Error generating splitr ID:", error);
       return {
         success: false,
         error:
@@ -68,7 +68,7 @@ export class LiftPayIdService {
       const targetYearMonth = yearMonth || `${currentYear}${currentMonth}`;
 
       const result = await this.prisma.$queryRaw<[{ seq: number }]>`
-        SELECT seq FROM liftpay_sequence 
+        SELECT seq FROM splitr_sequence 
         WHERE prefix = ${prefix} AND \`year_month\` = ${targetYearMonth}
       `;
 
@@ -91,7 +91,7 @@ export class LiftPayIdService {
       const result = await this.prisma.$queryRaw<
         Array<{ year_month: string; seq: number }>
       >`
-        SELECT \`year_month\`, seq FROM liftpay_sequence 
+        SELECT \`year_month\`, seq FROM splitr_sequence 
         WHERE prefix = ${prefix}
         ORDER BY \`year_month\` DESC
       `;
@@ -107,29 +107,29 @@ export class LiftPayIdService {
   }
 
   /**
-   * Validate a LiftPay ID format
-   * @param liftpayId - The ID to validate
+   * Validate a splitr ID format
+   * @param splitrId - The ID to validate
    * @returns boolean
    */
-  validateLiftPayId(liftpayId: string): boolean {
+  validatesplitrId(splitrId: string): boolean {
     // Format: PREFIX-YYMM-NNNNNN
     const regex = /^[A-Z]{2,10}-\d{4}-\d{6}$/;
-    return regex.test(liftpayId);
+    return regex.test(splitrId);
   }
 
   /**
-   * Parse a LiftPay ID to extract components
-   * @param liftpayId - The ID to parse
+   * Parse a splitr ID to extract components
+   * @param splitrId - The ID to parse
    * @returns Object with prefix, yearMonth, and sequence, or null if invalid
    */
-  parseLiftPayId(
-    liftpayId: string
+  parsesplitrId(
+    splitrId: string
   ): { prefix: string; yearMonth: string; sequence: number } | null {
-    if (!this.validateLiftPayId(liftpayId)) {
+    if (!this.validatesplitrId(splitrId)) {
       return null;
     }
 
-    const parts = liftpayId.split("-");
+    const parts = splitrId.split("-");
     if (parts.length !== 3) {
       return null;
     }
@@ -142,7 +142,7 @@ export class LiftPayIdService {
   }
 
   /**
-   * Get statistics for LiftPay ID generation
+   * Get statistics for splitr ID generation
    * @returns Promise<Object>
    */
   async getStatistics(): Promise<{
@@ -155,13 +155,13 @@ export class LiftPayIdService {
         Array<{ prefix: string; count: bigint }>
       >`
         SELECT prefix, COUNT(*) as count 
-        FROM liftpay_sequence 
+        FROM splitr_sequence 
         GROUP BY prefix
         ORDER BY count DESC
       `;
 
       const totalSequences = await this.prisma.$queryRaw<[{ total: bigint }]>`
-        SELECT SUM(seq - 100000) as total FROM liftpay_sequence
+        SELECT SUM(seq - 100000) as total FROM splitr_sequence
       `;
 
       return {
@@ -190,4 +190,4 @@ export class LiftPayIdService {
   }
 }
 
-export const liftpayIdService = new LiftPayIdService();
+export const splitrIdService = new SplitrIdService();

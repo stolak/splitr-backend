@@ -31,7 +31,7 @@ const paystackTransferSelect = {
   merchant: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       businessName: true,
       businessEmail: true,
     },
@@ -39,7 +39,7 @@ const paystackTransferSelect = {
   buyer: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       firstName: true,
       lastName: true,
       email: true,

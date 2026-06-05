@@ -78,7 +78,7 @@ import { scoringInputSnapshotEvaluationService } from '../services/scoringInputS
  *             buyerName:
  *               type: string
  *               nullable: true
- *             liftpayId:
+ *             splitrId:
  *               type: string
  *               nullable: true
  *             createdAt:

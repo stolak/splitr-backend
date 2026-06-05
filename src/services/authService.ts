@@ -21,8 +21,6 @@ export interface AuthResponse {
       merchantName?: string;
       buyerId?: string;
       merchantCharge?: number;
-      outletId?: string;
-      outletName?: string;
       logoUrl?: string;
     };
     tokens: {
@@ -41,7 +39,6 @@ export interface UserRegistrationInput {
   phoneNumber?: string;
   profileImageUrl?: string;
   merchantId?: string;
-  outletId?: string;
   role?: 'Visitor' | 'Admin' | 'Merchant' | 'Buyer' | 'SuperAdmin' | 'CustomerSupport';
   userType?: 'Admin' | 'Merchant' | 'Buyer';
   isVerified?: boolean;
@@ -79,7 +76,7 @@ function buildTokens(user: any) {
 
 export class AuthService {
   async create(input: UserRegistrationInput): Promise<AuthResponse> {
-    const { email, password, outletId, merchantId, profileImageUrl, address, ...userInput } = input;
+    const { email, password, merchantId, profileImageUrl, address, ...userInput } = input;
     // Check if user already exists by email
     let existingUser;
     existingUser = await prisma.user.findUnique({ where: { email } });
@@ -87,21 +84,7 @@ export class AuthService {
       throw new Error('User already exists with this email');
     }
 
-    // If outletId is provided, verify outlet exists and belongs to the merchant
-    if (outletId) {
-      const outlet = await prisma.outlet.findUnique({
-        where: { id: outletId },
-      });
-
-      if (!outlet) {
-        throw new Error('Outlet not found');
-      }
-
-      // If merchantId is provided, verify outlet belongs to that merchant
-      if (merchantId && outlet.merchantId !== merchantId) {
-        throw new Error('Outlet does not belong to the specified merchant');
-      }
-    }
+    
 
     // Hash password
     const validatedPassoword = password || '12345'; // auto-generated password
@@ -119,19 +102,13 @@ export class AuthService {
         userType: true,
         isVerified: true,
         merchantId: true,
-        outletId: true,
         merchant: {
           select: {
             isAgreedToTerms: true,
             businessName: true,
           },
         },
-        outlet: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+       
       },
     });
 
@@ -152,8 +129,7 @@ export class AuthService {
           isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms || false,
           merchantId: user?.merchantId ?? undefined,
           merchantName: user?.merchant?.businessName ?? undefined,
-          outletId: user?.outletId ?? undefined,
-          outletName: user?.outlet?.name ?? undefined,
+          
         },
         tokens,
       },
@@ -180,23 +156,17 @@ export class AuthService {
         isVerified: true,
         profileImageUrl: true,
         merchantId: true,
-        outletId: true,
         merchant: {
           select: {
             isAgreedToTerms: true,
             businessName: true,
             id: true,
-            liftpayId: true,
+            splitrId: true,
             merchantCharge: true,
             logoUrl: true,
           },
         },
-        outlet: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        
         buyer: {
           select: {
             id: true,
@@ -220,7 +190,7 @@ export class AuthService {
       name,
       profileImageUrl: user.profileImageUrl ?? undefined,
       merchantId: user.merchantId,
-      outletId: user.outletId,
+
       userType: mapUserType(user.userType as any),
       isVerified: user.isVerified ?? false,
       isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
@@ -245,8 +215,6 @@ export class AuthService {
           merchantName: user?.merchant?.businessName ?? undefined,
           buyerId: user.buyer?.id ?? undefined,
           merchantCharge: user?.merchant?.merchantCharge ? Number(user.merchant.merchantCharge) : 0,
-          outletId: user?.outletId ?? undefined,
-          outletName: user?.outlet?.name ?? undefined,
           logoUrl: user.merchant?.logoUrl ?? undefined,
         },
         tokens,
@@ -258,7 +226,7 @@ export class AuthService {
    * Create a merchant user with optional outlet assignment
    */
   async createMerchantUser(input: UserRegistrationInput): Promise<AuthResponse> {
-    const { email, password, phoneNumber, outletId, merchantId, address, ...userInput } = input;
+    const { email, password, phoneNumber, merchantId, address, ...userInput } = input;
 
     // Validate required fields for merchant user
     if (!merchantId) {
@@ -281,20 +249,8 @@ export class AuthService {
       throw new Error('User already exists with this email');
     }
 
-    // If outletId is provided, verify outlet exists and belongs to the merchant
-    if (outletId) {
-      const outlet = await prisma.outlet.findUnique({
-        where: { id: outletId },
-      });
-
-      if (!outlet) {
-        throw new Error('Outlet not found');
-      }
-
-      if (outlet.merchantId !== merchantId) {
-        throw new Error('Outlet does not belong to the specified merchant');
-      }
-    }
+  
+    
 
     // Hash password
     const validatedPassword = password || '12345'; // auto-generated password
@@ -303,7 +259,7 @@ export class AuthService {
     // Create merchant user
     const user = await prisma.user.create({
       data: {
-        // `address` belongs to Buyer/Outlet, not User (see `schema.prisma`).
+  
         ...userInput,
         email,
         password: hashedPassword,
@@ -321,11 +277,11 @@ export class AuthService {
         isVerified: true,
         profileImageUrl: true,
         merchantId: true,
-        outletId: true,
+
         merchant: {
           select: {
             id: true,
-            liftpayId: true,
+            splitrId: true,
             businessName: true,
             businessEmail: true,
             isAgreedToTerms: true,
@@ -333,13 +289,7 @@ export class AuthService {
             logoUrl: true,
           },
         },
-        outlet: {
-          select: {
-            id: true,
-            name: true,
-            address: true,
-          },
-        },
+        
       },
     });
 
@@ -350,7 +300,7 @@ export class AuthService {
       name,
       profileImageUrl: user.profileImageUrl ?? undefined,
       merchantId: user.merchantId,
-      outletId: user.outletId,
+   
       userType: 'merchant',
       isVerified: user.isVerified ?? false,
       isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
@@ -373,8 +323,6 @@ export class AuthService {
           merchantId: user.merchantId ?? undefined,
           merchantName: user.merchant?.businessName ?? undefined,
           merchantCharge: user.merchant?.merchantCharge ? Number(user.merchant.merchantCharge) : 0,
-          outletId: user.outletId ?? undefined,
-          outletName: user.outlet?.name ?? undefined,
           logoUrl: user.merchant?.logoUrl ?? undefined,
         },
         tokens,

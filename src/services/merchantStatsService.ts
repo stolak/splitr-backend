@@ -130,7 +130,7 @@ export class MerchantStatsService {
         },
         select: {
           id: true,
-          liftpayId: true,
+          splitrId: true,
           amount: true,
           createdAt: true,
         },
@@ -173,7 +173,7 @@ export class MerchantStatsService {
           endDate: endDate.toISOString(),
           invoices: invoices.map((invoice) => ({
             id: invoice.id,
-            liftpayId: invoice.liftpayId,
+            splitrId: invoice.splitrId,
             amount: Number(invoice.amount),
             createdAt: invoice.createdAt.toISOString(),
           })),

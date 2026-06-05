@@ -1,4 +1,4 @@
-# LiftPay Server Deployment Guide
+# splitr Server Deployment Guide
 
 ## 📦 Building for Production
 
@@ -89,8 +89,8 @@ Create or update `.env` file with production values:
 
 ```env
 # Database
-DATABASE_URL="mysql://user:password@localhost:3306/liftpay"
-SHADOW_DATABASE_URL="mysql://user:password@localhost:3306/liftpay_shadow"
+DATABASE_URL="mysql://user:password@localhost:3306/splitr"
+SHADOW_DATABASE_URL="mysql://user:password@localhost:3306/splitr_shadow"
 
 # Server
 PORT=5000
@@ -105,22 +105,22 @@ SMTP_HOST="smtp.gmail.com"
 SMTP_PORT=587
 SMTP_USER="your-email@gmail.com"
 SMTP_PASSWORD="your-app-password"
-EMAIL_FROM="noreply@liftpay.co"
+EMAIL_FROM="noreply@splitr.co"
 
 # AWS S3 (for file uploads)
 AWS_ACCESS_KEY_ID="your-aws-access-key"
 AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 AWS_REGION="us-east-1"
-AWS_BUCKET_NAME="liftpay-uploads"
+AWS_BUCKET_NAME="splitr-uploads"
 
 # Mono (Bank verification)
 MONO_SECRET_KEY="your-mono-secret-key"
 MONO_PUBLIC_KEY="your-mono-public-key"
 
 # Application URLs
-FRONTEND_URL="https://app.liftpay.co"
-MERCHANT_DASHBOARD_URL="https://merchant.liftpay.co"
-VALIDATION_URL="https://verify.liftpay.co"
+FRONTEND_URL="https://app.splitr.co"
+MERCHANT_DASHBOARD_URL="https://merchant.splitr.co"
+VALIDATION_URL="https://verify.splitr.co"
 ```
 
 ### 6. Start the Application
@@ -140,7 +140,7 @@ node dist/server.js
 npm install -g pm2
 
 # Start application
-pm2 start dist/server.js --name "liftpay-api"
+pm2 start dist/server.js --name "splitr-api"
 
 # Save PM2 configuration
 pm2 save
@@ -151,11 +151,11 @@ pm2 startup
 
 #### Using systemd (Alternative):
 
-Create a systemd service file `/etc/systemd/system/liftpay.service`:
+Create a systemd service file `/etc/systemd/system/splitr.service`:
 
 ```ini
 [Unit]
-Description=LiftPay API Server
+Description=splitr API Server
 After=network.target
 
 [Service]
@@ -173,9 +173,9 @@ WantedBy=multi-user.target
 Then:
 
 ```bash
-sudo systemctl enable liftpay
-sudo systemctl start liftpay
-sudo systemctl status liftpay
+sudo systemctl enable splitr
+sudo systemctl start splitr
+sudo systemctl status splitr
 ```
 
 ## 🔧 Troubleshooting
@@ -248,15 +248,15 @@ taskkill /PID <PID> /F
 #### With PM2:
 
 ```bash
-pm2 logs liftpay-api
-pm2 logs liftpay-api --lines 100
+pm2 logs splitr-api
+pm2 logs splitr-api --lines 100
 ```
 
 #### With systemd:
 
 ```bash
-journalctl -u liftpay -f
-journalctl -u liftpay --since today
+journalctl -u splitr -f
+journalctl -u splitr --since today
 ```
 
 ### Monitor Application Status
@@ -292,16 +292,16 @@ npm run build
 npx prisma migrate deploy
 
 # 5. Restart application
-pm2 restart liftpay-api
+pm2 restart splitr-api
 # or
-sudo systemctl restart liftpay
+sudo systemctl restart splitr
 ```
 
 ### Zero-Downtime Deployment (PM2)
 
 ```bash
 # Build and reload without downtime
-npm run build && pm2 reload liftpay-api
+npm run build && pm2 reload splitr-api
 ```
 
 ## 🔐 Security Checklist
@@ -341,9 +341,9 @@ NODE_ENV=production
 
 For deployment issues or questions:
 
-- Email: support@liftpay.co
-- Documentation: https://docs.liftpay.co
-- GitHub Issues: https://github.com/your-org/liftpay/issues
+- Email: support@splitr.co
+- Documentation: https://docs.splitr.co
+- GitHub Issues: https://github.com/your-org/splitr/issues
 
 ---
 

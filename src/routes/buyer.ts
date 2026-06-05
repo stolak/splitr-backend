@@ -76,7 +76,7 @@ router.delete("/:id", buyerController.remove);
  *                         properties:
  *                           id:
  *                             type: string
- *                           liftpayId:
+ *                           splitrId:
  *                             type: string
  *                           firstName:
  *                             type: string

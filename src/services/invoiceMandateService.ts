@@ -54,7 +54,7 @@ const invoiceMandateSelect = {
   invoice: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       customerName: true,
       customerEmail: true,
       amount: true,
@@ -64,7 +64,7 @@ const invoiceMandateSelect = {
   loan: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       loanAmount: true,
       loanStatus: true,
     },
@@ -72,7 +72,7 @@ const invoiceMandateSelect = {
   buyer: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       firstName: true,
       lastName: true,
       email: true,

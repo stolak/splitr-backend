@@ -1,5 +1,5 @@
 import { RevenueType } from "@prisma/client";
-import { liftpayIdService } from "./liftpayIdService";
+import { splitrIdService } from "./splitrIdService";
 import prisma from "../utils/prisma";
 
 // ==================== INTERFACES ====================
@@ -85,17 +85,17 @@ export class RevenueService {
           throw new Error("Invoice not found");
         }
       }
-      // Generate liftpayId for Revenue
-      const liftpayIdResult = await liftpayIdService.generateLiftPayId("LPR");
-      if (!liftpayIdResult.success || !liftpayIdResult.liftpayId) {
+      // Generate splitrId for Revenue
+      const splitrIdResult = await splitrIdService.generatesplitrId("LPR");
+      if (!splitrIdResult.success || !splitrIdResult.splitrId) {
         throw new Error(
-          liftpayIdResult.error || "Failed to generate LiftPay ID for Revenue"
+          splitrIdResult.error || "Failed to generate splitr ID for Revenue"
         );
       }
 
       const revenue = await prisma.revenue.create({
         data: {
-          liftpayId: liftpayIdResult.liftpayId,
+          splitrId: splitrIdResult.splitrId,
           credit: input.credit || 0,
           debit: input.debit || 0,
           description: input.description,
@@ -113,7 +113,7 @@ export class RevenueService {
           merchant: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               businessName: true,
               businessEmail: true,
             },
@@ -121,7 +121,7 @@ export class RevenueService {
           buyer: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               firstName: true,
               lastName: true,
               email: true,
@@ -130,7 +130,7 @@ export class RevenueService {
           loan: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               loanAmount: true,
               loanStatus: true,
             },
@@ -138,7 +138,7 @@ export class RevenueService {
           invoice: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               amount: true,
               status: true,
             },
@@ -170,7 +170,7 @@ export class RevenueService {
           merchant: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               businessName: true,
               businessEmail: true,
             },
@@ -178,7 +178,7 @@ export class RevenueService {
           buyer: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               firstName: true,
               lastName: true,
               email: true,
@@ -187,7 +187,7 @@ export class RevenueService {
           loan: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               loanAmount: true,
               loanStatus: true,
             },
@@ -195,7 +195,7 @@ export class RevenueService {
           invoice: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               amount: true,
               status: true,
             },
@@ -220,17 +220,17 @@ export class RevenueService {
   }
 
   /**
-   * Get revenue by liftpayId
+   * Get revenue by splitrId
    */
-  async getRevenueByLiftpayId(liftpayId: string) {
+  async getRevenueBysplitrId(splitrId: string) {
     try {
       const revenue = await prisma.revenue.findUnique({
-        where: { liftpayId },
+        where: { splitrId },
         include: {
           merchant: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               businessName: true,
               businessEmail: true,
             },
@@ -238,7 +238,7 @@ export class RevenueService {
           buyer: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               firstName: true,
               lastName: true,
               email: true,
@@ -247,7 +247,7 @@ export class RevenueService {
           loan: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               loanAmount: true,
               loanStatus: true,
             },
@@ -255,7 +255,7 @@ export class RevenueService {
           invoice: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               amount: true,
               status: true,
             },
@@ -325,7 +325,7 @@ export class RevenueService {
             merchant: {
               select: {
                 id: true,
-                liftpayId: true,
+                splitrId: true,
                 businessName: true,
                 businessEmail: true,
               },
@@ -333,7 +333,7 @@ export class RevenueService {
             buyer: {
               select: {
                 id: true,
-                liftpayId: true,
+                splitrId: true,
                 firstName: true,
                 lastName: true,
                 email: true,
@@ -342,7 +342,7 @@ export class RevenueService {
             loan: {
               select: {
                 id: true,
-                liftpayId: true,
+                splitrId: true,
                 loanAmount: true,
                 loanStatus: true,
               },
@@ -350,7 +350,7 @@ export class RevenueService {
             invoice: {
               select: {
                 id: true,
-                liftpayId: true,
+                splitrId: true,
                 amount: true,
                 status: true,
               },
@@ -442,7 +442,7 @@ export class RevenueService {
           merchant: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               businessName: true,
               businessEmail: true,
             },
@@ -450,7 +450,7 @@ export class RevenueService {
           buyer: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               firstName: true,
               lastName: true,
               email: true,
@@ -459,7 +459,7 @@ export class RevenueService {
           loan: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               loanAmount: true,
               loanStatus: true,
             },
@@ -467,7 +467,7 @@ export class RevenueService {
           invoice: {
             select: {
               id: true,
-              liftpayId: true,
+              splitrId: true,
               amount: true,
               status: true,
             },
@@ -716,14 +716,14 @@ export class RevenueService {
             merchant: {
               select: {
                 id: true,
-                liftpayId: true,
+                splitrId: true,
                 businessName: true,
               },
             },
             buyer: {
               select: {
                 id: true,
-                liftpayId: true,
+                splitrId: true,
                 firstName: true,
                 lastName: true,
               },

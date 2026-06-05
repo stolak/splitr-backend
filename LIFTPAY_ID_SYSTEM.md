@@ -1,8 +1,8 @@
-# LiftPay ID System
+# splitr ID System
 
 ## Overview
 
-The LiftPay ID system provides unique, sequential identifiers for all entities in the platform. Each ID follows the format: `PREFIX-YYMM-NNNNNN`
+The splitr ID system provides unique, sequential identifiers for all entities in the platform. Each ID follows the format: `PREFIX-YYMM-NNNNNN`
 
 - **PREFIX**: 2-10 character identifier for the entity type
 - **YYMM**: Year and month (e.g., 2510 for October 2025)
@@ -12,11 +12,11 @@ The LiftPay ID system provides unique, sequential identifiers for all entities i
 
 | Prefix | Entity Type      | Description                   |
 | ------ | ---------------- | ----------------------------- |
-| LPM    | LiftPay Merchant | Merchant accounts             |
-| LPB    | LiftPay Buyer    | Buyer accounts                |
-| LPL    | LiftPay Loan     | Loan transactions (future)    |
-| LPP    | LiftPay Payment  | Payment transactions (future) |
-| LPI    | LiftPay Invoice  | Invoice records (future)      |
+| LPM    | splitr Merchant | Merchant accounts             |
+| LPB    | splitr Buyer    | Buyer accounts                |
+| LPL    | splitr Loan     | Loan transactions (future)    |
+| LPP    | splitr Payment  | Payment transactions (future) |
+| LPI    | splitr Invoice  | Invoice records (future)      |
 
 ## Example IDs
 
@@ -32,7 +32,7 @@ LPB-2511-100001  // First buyer in November 2025
 ### Sequence Tracker Table
 
 ```sql
-CREATE TABLE liftpay_sequence (
+CREATE TABLE splitr_sequence (
   prefix VARCHAR(10) NOT NULL,
   year_month CHAR(4) NOT NULL,
   seq INT NOT NULL DEFAULT 100000,
@@ -42,18 +42,18 @@ CREATE TABLE liftpay_sequence (
 
 ### Entity Models
 
-All entities now include a `liftpayId` field:
+All entities now include a `splitrId` field:
 
 ```prisma
 model Merchant {
   id        String @id @default(uuid())
-  liftpayId String @unique @db.VarChar(30)
+  splitrId String @unique @db.VarChar(30)
   // ... other fields
 }
 
 model Buyer {
   id        String @id @default(uuid())
-  liftpayId String @unique @db.VarChar(30)
+  splitrId String @unique @db.VarChar(30)
   // ... other fields
 }
 ```
@@ -63,28 +63,28 @@ model Buyer {
 ### 1. Run Database Migrations
 
 ```bash
-# Run Prisma migrations to add liftpayId fields
+# Run Prisma migrations to add splitrId fields
 npm run migrate
 
-# Set up LiftPay ID system (tables, functions, triggers)
-npm run setup-liftpay-ids
+# Set up splitr ID system (tables, functions, triggers)
+npm run setup-splitr-ids
 ```
 
 ### 2. Verify Setup
 
 ```bash
 # Test the system
-curl -X POST http://localhost:5000/api/v1/liftpay-id/generate \
+curl -X POST http://localhost:5000/api/v1/splitr-id/generate \
   -H "Content-Type: application/json" \
   -d '{"prefix": "LPM"}'
 ```
 
 ## API Endpoints
 
-### Generate LiftPay ID
+### Generate splitr ID
 
 ```http
-POST /api/v1/liftpay-id/generate
+POST /api/v1/splitr-id/generate
 Content-Type: application/json
 
 {
@@ -97,21 +97,21 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "LiftPay ID generated successfully",
+  "message": "splitr ID generated successfully",
   "data": {
-    "liftpayId": "LPM-2510-100001"
+    "splitrId": "LPM-2510-100001"
   }
 }
 ```
 
-### Validate LiftPay ID
+### Validate splitr ID
 
 ```http
-POST /api/v1/liftpay-id/validate
+POST /api/v1/splitr-id/validate
 Content-Type: application/json
 
 {
-  "liftpayId": "LPM-2510-100001"
+  "splitrId": "LPM-2510-100001"
 }
 ```
 
@@ -120,7 +120,7 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "LiftPay ID is valid",
+  "message": "splitr ID is valid",
   "data": {
     "isValid": true,
     "parsed": {
@@ -135,7 +135,7 @@ Content-Type: application/json
 ### Get Sequences for Prefix
 
 ```http
-GET /api/v1/liftpay-id/sequences/LPM
+GET /api/v1/splitr-id/sequences/LPM
 ```
 
 **Response:**
@@ -159,7 +159,7 @@ GET /api/v1/liftpay-id/sequences/LPM
 ### Get Statistics
 
 ```http
-GET /api/v1/liftpay-id/statistics
+GET /api/v1/splitr-id/statistics
 ```
 
 **Response:**
@@ -189,26 +189,26 @@ GET /api/v1/liftpay-id/statistics
 
 ### Database Triggers
 
-The system automatically generates LiftPay IDs when new records are created:
+The system automatically generates splitr IDs when new records are created:
 
 ```sql
 -- Merchant Trigger
-CREATE TRIGGER trg_merchant_liftpay_id
+CREATE TRIGGER trg_merchant_splitr_id
 BEFORE INSERT ON Merchant
 FOR EACH ROW
 BEGIN
-  IF NEW.liftpayId IS NULL OR NEW.liftpayId = '' THEN
-    SET NEW.liftpayId = generate_liftpay_id('LPM');
+  IF NEW.splitrId IS NULL OR NEW.splitrId = '' THEN
+    SET NEW.splitrId = generate_splitr_id('LPM');
   END IF;
 END;
 
 -- Buyer Trigger
-CREATE TRIGGER trg_buyer_liftpay_id
+CREATE TRIGGER trg_buyer_splitr_id
 BEFORE INSERT ON Buyer
 FOR EACH ROW
 BEGIN
-  IF NEW.liftpayId IS NULL OR NEW.liftpayId = '' THEN
-    SET NEW.liftpayId = generate_liftpay_id('LPB');
+  IF NEW.splitrId IS NULL OR NEW.splitrId = '' THEN
+    SET NEW.splitrId = generate_splitr_id('LPB');
   END IF;
 END;
 ```
@@ -218,68 +218,68 @@ END;
 You can also generate IDs manually using the service:
 
 ```typescript
-import { liftpayIdService } from "./services/liftpayIdService";
+import { splitrIdService } from "./services/splitrIdService";
 
 // Generate a new ID
-const result = await liftpayIdService.generateLiftPayId("LPM");
+const result = await splitrIdService.generatesplitrId("LPM");
 if (result.success) {
-  console.log("Generated ID:", result.liftpayId);
+  console.log("Generated ID:", result.splitrId);
 }
 ```
 
 ## Service Usage
 
-### LiftPayIdService
+### splitrIdService
 
 ```typescript
-import { liftpayIdService } from "./services/liftpayIdService";
+import { splitrIdService } from "./services/splitrIdService";
 
 // Generate ID
-const id = await liftpayIdService.generateLiftPayId("LPM");
+const id = await splitrIdService.generatesplitrId("LPM");
 
 // Validate ID
-const isValid = liftpayIdService.validateLiftPayId("LPM-2510-100001");
+const isValid = splitrIdService.validatesplitrId("LPM-2510-100001");
 
 // Parse ID
-const parsed = liftpayIdService.parseLiftPayId("LPM-2510-100001");
+const parsed = splitrIdService.parsesplitrId("LPM-2510-100001");
 // Returns: { prefix: 'LPM', yearMonth: '2510', sequence: 100001 }
 
 // Get statistics
-const stats = await liftpayIdService.getStatistics();
+const stats = await splitrIdService.getStatistics();
 ```
 
 ## Migration Guide
 
 ### Existing Data
 
-For existing merchants and buyers without LiftPay IDs:
+For existing merchants and buyers without splitr IDs:
 
 1. **Backup your database**
-2. **Run the migration script** to add the `liftpayId` fields
+2. **Run the migration script** to add the `splitrId` fields
 3. **Update existing records** with generated IDs:
 
 ```sql
 -- Update existing merchants
 UPDATE Merchant
-SET liftpayId = generate_liftpay_id('LPM')
-WHERE liftpayId IS NULL OR liftpayId = '';
+SET splitrId = generate_splitr_id('LPM')
+WHERE splitrId IS NULL OR splitrId = '';
 
 -- Update existing buyers
 UPDATE Buyer
-SET liftpayId = generate_liftpay_id('LPB')
-WHERE liftpayId IS NULL OR liftpayId = '';
+SET splitrId = generate_splitr_id('LPB')
+WHERE splitrId IS NULL OR splitrId = '';
 ```
 
 ### Adding New Entity Types
 
-To add LiftPay IDs to new entity types:
+To add splitr IDs to new entity types:
 
 1. **Add the field to Prisma schema:**
 
 ```prisma
 model NewEntity {
   id        String @id @default(uuid())
-  liftpayId String @unique @db.VarChar(30)
+  splitrId String @unique @db.VarChar(30)
   // ... other fields
 }
 ```
@@ -287,12 +287,12 @@ model NewEntity {
 2. **Create a trigger:**
 
 ```sql
-CREATE TRIGGER trg_newentity_liftpay_id
+CREATE TRIGGER trg_newentity_splitr_id
 BEFORE INSERT ON NewEntity
 FOR EACH ROW
 BEGIN
-  IF NEW.liftpayId IS NULL OR NEW.liftpayId = '' THEN
-    SET NEW.liftpayId = generate_liftpay_id('NEP'); -- New Entity Prefix
+  IF NEW.splitrId IS NULL OR NEW.splitrId = '' THEN
+    SET NEW.splitrId = generate_splitr_id('NEP'); -- New Entity Prefix
   END IF;
 END;
 ```
@@ -307,7 +307,7 @@ npm run migrate
 
 ### Common Issues
 
-1. **Function not found**: Run `npm run setup-liftpay-ids`
+1. **Function not found**: Run `npm run setup-splitr-ids`
 2. **Trigger errors**: Check MySQL version compatibility
 3. **Duplicate IDs**: Verify sequence table integrity
 
@@ -315,10 +315,10 @@ npm run migrate
 
 ```sql
 -- Check sequence table
-SELECT * FROM liftpay_sequence ORDER BY prefix, year_month;
+SELECT * FROM splitr_sequence ORDER BY prefix, year_month;
 
 -- Test function manually
-SELECT generate_liftpay_id('LPM') as test_id;
+SELECT generate_splitr_id('LPM') as test_id;
 
 -- Check triggers
 SHOW TRIGGERS LIKE 'Merchant';
@@ -341,7 +341,7 @@ SHOW TRIGGERS LIKE 'Buyer';
 
 ## Support
 
-For issues or questions about the LiftPay ID system:
+For issues or questions about the splitr ID system:
 
 1. Check the troubleshooting section above
 2. Review the API documentation

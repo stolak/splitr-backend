@@ -11,7 +11,7 @@ export class BusinessCategoryService {
   constructor() {
     this.dataPath = path.join(
       __dirname,
-      "../../liftpay-business-categories.json"
+      "../../splitr-business-categories.json"
     );
   }
 

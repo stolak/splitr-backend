@@ -22,7 +22,7 @@ const options: swaggerJSDoc.Options = {
       { name: 'Helper', description: 'Helper utilities' },
       { name: 'Invoice', description: 'Invoice management' },
       { name: 'Item', description: 'Item management' },
-      { name: 'LiftPayId', description: 'LiftPay ID management' },
+      { name: 'splitrId', description: 'splitr ID management' },
       { name: 'Loan', description: 'Loan management' },
       { name: 'LoanDebitTrial', description: 'Loan debit trial management' },
       { name: 'LoanPenalty', description: 'Loan penalty management' },

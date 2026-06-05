@@ -2,15 +2,15 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-async function testLiftPayIds() {
+async function testsplitrIds() {
   try {
-    console.log('🧪 Testing LiftPay ID System...\n');
+    console.log('🧪 Testing splitr ID System...\n');
 
     // Test 1: Check existing merchants
     console.log('📊 Existing Merchants:');
     const merchants = await prisma.merchant.findMany({
       select: {
-        liftpayId: true,
+        splitrId: true,
         businessName: true,
         createdAt: true
       },
@@ -18,14 +18,14 @@ async function testLiftPayIds() {
     });
 
     merchants.forEach((merchant, index) => {
-      console.log(`   ${index + 1}. ${merchant.liftpayId} - ${merchant.businessName}`);
+      console.log(`   ${index + 1}. ${merchant.splitrId} - ${merchant.businessName}`);
     });
 
     // Test 2: Check existing buyers
     console.log('\n📊 Existing Buyers:');
     const buyers = await prisma.buyer.findMany({
       select: {
-        liftpayId: true,
+        splitrId: true,
         firstName: true,
         lastName: true,
         createdAt: true
@@ -35,14 +35,14 @@ async function testLiftPayIds() {
 
     buyers.forEach((buyer, index) => {
       const name = `${buyer.firstName || ''} ${buyer.lastName || ''}`.trim() || 'Unknown';
-      console.log(`   ${index + 1}. ${buyer.liftpayId} - ${name}`);
+      console.log(`   ${index + 1}. ${buyer.splitrId} - ${name}`);
     });
 
     // Test 3: Check sequence table
     console.log('\n📊 Sequence Table:');
     const sequences = await prisma.$queryRaw`
       SELECT prefix, \`year_month\`, seq 
-      FROM liftpay_sequence 
+      FROM splitr_sequence 
       ORDER BY prefix, \`year_month\`
     `;
 
@@ -53,8 +53,8 @@ async function testLiftPayIds() {
     // Test 4: Validate ID formats
     console.log('\n🔍 Validating ID Formats:');
     
-    const merchantIds = merchants.map(m => m.liftpayId).filter(Boolean);
-    const buyerIds = buyers.map(b => b.liftpayId).filter(Boolean);
+    const merchantIds = merchants.map(m => m.splitrId).filter(Boolean);
+    const buyerIds = buyers.map(b => b.splitrId).filter(Boolean);
     
     const allIds = [...merchantIds, ...buyerIds];
     
@@ -100,8 +100,8 @@ async function testLiftPayIds() {
     // Test 6: Test ID generation function
     console.log('\n🧪 Testing ID Generation:');
     try {
-      const [testMerchant] = await prisma.$queryRaw`SELECT generate_liftpay_id('LPM') as test_id`;
-      const [testBuyer] = await prisma.$queryRaw`SELECT generate_liftpay_id('LPB') as test_id`;
+      const [testMerchant] = await prisma.$queryRaw`SELECT generate_splitr_id('LPM') as test_id`;
+      const [testBuyer] = await prisma.$queryRaw`SELECT generate_splitr_id('LPB') as test_id`;
       
       console.log(`   New Merchant ID: ${testMerchant.test_id}`);
       console.log(`   New Buyer ID: ${testBuyer.test_id}`);
@@ -117,7 +117,7 @@ async function testLiftPayIds() {
       console.log(`   ❌ ID Generation Test Failed: ${error.message}`);
     }
 
-    console.log('\n🎉 LiftPay ID System Test Completed!');
+    console.log('\n🎉 splitr ID System Test Completed!');
 
   } catch (error) {
     console.error('❌ Test failed:', error);
@@ -128,7 +128,7 @@ async function testLiftPayIds() {
 }
 
 // Run the test
-testLiftPayIds()
+testsplitrIds()
   .then(() => {
     console.log('\n✅ All tests passed!');
     process.exit(0);

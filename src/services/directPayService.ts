@@ -69,7 +69,7 @@ const directPaySelect = {
   invoice: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       customerName: true,
       customerEmail: true,
       amount: true,
@@ -87,7 +87,7 @@ const directPaySelect = {
   buyer: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       firstName: true,
       lastName: true,
       email: true,

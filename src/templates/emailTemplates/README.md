@@ -56,7 +56,7 @@ This directory contains HTML email templates for the Lift Platform email service
   await emailService.sendTemplateEmail({
     to: 'merchant@example.com',
     templateName: 'documentRejection',
-    subject: 'Action Required – Some of Your LiftPay Merchant Documents Need Attention',
+    subject: 'Action Required – Some of Your splitr Merchant Documents Need Attention',
     data: {
       merchant_name: "John's Business",
       rejectionReasons: [
@@ -69,7 +69,7 @@ This directory contains HTML email templates for the Lift Platform email service
           reason: 'Bill is older than 3 months, please provide a recent bill',
         },
       ],
-      merchant_dashboard_link: 'https://merchant.liftpay.co/dashboard',
+      merchant_dashboard_link: 'https://merchant.splitr.co/dashboard',
     },
   });
   ```
@@ -84,11 +84,11 @@ This directory contains HTML email templates for the Lift Platform email service
   await emailService.sendTemplateEmail({
     to: 'representative@example.com',
     templateName: 'representativeValidation',
-    subject: 'LiftPay Merchant Registration – Authorized Representative Validation Required',
+    subject: 'splitr Merchant Registration – Authorized Representative Validation Required',
     data: {
       representative_name: 'Jane Doe',
       merchant_business_name: 'TechCorp Solutions Ltd',
-      validation_link: 'https://verify.liftpay.co/validate?token=xyz789',
+      validation_link: 'https://verify.splitr.co/validate?token=xyz789',
     },
   });
   ```
@@ -103,10 +103,10 @@ This directory contains HTML email templates for the Lift Platform email service
   await emailService.sendTemplateEmail({
     to: 'merchant@example.com',
     templateName: 'merchantVerificationComplete',
-    subject: 'Welcome to LiftPay Merchant Network',
+    subject: 'Welcome to splitr Merchant Network',
     data: {
       merchant_name: "John's Business",
-      merchant_dashboard_link: 'https://merchant.liftpay.co',
+      merchant_dashboard_link: 'https://merchant.splitr.co',
     },
   });
   ```
@@ -123,7 +123,7 @@ This directory contains HTML email templates for the Lift Platform email service
   await emailService.sendTemplateEmail({
     to: 'user@example.com',
     templateName: 'otp',
-    subject: 'Your LiftPay Verification Code',
+    subject: 'Your splitr Verification Code',
     data: {
       first_name: 'John',
       otp_code: '1234',
@@ -134,7 +134,7 @@ This directory contains HTML email templates for the Lift Platform email service
   await emailService.sendTemplateEmail({
     to: 'user@example.com',
     templateName: 'otp',
-    subject: 'Your LiftPay Verification Code',
+    subject: 'Your splitr Verification Code',
     data: {
       otp_code: '1234',
     },

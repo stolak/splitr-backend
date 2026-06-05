@@ -153,19 +153,19 @@ router.get(
 
 /**
  * @swagger
- * /api/v1/loan-transactions/liftpay-id/{liftpayId}:
+ * /api/v1/loan-transactions/splitr-id/{splitrId}:
  *   get:
- *     summary: Get loan transaction by liftpayId
+ *     summary: Get loan transaction by splitrId
  *     tags: [LoanTransactions]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: liftpayId
+ *         name: splitrId
  *         required: true
  *         schema:
  *           type: string
- *         description: Loan transaction liftpayId
+ *         description: Loan transaction splitrId
  *     responses:
  *       200:
  *         description: Loan transaction retrieved successfully
@@ -177,9 +177,9 @@ router.get(
  *         description: Internal server error
  */
 router.get(
-  "/liftpay-id/:liftpayId",
+  "/splitr-id/:splitrId",
   authenticateJWT,
-  loanTransactionController.getLoanTransactionByLiftpayId
+  loanTransactionController.getLoanTransactionBysplitrId
 );
 
 /**

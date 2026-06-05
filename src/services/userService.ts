@@ -75,13 +75,7 @@ export class UserService {
             phoneNumber: true,
             userType: true,
             role: true,
-            outletId: true,
-            outlet: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+            
             isActive: true,
             isVerified: true,
             isEmailVerified: true,

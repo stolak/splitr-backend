@@ -33,7 +33,7 @@ const router = Router();
  *         id:
  *           type: string
  *           format: uuid
- *         liftpayId:
+ *         splitrId:
  *           type: string
  *         merchantId:
  *           type: string
@@ -298,19 +298,19 @@ router.get(
 
 /**
  * @swagger
- * /api/v1/merchant-transactions/liftpay/{liftpayId}:
+ * /api/v1/merchant-transactions/splitr/{splitrId}:
  *   get:
- *     summary: Get merchant transaction by liftpayId
+ *     summary: Get merchant transaction by splitrId
  *     tags: [Merchant Transactions]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: liftpayId
+ *         name: splitrId
  *         required: true
  *         schema:
  *           type: string
- *         description: Merchant transaction liftpayId
+ *         description: Merchant transaction splitrId
  *     responses:
  *       200:
  *         description: Merchant transaction details
@@ -331,9 +331,9 @@ router.get(
  *         description: Internal server error
  */
 router.get(
-  "/liftpay/:liftpayId",
+  "/splitr/:splitrId",
   authenticateJWT,
-  merchantTransactionController.getMerchantTransactionByLiftpayId.bind(
+  merchantTransactionController.getMerchantTransactionBysplitrId.bind(
     merchantTransactionController
   )
 );
@@ -893,9 +893,9 @@ router.get(
  *                             type: string
  *                             format: uuid
  *                             description: Unique merchant identifier
- *                           liftpayId:
+ *                           splitrId:
  *                             type: string
- *                             description: Merchant Liftpay ID
+ *                             description: Merchant splitr ID
  *                           businessName:
  *                             type: string
  *                             description: Business name of the merchant
@@ -998,9 +998,9 @@ router.get(
  *                             type: string
  *                             format: uuid
  *                             description: Unique merchant identifier
- *                           liftpayId:
+ *                           splitrId:
  *                             type: string
- *                             description: Merchant Liftpay ID
+ *                             description: Merchant splitr ID
  *                           businessName:
  *                             type: string
  *                             description: Business name of the merchant
@@ -1077,10 +1077,10 @@ router.get(
  *                       type: string
  *                       format: uuid
  *                       description: Unique merchant identifier
- *                     liftpayId:
+ *                     splitrId:
  *                       type: string
  *                       nullable: true
- *                       description: Merchant Liftpay ID
+ *                       description: Merchant splitr ID
  *                     businessName:
  *                       type: string
  *                       nullable: true
@@ -1153,9 +1153,9 @@ router.get(
  *                       type: string
  *                       format: uuid
  *                       description: Unique merchant identifier
- *                     liftpayId:
+ *                     splitrId:
  *                       type: string
- *                       description: Merchant Liftpay ID
+ *                       description: Merchant splitr ID
  *                     businessName:
  *                       type: string
  *                       description: Business name of the merchant

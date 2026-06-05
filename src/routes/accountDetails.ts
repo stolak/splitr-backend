@@ -26,7 +26,7 @@ const router = Router();
  *           properties:
  *             id:
  *               type: string
- *             liftpayId:
+ *             splitrId:
  *               type: string
  *             firstName:
  *               type: string

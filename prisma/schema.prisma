@@ -94,11 +94,6 @@ enum TierStatus {
   Inactive
 }
 
-enum OutletStatus {
-  Active
-  Inactive
-}
-
 enum RevenueType {
   Repayment
   Settlement
@@ -126,7 +121,7 @@ model User {
   approvedById String?
   modifiedById String?
   merchantId   String? // 👈 Foreign key to Merchant
-  outletId     String? // 👈 Foreign key to Outlet
+  
 
   createdBy  User? @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   approvedBy User? @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
@@ -139,9 +134,7 @@ model User {
   // 👇 Define relation back to Merchant
   merchant Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
 
-  // 👇 Define relation back to Outlet
-  outlet Outlet? @relation("OutletUsers", fields: [outletId], references: [id], onDelete: SetNull)
-
+  
   status       String   @default("active")
   referralCode String?
   createdAt    DateTime @default(now())
@@ -155,8 +148,6 @@ model User {
   // Merchants whose terms this user agreed to
   merchantsTermsAgreed Merchant[] @relation("MerchantTermsAgreedBy")
 
-  // Outlets managed by this user
-  managedOutlets Outlet[] @relation("OutletManager")
 
   // Password reset tokens
   passwordResetTokens PasswordResetToken[]
@@ -179,7 +170,7 @@ model PasswordResetToken {
 
 model Buyer {
   id        String @id @default(uuid())
-  liftpayId String @unique @db.VarChar(30)
+  splitrId String @unique @db.VarChar(30)
   userId    String @unique
   user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -239,7 +230,7 @@ model Buyer {
 
 model Merchant {
   id                          String  @id @default(uuid())
-  liftpayId                   String  @unique @db.VarChar(30)
+  splitrId                   String  @unique @db.VarChar(30)
   logoUrl                     String?
   businessName                String
   businessEmail               String  @unique
@@ -317,7 +308,6 @@ model Merchant {
   Loan                       Loan[]
   invoices                   Invoice[]
   merchantTransactions       MerchantTransaction[]
-  outlets                    Outlet[]
   revenues                   Revenue[]
   paystackTransferRecipients PaystackMerchantTransferRecipient[]
   paystackTransfers          PaystackTransfer[]
@@ -426,7 +416,7 @@ model TimeOutSetting {
 
 model Loan {
   id                   String            @id @default(uuid())
-  liftpayId            String            @unique @db.VarChar(30)
+  splitrId            String            @unique @db.VarChar(30)
   buyerId              String
   buyer                Buyer             @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   invoiceId            String?           @unique
@@ -542,7 +532,7 @@ model LoanDebitTrial {
 
 model LoanTransaction {
   id                String            @id @default(uuid())
-  liftpayId         String            @unique @db.VarChar(30)
+  splitrId         String            @unique @db.VarChar(30)
   loanId            String
   loan              Loan              @relation(fields: [loanId], references: [id], onDelete: Restrict)
   transactionType   TransactionType
@@ -560,7 +550,7 @@ model LoanTransaction {
 
 model MerchantTransaction {
   id              String                  @id @default(uuid())
-  liftpayId       String                  @unique @db.VarChar(30)
+  splitrId       String                  @unique @db.VarChar(30)
   merchantId      String
   merchant        Merchant                @relation(fields: [merchantId], references: [id], onDelete: Restrict)
   invoiceRef      String?
@@ -701,7 +691,7 @@ model ScoringInputSnapshot {
 
 model Invoice {
   id                   String                @id @default(uuid())
-  liftpayId            String                @unique @db.VarChar(30)
+  splitrId            String                @unique @db.VarChar(30)
   customerName         String
   customerEmail        String
   customerPhoneNumber  String
@@ -712,8 +702,7 @@ model Invoice {
   buyer                Buyer?                @relation(fields: [buyerId], references: [id], onDelete: SetNull)
   merchantId           String
   merchant             Merchant              @relation(fields: [merchantId], references: [id], onDelete: Restrict)
-  outletId             String?
-  outlet               Outlet?               @relation(fields: [outletId], references: [id], onDelete: SetNull)
+     
   items                Item[]
   status               InvoiceStatus         @default(Pending)
   type                 InvoiceType           @default(Purchase)
@@ -830,24 +819,11 @@ model Tier {
   updatedAt  DateTime   @updatedAt
 }
 
-model Outlet {
-  id         String       @id @default(uuid())
-  name       String
-  address    String       @db.Text
-  managerId  String?
-  manager    User?        @relation("OutletManager", fields: [managerId], references: [id], onDelete: SetNull)
-  merchantId String
-  merchant   Merchant     @relation(fields: [merchantId], references: [id], onDelete: Restrict)
-  invoices   Invoice[]
-  users      User[]       @relation("OutletUsers")
-  status     OutletStatus @default(Active)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-}
+
 
 model Revenue {
   id              String        @id @default(uuid())
-  liftpayId       String        @unique @db.VarChar(30)
+  splitrId       String        @unique @db.VarChar(30)
   credit          Decimal       @default(0)
   debit           Decimal       @default(0)
   description     String

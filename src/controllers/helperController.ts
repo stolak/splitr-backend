@@ -156,7 +156,7 @@ export const helperController = {
       emailService.sendTemplateEmail({
         to: email,
         templateName: "otp",
-        subject: "Your LiftPay Verification Code",
+        subject: "Your splitr Verification Code",
         data: {
           // first_name is optional - template handles both cases
           otp_code: result.otp,

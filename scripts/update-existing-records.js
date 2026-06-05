@@ -7,7 +7,7 @@ async function updateExistingRecords() {
   let connection;
   
   try {
-    console.log('🔄 Updating existing records with LiftPay IDs...\n');
+    console.log('🔄 Updating existing records with splitr IDs...\n');
 
     // Get database connection details from Prisma
     const databaseUrl = process.env.DATABASE_URL;
@@ -33,8 +33,8 @@ async function updateExistingRecords() {
     console.log('🏢 Updating existing merchants...');
     const [merchantResult] = await connection.execute(`
       UPDATE Merchant 
-      SET liftpayId = generate_liftpay_id('LPM') 
-      WHERE liftpayId IS NULL OR liftpayId = ''
+      SET splitrId = generate_splitr_id('LPM') 
+      WHERE splitrId IS NULL OR splitrId = ''
     `);
     console.log(`✅ Updated ${merchantResult.affectedRows} merchants`);
 
@@ -42,30 +42,30 @@ async function updateExistingRecords() {
     console.log('👤 Updating existing buyers...');
     const [buyerResult] = await connection.execute(`
       UPDATE Buyer 
-      SET liftpayId = generate_liftpay_id('LPB') 
-      WHERE liftpayId IS NULL OR liftpayId = ''
+      SET splitrId = generate_splitr_id('LPB') 
+      WHERE splitrId IS NULL OR splitrId = ''
     `);
     console.log(`✅ Updated ${buyerResult.affectedRows} buyers`);
 
     // Show updated records
     console.log('\n📊 Updated records:');
     const [merchants] = await connection.execute(`
-      SELECT id, liftpayId, businessName FROM Merchant WHERE liftpayId IS NOT NULL
+      SELECT id, splitrId, businessName FROM Merchant WHERE splitrId IS NOT NULL
     `);
     
     const [buyers] = await connection.execute(`
-      SELECT id, liftpayId, firstName, lastName FROM Buyer WHERE liftpayId IS NOT NULL
+      SELECT id, splitrId, firstName, lastName FROM Buyer WHERE splitrId IS NOT NULL
     `);
 
     console.log('\n🏢 Merchants:');
     merchants.forEach(merchant => {
-      console.log(`   ${merchant.liftpayId} - ${merchant.businessName}`);
+      console.log(`   ${merchant.splitrId} - ${merchant.businessName}`);
     });
 
     console.log('\n👤 Buyers:');
     buyers.forEach(buyer => {
       const name = `${buyer.firstName || ''} ${buyer.lastName || ''}`.trim() || 'Unknown';
-      console.log(`   ${buyer.liftpayId} - ${name}`);
+      console.log(`   ${buyer.splitrId} - ${name}`);
     });
 
     console.log('\n🎉 All existing records updated successfully!');

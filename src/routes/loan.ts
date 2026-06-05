@@ -734,19 +734,19 @@ router.get('/:id', authenticateJWT, loanController.getLoanById);
 
 /**
  * @swagger
- * /api/v1/loans/liftpay-id/{liftpayId}:
+ * /api/v1/loans/splitr-id/{splitrId}:
  *   get:
- *     summary: Get loan by liftpayId
+ *     summary: Get loan by splitrId
  *     tags: [Loan]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: liftpayId
+ *         name: splitrId
  *         required: true
  *         schema:
  *           type: string
- *         description: Liftpay ID
+ *         description: splitr ID
  *     responses:
  *       200:
  *         description: Loan retrieved successfully
@@ -755,7 +755,7 @@ router.get('/:id', authenticateJWT, loanController.getLoanById);
  *       500:
  *         description: Internal server error
  */
-router.get('/liftpay-id/:liftpayId', authenticateJWT, loanController.getLoanByLiftpayId);
+router.get('/splitr-id/:splitrId', authenticateJWT, loanController.getLoanBysplitrId);
 
 /**
  * @swagger
@@ -788,7 +788,7 @@ router.get('/liftpay-id/:liftpayId', authenticateJWT, loanController.getLoanByLi
  *                   properties:
  *                     id:
  *                       type: string
- *                     liftpayId:
+ *                     splitrId:
  *                       type: string
  *                     loanAmount:
  *                       type: number
@@ -1189,7 +1189,7 @@ router.get('/:id/balance', authenticateJWT, loanController.getLoanBalance);
  *                                     properties:
  *                                       id:
  *                                         type: string
- *                                       liftpayId:
+ *                                       splitrId:
  *                                         type: string
  *                                       firstName:
  *                                         type: string

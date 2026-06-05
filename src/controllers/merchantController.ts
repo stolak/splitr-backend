@@ -536,21 +536,7 @@ export const merchantController = {
  *                             type: boolean
  *                           isPhoneVerified:
  *                             type: boolean
- *                           outletId:
- *                             type: string
- *                             format: uuid
- *                             nullable: true
- *                             description: ID of the outlet this user is assigned to
- *                           outlet:
- *                             type: object
- *                             nullable: true
- *                             description: Outlet details if user is assigned to an outlet
- *                             properties:
- *                               id:
- *                                 type: string
- *                                 format: uuid
- *                               name:
- *                                 type: string
+ 
  *                           createdAt:
  *                             type: string
  *                             format: date-time

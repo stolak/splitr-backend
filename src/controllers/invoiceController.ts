@@ -114,7 +114,7 @@ import { InvoiceStatus, InvoiceType, LoanReturnStatus } from '@prisma/client';
  *         name: q
  *         schema:
  *           type: string
- *         description: Optional search term for liftpayId, customerName, customerPhoneNumber, or customerEmail
+ *         description: Optional search term for splitrId, customerName, customerPhoneNumber, or customerEmail
  *       - in: query
  *         name: type
  *         schema:
@@ -156,13 +156,13 @@ import { InvoiceStatus, InvoiceType, LoanReturnStatus } from '@prisma/client';
 
 /**
  * @swagger
- * /api/v1/invoices/liftpay/{liftpayId}:
+ * /api/v1/invoices/splitr/{splitrId}:
  *   get:
- *     summary: Get invoice by LiftPay ID
+ *     summary: Get invoice by splitr ID
  *     tags: [Invoice]
  *     parameters:
  *       - in: path
- *         name: liftpayId
+ *         name: splitrId
  *         required: true
  *         schema:
  *           type: string
@@ -594,12 +594,12 @@ export class InvoiceController {
   }
 
   /**
-   * Get invoice by LiftPay ID
+   * Get invoice by splitr ID
    */
-  async getByLiftpayId(req: Request, res: Response) {
+  async getBysplitrId(req: Request, res: Response) {
     try {
-      const { liftpayId } = req.params;
-      const result = await invoiceService.getInvoiceByLiftpayId(liftpayId);
+      const { splitrId } = req.params;
+      const result = await invoiceService.getInvoiceBysplitrId(splitrId);
 
       if (!result.success) {
         return res.status(404).json({

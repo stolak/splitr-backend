@@ -86,12 +86,12 @@ export class RevenueController {
   }
 
   /**
-   * Get revenue by liftpayId
+   * Get revenue by splitrId
    */
-  async getRevenueByLiftpayId(req: Request, res: Response) {
+  async getRevenueBysplitrId(req: Request, res: Response) {
     try {
-      const result = await revenueService.getRevenueByLiftpayId(
-        req.params.liftpayId
+      const result = await revenueService.getRevenueBysplitrId(
+        req.params.splitrId
       );
 
       if (result.success) {

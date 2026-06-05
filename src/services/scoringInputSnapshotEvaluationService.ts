@@ -26,7 +26,7 @@ export class ScoringInputSnapshotEvaluationService {
     const buyers = buyerIds.length
       ? await prisma.buyer.findMany({
           where: { id: { in: buyerIds } },
-          select: { id: true, firstName: true, lastName: true, liftpayId: true },
+          select: { id: true, firstName: true, lastName: true, splitrId: true },
         })
       : [];
     const buyerById = new Map(buyers.map((b) => [b.id, b]));
@@ -37,7 +37,7 @@ export class ScoringInputSnapshotEvaluationService {
         const buyerName = buyer
           ? [buyer.firstName, buyer.lastName].filter(Boolean).join(' ')
           : null;
-        const liftpayId = buyer?.liftpayId ?? null;
+        const splitrId = buyer?.splitrId ?? null;
 
         try {
           const scoringResult = await scoringService.scoring(snapshot.scoringInput);
@@ -58,7 +58,7 @@ export class ScoringInputSnapshotEvaluationService {
               id: snapshot.id,
               buyerId: snapshot.buyerId,
               buyerName,
-              liftpayId,
+              splitrId,
               createdAt: snapshot.createdAt,
               updatedAt: snapshot.updatedAt,
               scoringInput: snapshot.scoringInput,
@@ -73,7 +73,7 @@ export class ScoringInputSnapshotEvaluationService {
               id: snapshot.id,
               buyerId: snapshot.buyerId,
               buyerName,
-              liftpayId,
+              splitrId,
               createdAt: snapshot.createdAt,
               updatedAt: snapshot.updatedAt,
               scoringInput: snapshot.scoringInput,

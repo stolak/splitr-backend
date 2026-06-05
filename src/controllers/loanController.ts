@@ -131,20 +131,20 @@ export class LoanController {
   }
 
   /**
-   * Get loan by liftpayId
+   * Get loan by splitrId
    */
-  async getLoanByLiftpayId(req: Request, res: Response) {
+  async getLoanBysplitrId(req: Request, res: Response) {
     try {
-      const { liftpayId } = req.params;
+      const { splitrId } = req.params;
 
-      if (!liftpayId) {
+      if (!splitrId) {
         return res.status(400).json({
           success: false,
-          message: "Liftpay ID is required",
+          message: "splitr ID is required",
         });
       }
 
-      const result = await loanService.getLoanByLiftpayId(liftpayId);
+      const result = await loanService.getLoanBysplitrId(splitrId);
 
       if (!result.success) {
         return res.status(404).json({
@@ -158,7 +158,7 @@ export class LoanController {
         data: result.data,
       });
     } catch (error: any) {
-      console.error("Error getting loan by liftpayId:", error);
+      console.error("Error getting loan by splitrId:", error);
       res.status(500).json({
         success: false,
         message: error.message || "Internal server error",

@@ -248,7 +248,7 @@ export class ScoringInputSnapshotService {
         buyer: {
           select: {
             id: true,
-            liftpayId: true,
+            splitrId: true,
             firstName: true,
             lastName: true,
           },

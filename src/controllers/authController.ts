@@ -267,7 +267,6 @@ export const registerMerchantUser = async (req: Request, res: Response) => {
       lastName,
       phoneNumber,
       merchantId,
-      outletId,
       role = "Merchant",
     }: UserRegistrationInput = req.body;
 
@@ -285,7 +284,6 @@ export const registerMerchantUser = async (req: Request, res: Response) => {
       lastName,
       phoneNumber,
       merchantId,
-      outletId,
       role,
       userType: "Merchant",
     });

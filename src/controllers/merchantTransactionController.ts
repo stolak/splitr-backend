@@ -58,13 +58,13 @@ export class MerchantTransactionController {
   }
 
   /**
-   * Get merchant transaction by liftpayId
+   * Get merchant transaction by splitrId
    */
-  async getMerchantTransactionByLiftpayId(req: Request, res: Response) {
+  async getMerchantTransactionBysplitrId(req: Request, res: Response) {
     try {
       const result =
-        await merchantTransactionService.getMerchantTransactionByLiftpayId(
-          req.params.liftpayId
+        await merchantTransactionService.getMerchantTransactionBysplitrId(
+          req.params.splitrId
         );
 
       if (result.success) {

@@ -24,7 +24,7 @@ const monoConnectSelect = {
   buyer: {
     select: {
       id: true,
-      liftpayId: true,
+      splitrId: true,
       firstName: true,
       lastName: true,
       email: true,

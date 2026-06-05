@@ -10,8 +10,8 @@ router.post('/', authenticateJWT, invoiceController.create);
 // Get all invoices with filters and pagination
 router.get('/', invoiceController.list);
 
-// Get invoice by LiftPay ID (must be before /:id route)
-router.get('/liftpay/:liftpayId', invoiceController.getByLiftpayId);
+// Get invoice by splitr ID (must be before /:id route)
+router.get('/splitr/:splitrId', invoiceController.getBysplitrId);
 
 // Get merchant invoices
 router.get('/merchant/:merchantId', invoiceController.getByMerchantId);
