@@ -762,7 +762,7 @@ async function main() {
     // Seed Loan Penalties
     console.log('\n📊 Seeding loan penalties...');
     const penalty1 = await prisma.loanPenalty.upsert({
-      where: { id: 'penalty-7-days' },
+      where: { id: 'penalty-6-days' },
       update: {},
       create: {
         id: 'penalty-6-days',
@@ -998,118 +998,7 @@ async function main() {
 
     console.log('✅ Eligibility and score records seeded successfully');
 
-    // Create sample outlets for merchants
-    const outlet1 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant1-hq' },
-      update: {},
-      create: {
-        id: 'outlet-merchant1-hq',
-        name: 'TechCorp HQ',
-        address: '45 Tech Avenue, Victoria Island, Lagos',
-        merchantId: merchant1.id,
-        status: 'Active',
-      },
-    });
-
-    const outlet2 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant2-vi' },
-      update: {},
-      create: {
-        id: 'outlet-merchant2-vi',
-        name: 'Retail Store - VI Branch',
-        address: '23 Akin Adesola Street, Victoria Island, Lagos',
-        merchantId: merchant2.id,
-        status: 'Active',
-      },
-    });
-
-    const outlet3 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant2-ikeja' },
-      update: {},
-      create: {
-        id: 'outlet-merchant2-ikeja',
-        name: 'Retail Store - Ikeja Branch',
-        address: '101 Allen Avenue, Ikeja, Lagos',
-        merchantId: merchant2.id,
-        status: 'Active',
-      },
-    });
-
-    const outlet4 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant2-lekki' },
-      update: {},
-      create: {
-        id: 'outlet-merchant2-lekki',
-        name: 'Retail Store - Lekki Branch',
-        address: '15 Admiralty Way, Lekki Phase 1, Lagos',
-        merchantId: merchant2.id,
-        status: 'Active',
-      },
-    });
-
-    // Create outlets for merchant4
-    const outlet6 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant4-ikeja' },
-      update: {},
-      create: {
-        id: 'outlet-merchant4-ikeja',
-        name: 'Swift Logistics - Ikeja Hub',
-        address: '200 Transport Avenue, Ikeja, Lagos',
-        merchantId: merchant4.id,
-        status: 'Active',
-      },
-    });
-
-    const outlet7 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant4-victoria' },
-      update: {},
-      create: {
-        id: 'outlet-merchant4-victoria',
-        name: 'Swift Logistics - Victoria Island Branch',
-        address: '50 Ahmadu Bello Way, Victoria Island, Lagos',
-        merchantId: merchant4.id,
-        status: 'Active',
-      },
-    });
-
-    // Create outlets for merchant5
-    const outlet8 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant5-main' },
-      update: {},
-      create: {
-        id: 'outlet-merchant5-main',
-        name: 'Prime Healthcare - Main Clinic',
-        address: '321 Medical Center, Wuse 2, Abuja',
-        merchantId: merchant5.id,
-        status: 'Active',
-      },
-    });
-
-    const outlet9 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant5-branch' },
-      update: {},
-      create: {
-        id: 'outlet-merchant5-branch',
-        name: 'Prime Healthcare - Garki Branch',
-        address: '45 Health Street, Garki, Abuja',
-        merchantId: merchant5.id,
-        status: 'Active',
-      },
-    });
-
-    const outlet5 = await prisma.outlet.upsert({
-      where: { id: 'outlet-merchant3-main' },
-      update: {},
-      create: {
-        id: 'outlet-merchant3-main',
-        name: 'Food Service Main Branch',
-        address: '78 Ajose Adeogun Street, Victoria Island, Lagos',
-        merchantId: merchant3.id,
-        status: 'Active',
-      },
-    });
-
-    console.log('✅ Outlets seeded successfully');
+  
 
     console.log('\n🎉 Database seeding completed successfully!');
     console.log('\n📋 Sample Data Created:');

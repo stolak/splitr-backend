@@ -151,8 +151,6 @@ model User {
 
   // Password reset tokens
   passwordResetTokens PasswordResetToken[]
-
-  @@map("user")
 }
 
 model PasswordResetToken {
@@ -168,7 +166,6 @@ model PasswordResetToken {
   @@index([userId])
   @@index([token])
   @@index([expiresAt])
-  @@map("password_reset_token")
 }
 
 model Buyer {
@@ -227,8 +224,6 @@ model Buyer {
  PaystackMerchantTransferRecipient PaystackMerchantTransferRecipient[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@map("buyer")
 }
 
 //
@@ -316,8 +311,6 @@ model Merchant {
   revenues                   Revenue[]
   paystackTransferRecipients PaystackMerchantTransferRecipient[]
   paystackTransfers          PaystackTransfer[]
-
-  @@map("merchant")
 }
 
 model MerchantShareHolder {
@@ -326,8 +319,6 @@ model MerchantShareHolder {
   merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   shareholder String?
   holding     String?
-
-  @@map("merchant_share_holder")
 }
 
 model MerchantDirector {
@@ -337,8 +328,6 @@ model MerchantDirector {
   director   String?
   position   String?
   doc        String?
-
-  @@map("merchant_director")
 }
 
 model BankAccount {
@@ -349,8 +338,6 @@ model BankAccount {
   accountNumber String
   merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   bank          Bank     @relation(fields: [bankId], references: [id], onDelete: Cascade)
-
-  @@map("bank_account")
 }
 
 model Bank {
@@ -358,8 +345,6 @@ model Bank {
   bankCode    String        @unique
   bankName    String
   BankAccount BankAccount[]
-
-  @@map("bank")
 }
 
 model MerchantAuthoriser {
@@ -372,8 +357,6 @@ model MerchantAuthoriser {
   bvn             String?
   nin             String
   merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@map("merchant_authoriser")
 }
 
 model RejectionReason {
@@ -384,8 +367,6 @@ model RejectionReason {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   createdById     String?
-
-  @@map("rejection_reason")
 }
 
 model LoanSetting {
@@ -406,8 +387,6 @@ model LoanSetting {
   upfrontFeeCap        Decimal?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
-
-  @@map("loan_setting")
 }
 
 model SettlementSetting {
@@ -419,8 +398,6 @@ model SettlementSetting {
   timeOfAutoSettlement   String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
-
-  @@map("settlement_setting")
 }
 
 model TimeOutSetting {
@@ -435,8 +412,6 @@ model TimeOutSetting {
   periodBetweenAttempts   Int      @default(6)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
-
-  @@map("time_out_setting")
 }
 
 model Loan {
@@ -482,8 +457,6 @@ model Loan {
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   revenues             Revenue[]
-
-  @@map("loan")
 }
 
 enum LoanReturnStatus {
@@ -513,8 +486,6 @@ model LoanSchedule {
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
   loanTransactions       LoanTransaction[]
-
-  @@map("loan_schedule")
 }
 
 model LoanPenaltySchedule {
@@ -528,8 +499,6 @@ model LoanPenaltySchedule {
   executedAt     DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-
-  @@map("loan_penalty_schedule")
 }
 
 model LoanDebitTrialSchedule {
@@ -542,8 +511,6 @@ model LoanDebitTrialSchedule {
   executedAt     DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-
-  @@map("loan_debit_trial_schedule")
 }
 
 model LoanPenalty {
@@ -553,8 +520,6 @@ model LoanPenalty {
   status     LoanPenaltyStatus @default(Inactive)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
-
-  @@map("loan_penalty")
 }
 
 model LoanDebitTrial {
@@ -563,8 +528,6 @@ model LoanDebitTrial {
   status    LoanPenaltyStatus @default(Inactive)
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
-
-  @@map("loan_debit_trial")
 }
 
 model LoanTransaction {
@@ -583,8 +546,6 @@ model LoanTransaction {
   transactionDate   DateTime
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
-
-  @@map("loan_transaction")
 }
 
 model MerchantTransaction {
@@ -604,8 +565,6 @@ model MerchantTransaction {
   groupReference  String?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
-
-  @@map("merchant_transaction")
 }
 
 enum TransactionType {
@@ -679,8 +638,6 @@ model EligibilityAndScore {
   requiredDownPayment     Decimal
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
-
-  @@map("eligibility_and_score")
 }
 
 /// Persisted `ScoringInput` from `scoringService.ts` for later scoring / reprocessing.
@@ -730,7 +687,6 @@ model ScoringInputSnapshot {
   updatedAt DateTime @updatedAt
 
   @@index([buyerId])
-  @@map("scoring_input_snapshot")
 }
 
 model Invoice {
@@ -768,8 +724,6 @@ model Invoice {
   returnInitiatedBy    String?
   returnApprovedBy     String?
   returnApprovedDate   DateTime?
-
-  @@map("invoice")
 }
 
 model MandateDebit {
@@ -793,7 +747,6 @@ model MandateDebit {
   @@index([loanId])
   @@index([mandateId])
   @@unique([mandateId, reference])
-  @@map("mandate_debit")
 }
 
 model InvoiceMandate {
@@ -816,8 +769,6 @@ model InvoiceMandate {
   directPays       DirectPay[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
-
-  @@map("invoice_mandate")
 }
 
 model DirectPay {
