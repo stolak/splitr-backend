@@ -111,10 +111,10 @@ export const registerBuyer = async (req: Request, res: Response) => {
       userType = "Buyer",
     }: UserRegistrationInput = req.body;
 
-    if (!email || !password) {
+    if (!email || !password || !firstName || !lastName) {
       return res
         .status(400)
-        .json({ message: "Email and password are required" });
+        .json({ message: "firstName, lastName, email, and password are required" });
     }
 
     const user = await authService.create({
@@ -131,9 +131,28 @@ export const registerBuyer = async (req: Request, res: Response) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+export const loginWithFirebase = async (req: Request, res: Response) => {
+  try {
+    const { idToken } = req.body;
+    // console.log('idToken', idToken)
+
+    if (!idToken) {
+      return res.status(400).json({ message: "idToken is required" });
+    }
+
+    const result = await authService.loginWithFirebase(idToken);
+    res.json(result);
+  } catch (error: any) {
+    const message = error.message || "Firebase authentication failed";
+    const status = message.includes("Firebase") || message.includes("token") ? 401 : 400;
+    res.status(status).json({ message });
+  }
+};
+
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password, userType } = req.body;
+    const { email, password, userType="Admin" } = req.body;
 
     if (!email || !password) {
       return res

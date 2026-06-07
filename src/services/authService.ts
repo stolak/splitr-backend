@@ -1,7 +1,10 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getJwtSecret } from '../utils/env';
+import { verifyFirebaseIdToken } from '../utils/firebase';
+import { extractFirebaseProviderLinks, FirebaseProviderLink } from '../utils/linkedProviderMapper';
 import prisma from '../utils/prisma';
 import { emailService } from './emailService';
 
@@ -74,6 +77,120 @@ function buildTokens(user: any) {
   return { accessToken, refreshToken, expiresIn: accessExpiresInSeconds };
 }
 
+const authUserSelect = {
+  id: true,
+  email: true,
+  password: true,
+  firstName: true,
+  lastName: true,
+  userType: true,
+  isVerified: true,
+  profileImageUrl: true,
+  merchantId: true,
+  merchant: {
+    select: {
+      isAgreedToTerms: true,
+      businessName: true,
+      id: true,
+      splitrId: true,
+      merchantCharge: true,
+      logoUrl: true,
+    },
+  },
+  buyer: {
+    select: {
+      id: true,
+    },
+  },
+} as const;
+
+function buildAuthResponseFromUser(user: {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  userType: string;
+  isVerified: boolean;
+  profileImageUrl: string | null;
+  merchantId: string | null;
+  merchant: {
+    isAgreedToTerms: boolean | null;
+    businessName: string;
+    merchantCharge: unknown;
+    logoUrl: string | null;
+  } | null;
+  buyer: { id: string } | null;
+}, message: string): AuthResponse {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || '';
+  const tokens = buildTokens({
+    id: user.id,
+    email: user.email,
+    name,
+    profileImageUrl: user.profileImageUrl ?? undefined,
+    merchantId: user.merchantId,
+    userType: mapUserType(user.userType as any),
+    isVerified: user.isVerified ?? false,
+    isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
+    buyerId: user.buyer?.id ?? undefined,
+    merchantCharge: user.merchant?.merchantCharge,
+    logoUrl: user.merchant?.logoUrl ?? undefined,
+  });
+
+  return {
+    success: true,
+    message,
+    data: {
+      user: {
+        id: user.id,
+        email: user.email,
+        name,
+        profileImageUrl: user.profileImageUrl ?? undefined,
+        userType: mapUserType(user.userType as any),
+        isVerified: user.isVerified ?? false,
+        isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
+        merchantId: user.merchantId ?? undefined,
+        merchantName: user.merchant?.businessName ?? undefined,
+        buyerId: user.buyer?.id ?? undefined,
+        merchantCharge: user.merchant?.merchantCharge ? Number(user.merchant.merchantCharge) : 0,
+        logoUrl: user.merchant?.logoUrl ?? undefined,
+      },
+      tokens,
+    },
+  };
+}
+
+async function syncLinkedUsers(userId: string, providerLinks: FirebaseProviderLink[]) {
+  for (const link of providerLinks) {
+    await prisma.linkedUser.upsert({
+      where: {
+        provider_providerUserId: {
+          provider: link.provider,
+          providerUserId: link.providerUserId,
+        },
+      },
+      update: { userId },
+      create: {
+        userId,
+        provider: link.provider,
+        providerUserId: link.providerUserId,
+      },
+    });
+  }
+}
+
+function extractNameFromFirebaseToken(decoded: DecodedIdToken) {
+  const firstName =
+    (decoded as DecodedIdToken & { given_name?: string }).given_name ||
+    decoded.name?.split(' ')[0] ||
+    undefined;
+  const lastName =
+    (decoded as DecodedIdToken & { family_name?: string }).family_name ||
+    decoded.name?.split(' ').slice(1).join(' ') ||
+    undefined;
+
+  return { firstName, lastName };
+}
+
 export class AuthService {
   async create(input: UserRegistrationInput): Promise<AuthResponse> {
     const { email, password, merchantId, profileImageUrl, address, ...userInput } = input;
@@ -142,84 +259,130 @@ export class AuthService {
     if (userType) {
       where.userType = userType;
     }
-    // `findUnique` only works with unique fields; `userType` is not unique.
-    // Use `findFirst` so the extra filter doesn't crash Prisma.
+    console.log(where)
     const user = await prisma.user.findFirst({
       where,
-      select: {
-        id: true,
-        email: true,
-        password: true,
-        firstName: true,
-        lastName: true,
-        userType: true,
-        isVerified: true,
-        profileImageUrl: true,
-        merchantId: true,
-        merchant: {
-          select: {
-            isAgreedToTerms: true,
-            businessName: true,
-            id: true,
-            splitrId: true,
-            merchantCharge: true,
-            logoUrl: true,
-          },
-        },
-        
-        buyer: {
-          select: {
-            id: true,
-          },
-        },
-      },
+      select: authUserSelect,
     });
     if (!user) {
       throw new Error('Invalid credentials');
     }
-    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       throw new Error('Invalid credentials');
     }
 
-    const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || '';
-    const tokens = buildTokens({
-      id: user.id,
-      email: user.email,
-      name,
-      profileImageUrl: user.profileImageUrl ?? undefined,
-      merchantId: user.merchantId,
+    return buildAuthResponseFromUser(user, 'Login successful');
+  }
 
-      userType: mapUserType(user.userType as any),
-      isVerified: user.isVerified ?? false,
-      isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
-      buyerId: user.buyer?.id ?? undefined,
-      merchantCharge: user.merchant?.merchantCharge,
-      logoUrl: user.merchant?.logoUrl ?? undefined,
+  async loginWithFirebase(idToken: string): Promise<AuthResponse> {
+    const decoded = await verifyFirebaseIdToken(idToken);
+    console.log(decoded)
+    const email = decoded.email;
+
+    if (!email) {
+      throw new Error('Firebase account must include an email address');
+    }
+
+    const providerLinks = extractFirebaseProviderLinks(decoded);
+    if (providerLinks.length === 0) {
+      throw new Error('Unsupported Firebase sign-in provider');
+    }
+
+    let user = await this.findUserForFirebaseAuth(email, providerLinks);
+
+    if (!user) {
+      user = await this.createFirebaseUser(decoded, email, providerLinks);
+      return buildAuthResponseFromUser(user, 'Registration successful');
+    }
+
+    this.assertFirebaseBuyerUser(user);
+
+    await syncLinkedUsers(user.id, providerLinks);
+
+    const refreshedUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: authUserSelect,
     });
 
-    return {
-      success: true,
-      message: 'Login successful',
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name,
-          profileImageUrl: user.profileImageUrl ?? undefined,
-          userType: mapUserType(user.userType as any),
-          isVerified: user.isVerified ?? false,
-          isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
-          merchantId: user?.merchantId ?? undefined,
-          merchantName: user?.merchant?.businessName ?? undefined,
-          buyerId: user.buyer?.id ?? undefined,
-          merchantCharge: user?.merchant?.merchantCharge ? Number(user.merchant.merchantCharge) : 0,
-          logoUrl: user.merchant?.logoUrl ?? undefined,
+    if (!refreshedUser) {
+      throw new Error('User not found');
+    }
+
+    return buildAuthResponseFromUser(refreshedUser, 'Login successful');
+  }
+
+  private async findUserForFirebaseAuth(email: string, providerLinks: FirebaseProviderLink[]) {
+    for (const link of providerLinks) {
+      const linkedUser = await prisma.linkedUser.findUnique({
+        where: {
+          provider_providerUserId: {
+            provider: link.provider,
+            providerUserId: link.providerUserId,
+          },
         },
-        tokens,
-      },
-    };
+        include: {
+          user: {
+            select: authUserSelect,
+          },
+        },
+      });
+
+      if (linkedUser?.user) {
+        return linkedUser.user;
+      }
+    }
+
+    return prisma.user.findUnique({
+      where: { email },
+      select: authUserSelect,
+    });
+  }
+
+  private async createFirebaseUser(
+    decoded: DecodedIdToken,
+    email: string,
+    providerLinks: FirebaseProviderLink[],
+  ) {
+    const { firstName, lastName } = extractNameFromFirebaseToken(decoded);
+    const randomPassword = randomBytes(32).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    const profileImageUrl = (decoded as DecodedIdToken & { picture?: string }).picture;
+
+    return prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          firstName,
+          lastName,
+          profileImageUrl,
+          userType: 'Buyer',
+          role: 'Buyer',
+          isEmailVerified: decoded.email_verified ?? true,
+          isActive: true,
+        },
+        select: authUserSelect,
+      });
+
+      for (const link of providerLinks) {
+        await tx.linkedUser.create({
+          data: {
+            userId: user.id,
+            provider: link.provider,
+            providerUserId: link.providerUserId,
+          },
+        });
+      }
+
+      return user;
+    });
+  }
+
+  private assertFirebaseBuyerUser(user: { userType: string }) {
+    if (user.userType !== 'Buyer') {
+      throw new Error('Firebase sign-in is only available for buyer accounts');
+    }
   }
 
   /**

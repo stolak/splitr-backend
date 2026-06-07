@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, registerBuyer, registerMerchantUser, getUsersByMerchant, forgotPassword, resetPassword, changePassword } from "../controllers/authController";
+import { register, login, registerBuyer, registerMerchantUser, getUsersByMerchant, forgotPassword, resetPassword, changePassword, loginWithFirebase } from "../controllers/authController";
 import { authenticateJWT } from "../middlewares/auth";
 const router = express.Router();
 /**
@@ -56,6 +56,31 @@ router.post("/register", register);
  *         description: Invalid credentials
  */
 router.post("/login", login);
+
+/**
+ * @openapi
+ * /api/v1/auth/firebase:
+ *   post:
+ *     summary: Sign up or log in with a Firebase ID token
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [idToken]
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: Firebase ID token from the client SDK
+ *     responses:
+ *       200:
+ *         description: Authenticated
+ *       401:
+ *         description: Invalid Firebase token
+ */
+router.post("/firebase", loginWithFirebase);
 
 router.post("/buyer/register", registerBuyer);
 

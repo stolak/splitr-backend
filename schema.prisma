@@ -151,6 +151,40 @@ model User {
 
   // Password reset tokens
   passwordResetTokens PasswordResetToken[]
+  linkedUsers         LinkedUser[]
+}
+
+enum LinkedProvider {
+  Google
+  Facebook
+  Twitter
+  LinkedIn
+  Instagram
+  Pinterest
+  Apple
+  Microsoft
+  Yahoo
+  AOL
+  GitHub
+  Bitbucket
+  GitLab
+  StackOverflow
+  Reddit
+}
+
+model LinkedUser {
+  id             String         @id @default(uuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       LinkedProvider
+  providerUserId String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([userId, provider])
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("linked_user")
 }
 
 model PasswordResetToken {

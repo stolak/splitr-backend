@@ -48,7 +48,7 @@ const options: swaggerJSDoc.Options = {
       },
     },
     security: [{ bearerAuth: [] }],
-    servers: [{ url: process.env.API_URL || 'http://localhost:5000' }],
+    servers: [{ url: process.env.API_URL || 'http://localhost:5002' }],
   },
   // Ensure all route and controller files are scanned
   apis: [
