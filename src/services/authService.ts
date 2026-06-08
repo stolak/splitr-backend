@@ -277,7 +277,6 @@ export class AuthService {
 
   async loginWithFirebase(idToken: string): Promise<AuthResponse> {
     const decoded = await verifyFirebaseIdToken(idToken);
-    console.log(decoded)
     const email = decoded.email;
 
     if (!email) {
@@ -289,14 +288,24 @@ export class AuthService {
       throw new Error('Unsupported Firebase sign-in provider');
     }
 
+    await this.validateFirebaseEmailAvailability(email);
+
     let user = await this.findUserForFirebaseAuth(email, providerLinks);
+    let isNewRegistration = false;
 
     if (!user) {
-      user = await this.createFirebaseUser(decoded, email, providerLinks);
-      return buildAuthResponseFromUser(user, 'Registration successful');
-    }
+      const buyerByEmail = await prisma.buyer.findUnique({ where: { email } });
 
-    this.assertFirebaseBuyerUser(user);
+      if (buyerByEmail) {
+        user = await this.createUserForOrphanBuyer(decoded, email, buyerByEmail, providerLinks);
+      } else {
+        user = await this.createFirebaseUserWithBuyer(decoded, email, providerLinks);
+      }
+      isNewRegistration = true;
+    } else {
+      this.assertFirebaseBuyerUser(user);
+      await this.ensureBuyerProfile(user, decoded, email);
+    }
 
     await syncLinkedUsers(user.id, providerLinks);
 
@@ -309,7 +318,35 @@ export class AuthService {
       throw new Error('User not found');
     }
 
-    return buildAuthResponseFromUser(refreshedUser, 'Login successful');
+    return buildAuthResponseFromUser(
+      refreshedUser,
+      isNewRegistration ? 'Registration successful' : 'Login successful',
+    );
+  }
+
+  private async validateFirebaseEmailAvailability(email: string) {
+    const [userByEmail, buyerByEmail] = await Promise.all([
+      prisma.user.findUnique({
+        where: { email },
+        select: { id: true, userType: true },
+      }),
+      prisma.buyer.findUnique({
+        where: { email },
+        select: { id: true, userId: true },
+      }),
+    ]);
+
+    console.log('userByEmail', userByEmail)
+    console.log('buyerByEmail', buyerByEmail)
+    if (userByEmail && userByEmail.userType !== 'Buyer') {
+      throw new Error(
+        'The email already exists with a non-buyer user hence it cannot be used',
+      );
+    }
+
+    if (userByEmail && buyerByEmail && buyerByEmail.userId !== userByEmail.id) {
+      throw new Error('Email already exists with another buyer');
+    }
   }
 
   private async findUserForFirebaseAuth(email: string, providerLinks: FirebaseProviderLink[]) {
@@ -339,18 +376,59 @@ export class AuthService {
     });
   }
 
-  private async createFirebaseUser(
+  private async ensureBuyerProfile(
+    user: {
+      id: string;
+      firstName: string | null;
+      lastName: string | null;
+      buyer: { id: string } | null;
+    },
+    decoded: DecodedIdToken,
+    email: string,
+  ) {
+    if (user.buyer) {
+      return;
+    }
+
+    const buyerWithEmail = await prisma.buyer.findUnique({ where: { email } });
+    if (buyerWithEmail && buyerWithEmail.userId !== user.id) {
+      throw new Error('Email already exists with another buyer');
+    }
+
+    const { firstName, lastName } = extractNameFromFirebaseToken(decoded);
+
+    await prisma.buyer.create({
+      data: {
+        splitrId: '',
+        userId: user.id,
+        email,
+        firstName: firstName ?? user.firstName,
+        lastName: lastName ?? user.lastName,
+        isEmailVerified: decoded.email_verified ?? true,
+        isPhoneVerified: true,
+        isActive: true,
+        isVerified: false,
+      },
+    });
+  }
+
+  private async createFirebaseUserWithBuyer(
     decoded: DecodedIdToken,
     email: string,
     providerLinks: FirebaseProviderLink[],
   ) {
+    const existingBuyer = await prisma.buyer.findUnique({ where: { email } });
+    if (existingBuyer) {
+      throw new Error('Email already exists with another buyer');
+    }
+
     const { firstName, lastName } = extractNameFromFirebaseToken(decoded);
     const randomPassword = randomBytes(32).toString('hex');
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
     const profileImageUrl = (decoded as DecodedIdToken & { picture?: string }).picture;
 
-    return prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
         data: {
           email,
           password: hashedPassword,
@@ -362,26 +440,119 @@ export class AuthService {
           isEmailVerified: decoded.email_verified ?? true,
           isActive: true,
         },
-        select: authUserSelect,
+      });
+
+      await tx.buyer.create({
+        data: {
+          splitrId: '',
+          userId: createdUser.id,
+          email,
+          firstName,
+          lastName,
+          isEmailVerified: decoded.email_verified ?? true,
+          isPhoneVerified: true,
+          isActive: true,
+          isVerified: false,
+        },
       });
 
       for (const link of providerLinks) {
         await tx.linkedUser.create({
           data: {
-            userId: user.id,
+            userId: createdUser.id,
             provider: link.provider,
             providerUserId: link.providerUserId,
           },
         });
       }
 
-      return user;
+      return tx.user.findUnique({
+        where: { id: createdUser.id },
+        select: authUserSelect,
+      });
     });
+
+    if (!user) {
+      throw new Error('Failed to create user');
+    }
+
+    return user;
+  }
+
+  private async createUserForOrphanBuyer(
+    decoded: DecodedIdToken,
+    email: string,
+    buyer: { id: string; userId: string },
+    providerLinks: FirebaseProviderLink[],
+  ) {
+    const existingUserForBuyer = await prisma.user.findUnique({
+      where: { id: buyer.userId },
+      select: authUserSelect,
+    });
+
+    if (existingUserForBuyer) {
+      this.assertFirebaseBuyerUser(existingUserForBuyer);
+      await this.ensureBuyerProfile(existingUserForBuyer, decoded, email);
+      return existingUserForBuyer;
+    }
+
+    const { firstName, lastName } = extractNameFromFirebaseToken(decoded);
+    const randomPassword = randomBytes(32).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    const profileImageUrl = (decoded as DecodedIdToken & { picture?: string }).picture;
+
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          firstName,
+          lastName,
+          profileImageUrl,
+          userType: 'Buyer',
+          role: 'Buyer',
+          isEmailVerified: decoded.email_verified ?? true,
+          isActive: true,
+        },
+      });
+
+      await tx.buyer.update({
+        where: { id: buyer.id },
+        data: {
+          userId: createdUser.id,
+          firstName: firstName ?? undefined,
+          lastName: lastName ?? undefined,
+        },
+      });
+
+      for (const link of providerLinks) {
+        await tx.linkedUser.create({
+          data: {
+            userId: createdUser.id,
+            provider: link.provider,
+            providerUserId: link.providerUserId,
+          },
+        });
+      }
+
+      return tx.user.findUnique({
+        where: { id: createdUser.id },
+        select: authUserSelect,
+      });
+    });
+
+    if (!user) {
+      throw new Error('Failed to create user for existing buyer');
+    }
+
+    return user;
   }
 
   private assertFirebaseBuyerUser(user: { userType: string }) {
     if (user.userType !== 'Buyer') {
-      throw new Error('Firebase sign-in is only available for buyer accounts');
+      throw new Error(
+        'The email already exists with a non-buyer user hence it cannot be used',
+      );
     }
   }
 
