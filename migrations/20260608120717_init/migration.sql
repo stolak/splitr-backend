@@ -28,6 +28,21 @@ CREATE TABLE `User` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `linked_user` (
+    `id` VARCHAR(191) NOT NULL,
+    `userId` VARCHAR(191) NOT NULL,
+    `provider` ENUM('Google', 'Facebook', 'Twitter', 'LinkedIn', 'Instagram', 'Pinterest', 'Apple', 'Microsoft', 'Yahoo', 'AOL', 'GitHub', 'Bitbucket', 'GitLab', 'StackOverflow', 'Reddit') NOT NULL,
+    `providerUserId` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    INDEX `linked_user_userId_idx`(`userId`),
+    UNIQUE INDEX `linked_user_userId_provider_key`(`userId`, `provider`),
+    UNIQUE INDEX `linked_user_provider_providerUserId_key`(`provider`, `providerUserId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `PasswordResetToken` (
     `id` VARCHAR(191) NOT NULL,
     `userId` VARCHAR(191) NOT NULL,
@@ -710,6 +725,9 @@ ALTER TABLE `User` ADD CONSTRAINT `User_modifiedById_fkey` FOREIGN KEY (`modifie
 
 -- AddForeignKey
 ALTER TABLE `User` ADD CONSTRAINT `User_merchantId_fkey` FOREIGN KEY (`merchantId`) REFERENCES `Merchant`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `linked_user` ADD CONSTRAINT `linked_user_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `PasswordResetToken` ADD CONSTRAINT `PasswordResetToken_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
