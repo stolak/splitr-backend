@@ -336,8 +336,6 @@ export class AuthService {
       }),
     ]);
 
-    console.log('userByEmail', userByEmail)
-    console.log('buyerByEmail', buyerByEmail)
     if (userByEmail && userByEmail.userType !== 'Buyer') {
       throw new Error(
         'The email already exists with a non-buyer user hence it cannot be used',
