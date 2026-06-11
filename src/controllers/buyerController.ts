@@ -328,7 +328,7 @@ export const buyerController = {
     try {
       const data = req.body as UpdateBuyerInput;
       const buyer = await buyerService.updateBuyer(req.params.id, data);
-      res.json(buyer);
+      res.json({ success: true, message: "Buyer updated successfully", data: { buyer } });
     } catch (error: any) {
       const status = /not found/i.test(error.message) ? 404 : 400;
       res.status(status).json({ message: error.message });
@@ -337,7 +337,7 @@ export const buyerController = {
   remove: async (req: Request, res: Response) => {
     try {
       const result = await buyerService.deleteBuyer(req.params.id);
-      res.json(result);
+      res.json({ success: true, message: "Buyer deleted successfully", data: { result } });
     } catch (error: any) {
       const status = /not found/i.test(error.message) ? 404 : 400;
       res.status(status).json({ message: error.message });
