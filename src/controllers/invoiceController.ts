@@ -512,11 +512,12 @@ export class InvoiceController {
           message: 'Invoice must have at least one item',
         });
       }
-
       const result = await invoiceService.createInvoice({
         ...input,
         merchantId: input.merchantId ?? req.user?.merchantId,
       });
+
+
 
       return res.status(201).json({
         success: true,

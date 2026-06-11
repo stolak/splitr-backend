@@ -81,6 +81,7 @@ enum InvoiceType {
   Shopping
   Services
   Invoice
+
 }
 
 enum LoanScheduleStatus {
@@ -764,8 +765,8 @@ model Invoice {
   amount               Decimal
   buyerId              String?
   buyer                Buyer?                @relation(fields: [buyerId], references: [id], onDelete: SetNull)
-  merchantId           String
-  merchant             Merchant              @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  merchantId           String?
+  merchant             Merchant?              @relation(fields: [merchantId], references: [id], onDelete: Restrict)
      
   items                Item[]
   status               InvoiceStatus         @default(Pending)
