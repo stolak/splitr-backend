@@ -64,11 +64,17 @@ const options: swaggerJSDoc.Options = {
 const swaggerSpec = swaggerJSDoc(options);
 
 export function setupSwagger(app: Express) {
-  // Swagger UI options with alphabetical sorting
   const swaggerUiOptions = {
     swaggerOptions: {
-      tagsSorter: 'alpha', // Sort tags alphabetically
-      operationsSorter: 'alpha', // Sort operations within tags alphabetically
+      // Must use inline literals — this function is serialized and runs in the browser.
+      tagsSorter: (a: { name?: string }, b: { name?: string }) => {
+        const nameA = a?.name ?? String(a);
+        const nameB = b?.name ?? String(b);
+        if (nameA === 'Auth') return -1;
+        if (nameB === 'Auth') return 1;
+        return nameA.localeCompare(nameB);
+      },
+      operationsSorter: 'alpha',
       persistAuthorization: true,
     },
   };
