@@ -146,6 +146,17 @@ export class BuyerService {
     return buyer;
   }
 
+  async getBuyerByUserId(userId: string) {
+    const buyer = await prisma.buyer.findUnique({
+      where: { userId },
+      select: buyerSelect,
+    });
+    if (!buyer) {
+      throw new Error('Buyer not found');
+    }
+    return buyer;
+  }
+
   async listBuyers() {
     const buyers = await prisma.buyer.findMany({
       select: buyerSelect,

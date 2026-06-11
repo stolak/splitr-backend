@@ -548,7 +548,7 @@ export class MerchantService {
       const authorisers = merchantAuthoriser?.authorisers;
       // create each merchant authoriser as user and send email to merchant authoriser
       for (const authoriser of authorisers) {
-        const existingUser = await prisma.user.findUnique({
+        const existingUser = await prisma.user.findFirst({
           where: { email: authoriser.authoriserEmail },
         });
         if (existingUser) {

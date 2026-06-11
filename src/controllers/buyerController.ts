@@ -36,6 +36,82 @@ import { authService } from "../services/authService";
  */
 /**
  * @swagger
+ * /api/v1/buyers/user/{userId}:
+ *   get:
+ *     summary: Get buyer by user ID
+ *     tags: [Buyer]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         required: true
+ *         description: User ID linked to the buyer profile
+ *     responses:
+ *       200:
+ *         description: Buyer found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     buyer:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           format: uuid
+ *                         userId:
+ *                           type: string
+ *                           format: uuid
+ *                         splitrId:
+ *                           type: string
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                           format: email
+ *                         phoneNumber:
+ *                           type: string
+ *                         isVerified:
+ *                           type: boolean
+ *                         address:
+ *                           type: string
+ *                         nin:
+ *                           type: string
+ *                         bvn:
+ *                           type: string
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *       404:
+ *         description: Buyer not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Buyer not found
+ */
+/**
+ * @swagger
  * /api/v1/buyers/{id}:
  *   get:
  *     summary: Get buyer by ID
@@ -215,6 +291,17 @@ export const buyerController = {
       });
     } catch (error: any) {
       res.status(404).json({ message: error.message });
+    }
+  },
+  getByUserId: async (req: Request, res: Response) => {
+    try {
+      const buyer = await buyerService.getBuyerByUserId(req.params.userId);
+      res.status(200).json({
+        success: true,
+        data: { buyer },
+      });
+    } catch (error: any) {
+      res.status(404).json({ success: false, message: error.message });
     }
   },
   list: async (_req: Request, res: Response) => {

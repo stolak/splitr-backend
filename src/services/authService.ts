@@ -196,7 +196,7 @@ export class AuthService {
     const { email, password, merchantId, profileImageUrl, address, ...userInput } = input;
     // Check if user already exists by email
     let existingUser;
-    existingUser = await prisma.user.findUnique({ where: { email } });
+    existingUser = await prisma.user.findFirst({ where: { OR: [{ email }] } });
     if (existingUser) {
       throw new Error('User already exists with this email');
     }
@@ -576,7 +576,7 @@ export class AuthService {
 
     // Check if user already exists by email or phoneNumber
     let existingUser;
-    existingUser = await prisma.user.findUnique({ where: { email } });
+    existingUser = await prisma.user.findFirst({ where: { OR: [{ email }] } });
     if (existingUser) {
       throw new Error('User already exists with this email');
     }
@@ -681,7 +681,7 @@ export class AuthService {
   async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
     try {
       // Verify user exists
-      const user = await prisma.user.findUnique({
+      const user = await prisma.user.findFirst({
         where: { email },
         select: {
           id: true,
@@ -775,7 +775,7 @@ export class AuthService {
       }
 
       // Find user
-      const user = await prisma.user.findUnique({
+      const user = await prisma.user.findFirst({
         where: { email },
         select: { id: true, email: true },
       });

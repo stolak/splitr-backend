@@ -5,6 +5,7 @@ const router = Router();
 
 router.post("/", buyerController.create);
 router.get("/", buyerController.list);
+router.get("/user/:userId", buyerController.getByUserId);
 router.get("/:id", buyerController.getById);
 router.patch("/:id", buyerController.update);
 router.delete("/:id", buyerController.remove);
