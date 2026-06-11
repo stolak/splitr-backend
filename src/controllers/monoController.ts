@@ -152,7 +152,7 @@ import prisma from "../utils/prisma";
  *               properties:
  *                 message:
  *                   type: string
- *                   example: NIN already exists with a buyer and cannot be used for new registration
+ *                   example: SIN number already exists with a buyer and cannot be used for new registration
  */
 
 export const monoController = {
@@ -176,14 +176,14 @@ export const monoController = {
       }
 
       const existingBuyer = await prisma.buyer.findFirst({
-        where: { nin },
+        where: { sinNumber: nin },
         select: { id: true },
       });
 
       if (existingBuyer) {
         return res.status(400).json({
           message:
-            "NIN already exists with a buyer and cannot be used for new registration",
+            "SIN number already exists with a buyer and cannot be used for new registration",
         });
       }
 

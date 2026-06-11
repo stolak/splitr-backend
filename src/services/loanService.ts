@@ -2488,7 +2488,7 @@ export class LoanService {
             address: buyer.address || '',
             identity: {
               type: 'bvn',
-              number: buyer.bvn || '',
+              number: buyer.sinNumber || buyer.idNumber || '',
             },
             name: `${buyer.firstName} ${buyer.lastName}`,
           },

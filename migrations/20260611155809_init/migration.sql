@@ -60,7 +60,7 @@ CREATE TABLE `PasswordResetToken` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `Buyer` (
+CREATE TABLE `buyer` (
     `id` VARCHAR(191) NOT NULL,
     `splitrId` VARCHAR(30) NOT NULL,
     `userId` VARCHAR(191) NOT NULL,
@@ -73,31 +73,26 @@ CREATE TABLE `Buyer` (
     `gender` VARCHAR(191) NULL,
     `idType` VARCHAR(191) NULL,
     `idNumber` VARCHAR(191) NULL,
-    `nin` VARCHAR(191) NULL,
-    `bvn` VARCHAR(191) NULL,
+    `sinNumber` VARCHAR(191) NULL,
+    `sinExpiryDate` VARCHAR(191) NULL,
     `photo` VARCHAR(191) NULL,
     `state` VARCHAR(191) NULL,
-    `LGA` VARCHAR(191) NULL,
-    `streetName` VARCHAR(191) NULL,
+    `province` VARCHAR(191) NULL,
+    `city` VARCHAR(191) NULL,
     `houseNo` VARCHAR(191) NULL,
-    `zipCode` VARCHAR(191) NULL,
+    `postalCode` VARCHAR(191) NULL,
     `isActive` BOOLEAN NOT NULL DEFAULT false,
     `isVerified` BOOLEAN NOT NULL DEFAULT false,
     `isEmailVerified` BOOLEAN NOT NULL DEFAULT true,
     `isPhoneVerified` BOOLEAN NOT NULL DEFAULT true,
-    `createdById` VARCHAR(191) NULL,
-    `approvedById` VARCHAR(191) NULL,
-    `modifiedById` VARCHAR(191) NULL,
     `status` VARCHAR(191) NOT NULL DEFAULT 'active',
-    `IsSalaried` BOOLEAN NOT NULL DEFAULT false,
-    `SalariedDate` DATETIME(3) NULL,
     `IsTermsAndConditionAccepted` BOOLEAN NOT NULL DEFAULT false,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `Buyer_splitrId_key`(`splitrId`),
-    UNIQUE INDEX `Buyer_userId_key`(`userId`),
-    UNIQUE INDEX `Buyer_email_key`(`email`),
+    UNIQUE INDEX `buyer_splitrId_key`(`splitrId`),
+    UNIQUE INDEX `buyer_userId_key`(`userId`),
+    UNIQUE INDEX `buyer_email_key`(`email`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -733,16 +728,7 @@ ALTER TABLE `linked_user` ADD CONSTRAINT `linked_user_userId_fkey` FOREIGN KEY (
 ALTER TABLE `PasswordResetToken` ADD CONSTRAINT `PasswordResetToken_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `Buyer` ADD CONSTRAINT `Buyer_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `Buyer` ADD CONSTRAINT `Buyer_createdById_fkey` FOREIGN KEY (`createdById`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `Buyer` ADD CONSTRAINT `Buyer_approvedById_fkey` FOREIGN KEY (`approvedById`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `Buyer` ADD CONSTRAINT `Buyer_modifiedById_fkey` FOREIGN KEY (`modifiedById`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `buyer` ADD CONSTRAINT `buyer_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Merchant` ADD CONSTRAINT `Merchant_agreedToTermsBy_fkey` FOREIGN KEY (`agreedToTermsBy`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
@@ -766,7 +752,7 @@ ALTER TABLE `MerchantAuthoriser` ADD CONSTRAINT `MerchantAuthoriser_merchantId_f
 ALTER TABLE `RejectionReason` ADD CONSTRAINT `RejectionReason_merchantId_fkey` FOREIGN KEY (`merchantId`) REFERENCES `Merchant`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `Loan` ADD CONSTRAINT `Loan_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `Loan` ADD CONSTRAINT `Loan_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Loan` ADD CONSTRAINT `Loan_invoiceId_fkey` FOREIGN KEY (`invoiceId`) REFERENCES `Invoice`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
@@ -796,16 +782,16 @@ ALTER TABLE `MerchantTransaction` ADD CONSTRAINT `MerchantTransaction_merchantId
 ALTER TABLE `MerchantTransaction` ADD CONSTRAINT `MerchantTransaction_invoiceRef_fkey` FOREIGN KEY (`invoiceRef`) REFERENCES `Invoice`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `EligibilityAndScore` ADD CONSTRAINT `EligibilityAndScore_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `EligibilityAndScore` ADD CONSTRAINT `EligibilityAndScore_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `ScoringInputSnapshot` ADD CONSTRAINT `ScoringInputSnapshot_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `ScoringInputSnapshot` ADD CONSTRAINT `ScoringInputSnapshot_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `ScoringInputSnapshot` ADD CONSTRAINT `ScoringInputSnapshot_accountDetailsId_fkey` FOREIGN KEY (`accountDetailsId`) REFERENCES `AccountDetails`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `Invoice` ADD CONSTRAINT `Invoice_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `Invoice` ADD CONSTRAINT `Invoice_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Invoice` ADD CONSTRAINT `Invoice_merchantId_fkey` FOREIGN KEY (`merchantId`) REFERENCES `Merchant`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -823,7 +809,7 @@ ALTER TABLE `InvoiceMandate` ADD CONSTRAINT `InvoiceMandate_invoiceId_fkey` FORE
 ALTER TABLE `InvoiceMandate` ADD CONSTRAINT `InvoiceMandate_loanId_fkey` FOREIGN KEY (`loanId`) REFERENCES `Loan`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `InvoiceMandate` ADD CONSTRAINT `InvoiceMandate_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `InvoiceMandate` ADD CONSTRAINT `InvoiceMandate_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `DirectPay` ADD CONSTRAINT `DirectPay_invoiceId_fkey` FOREIGN KEY (`invoiceId`) REFERENCES `Invoice`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
@@ -832,13 +818,13 @@ ALTER TABLE `DirectPay` ADD CONSTRAINT `DirectPay_invoiceId_fkey` FOREIGN KEY (`
 ALTER TABLE `DirectPay` ADD CONSTRAINT `DirectPay_mandateId_fkey` FOREIGN KEY (`mandateId`) REFERENCES `InvoiceMandate`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `DirectPay` ADD CONSTRAINT `DirectPay_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `DirectPay` ADD CONSTRAINT `DirectPay_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Item` ADD CONSTRAINT `Item_invoiceId_fkey` FOREIGN KEY (`invoiceId`) REFERENCES `Invoice`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `Revenue` ADD CONSTRAINT `Revenue_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `Revenue` ADD CONSTRAINT `Revenue_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Revenue` ADD CONSTRAINT `Revenue_merchantId_fkey` FOREIGN KEY (`merchantId`) REFERENCES `Merchant`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
@@ -850,19 +836,19 @@ ALTER TABLE `Revenue` ADD CONSTRAINT `Revenue_loanId_fkey` FOREIGN KEY (`loanId`
 ALTER TABLE `Revenue` ADD CONSTRAINT `Revenue_invoiceId_fkey` FOREIGN KEY (`invoiceId`) REFERENCES `Invoice`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `MonoConnect` ADD CONSTRAINT `MonoConnect_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `MonoConnect` ADD CONSTRAINT `MonoConnect_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `AccountDetails` ADD CONSTRAINT `AccountDetails_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `AccountDetails` ADD CONSTRAINT `AccountDetails_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `PaystackMerchantTransferRecipient` ADD CONSTRAINT `PaystackMerchantTransferRecipient_merchantId_fkey` FOREIGN KEY (`merchantId`) REFERENCES `Merchant`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `PaystackMerchantTransferRecipient` ADD CONSTRAINT `PaystackMerchantTransferRecipient_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `PaystackMerchantTransferRecipient` ADD CONSTRAINT `PaystackMerchantTransferRecipient_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `PaystackTransfer` ADD CONSTRAINT `PaystackTransfer_merchantId_fkey` FOREIGN KEY (`merchantId`) REFERENCES `Merchant`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `PaystackTransfer` ADD CONSTRAINT `PaystackTransfer_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `PaystackTransfer` ADD CONSTRAINT `PaystackTransfer_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

@@ -86,9 +86,15 @@ import { authService } from "../services/authService";
  *                           type: boolean
  *                         address:
  *                           type: string
- *                         nin:
+ *                         sinNumber:
  *                           type: string
- *                         bvn:
+ *                         sinExpiryDate:
+ *                           type: string
+ *                         province:
+ *                           type: string
+ *                         city:
+ *                           type: string
+ *                         postalCode:
  *                           type: string
  *                         createdAt:
  *                           type: string
@@ -199,21 +205,21 @@ import { authService } from "../services/authService";
  *           type: string
  *         idNumber:
  *           type: string
- *         nin:
+ *         sinNumber:
  *           type: string
- *         bvn:
+ *         sinExpiryDate:
  *           type: string
  *         photo:
  *           type: string
  *         state:
  *           type: string
- *         LGA:
+ *         province:
  *           type: string
- *         streetName:
+ *         city:
  *           type: string
  *         houseNo:
  *           type: string
- *         zipCode:
+ *         postalCode:
  *           type: string
  *         password:
  *           type: string
@@ -239,21 +245,21 @@ import { authService } from "../services/authService";
  *           type: string
  *         idNumber:
  *           type: string
- *         nin:
+ *         sinNumber:
  *           type: string
- *         bvn:
+ *         sinExpiryDate:
  *           type: string
  *         photo:
  *           type: string
  *         state:
  *           type: string
- *         LGA:
+ *         province:
  *           type: string
- *         streetName:
+ *         city:
  *           type: string
  *         houseNo:
  *           type: string
- *         zipCode:
+ *         postalCode:
  *           type: string
  */
 export const buyerController = {

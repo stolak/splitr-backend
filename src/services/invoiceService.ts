@@ -1085,7 +1085,7 @@ export class InvoiceService {
     const { phone, address, identification_no, identification_type, bvn } = customer.data?.data;
     if (bvn && bvn.length === 11) {
       buyerService.updateBuyer(buyerId, {
-        bvn: bvn,
+        sinNumber: bvn,
       });
     }
     if (
@@ -1105,10 +1105,10 @@ export class InvoiceService {
           ...((!phone || phone === '') && { phone: buyer.phoneNumber || '08032186222' }),
           ...((!address || address === '') && { address: buyer.address || 'Abuja' }),
           ...((!identification_no || identification_no === '') && {
-            identification_no: buyer.bvn || '2011119422',
+            identification_no: buyer.sinNumber || buyer.idNumber || '',
           }),
           ...((!identification_type || identification_type === '') && {
-            identification_type: 'bvn',
+            identification_type: buyer.idType || 'bvn',
           }),
         },
       );
@@ -1328,7 +1328,7 @@ export class InvoiceService {
         address: buyer.address || '',
         identity: {
           type: 'bvn',
-          number: buyer.bvn || '',
+          number: buyer.sinNumber || buyer.idNumber || '',
         },
         name: `${buyer.firstName} ${buyer.lastName}`,
       },
