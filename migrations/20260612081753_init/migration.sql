@@ -1,152 +1,46 @@
-/*
-  Warnings:
+-- CreateTable
+CREATE TABLE `user` (
+    `id` VARCHAR(191) NOT NULL,
+    `password` VARCHAR(191) NOT NULL,
+    `firstName` VARCHAR(191) NULL,
+    `lastName` VARCHAR(191) NULL,
+    `profileImageUrl` VARCHAR(191) NULL,
+    `phoneNumber` VARCHAR(191) NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `userType` ENUM('Admin', 'Merchant', 'Buyer') NOT NULL DEFAULT 'Buyer',
+    `role` ENUM('Visitor', 'Admin', 'Merchant', 'Buyer', 'SuperAdmin', 'CustomerSupport') NOT NULL DEFAULT 'Visitor',
+    `isActive` BOOLEAN NOT NULL DEFAULT false,
+    `isVerified` BOOLEAN NOT NULL DEFAULT false,
+    `isEmailVerified` BOOLEAN NOT NULL DEFAULT false,
+    `isPhoneVerified` BOOLEAN NOT NULL DEFAULT false,
+    `isDeleted` BOOLEAN NOT NULL DEFAULT false,
+    `createdById` VARCHAR(191) NULL,
+    `approvedById` VARCHAR(191) NULL,
+    `modifiedById` VARCHAR(191) NULL,
+    `merchantId` VARCHAR(191) NULL,
+    `status` VARCHAR(191) NOT NULL DEFAULT 'active',
+    `referralCode` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
 
-  - You are about to drop the `accountdetails` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `bankaccount` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `directpay` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `eligibilityandscore` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `invoicemandate` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `loandebittrial` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `loandebittrialschedule` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `loanpenalty` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `loanpenaltyschedule` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `loanschedule` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `loansetting` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `loantransaction` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `mandatedebit` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `merchantauthoriser` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `merchantdirector` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `merchantshareholder` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `merchanttransaction` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `monoconnect` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `passwordresettoken` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `paystackmerchanttransferrecipient` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `paystacktransfer` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `rejectionreason` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `scoringinputsnapshot` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `settlementsetting` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `timeoutsetting` table. If the table is not empty, all the data it contains will be lost.
+    UNIQUE INDEX `user_email_key`(`email`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-*/
--- DropIndex
-DROP INDEX `Invoice_buyerId_fkey` ON `invoice`;
+-- CreateTable
+CREATE TABLE `linked_user` (
+    `id` VARCHAR(191) NOT NULL,
+    `userId` VARCHAR(191) NOT NULL,
+    `provider` ENUM('Google', 'Facebook', 'Twitter', 'LinkedIn', 'Instagram', 'Pinterest', 'Apple', 'Microsoft', 'Yahoo', 'AOL', 'GitHub', 'Bitbucket', 'GitLab', 'StackOverflow', 'Reddit') NOT NULL,
+    `providerUserId` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
 
--- DropIndex
-DROP INDEX `Invoice_merchantId_fkey` ON `invoice`;
-
--- DropIndex
-DROP INDEX `Item_invoiceId_fkey` ON `item`;
-
--- DropIndex
-DROP INDEX `Loan_buyerId_fkey` ON `loan`;
-
--- DropIndex
-DROP INDEX `Loan_merchantId_fkey` ON `loan`;
-
--- DropIndex
-DROP INDEX `Merchant_agreedToTermsBy_fkey` ON `merchant`;
-
--- DropIndex
-DROP INDEX `Revenue_buyerId_fkey` ON `revenue`;
-
--- DropIndex
-DROP INDEX `Revenue_invoiceId_fkey` ON `revenue`;
-
--- DropIndex
-DROP INDEX `Revenue_loanId_fkey` ON `revenue`;
-
--- DropIndex
-DROP INDEX `Revenue_merchantId_fkey` ON `revenue`;
-
--- DropIndex
-DROP INDEX `User_approvedById_fkey` ON `user`;
-
--- DropIndex
-DROP INDEX `User_createdById_fkey` ON `user`;
-
--- DropIndex
-DROP INDEX `User_merchantId_fkey` ON `user`;
-
--- DropIndex
-DROP INDEX `User_modifiedById_fkey` ON `user`;
-
--- AlterTable
-ALTER TABLE `merchant` MODIFY `businessDescription` VARCHAR(30000) NULL;
-
--- DropTable
-DROP TABLE `accountdetails`;
-
--- DropTable
-DROP TABLE `bankaccount`;
-
--- DropTable
-DROP TABLE `directpay`;
-
--- DropTable
-DROP TABLE `eligibilityandscore`;
-
--- DropTable
-DROP TABLE `invoicemandate`;
-
--- DropTable
-DROP TABLE `loandebittrial`;
-
--- DropTable
-DROP TABLE `loandebittrialschedule`;
-
--- DropTable
-DROP TABLE `loanpenalty`;
-
--- DropTable
-DROP TABLE `loanpenaltyschedule`;
-
--- DropTable
-DROP TABLE `loanschedule`;
-
--- DropTable
-DROP TABLE `loansetting`;
-
--- DropTable
-DROP TABLE `loantransaction`;
-
--- DropTable
-DROP TABLE `mandatedebit`;
-
--- DropTable
-DROP TABLE `merchantauthoriser`;
-
--- DropTable
-DROP TABLE `merchantdirector`;
-
--- DropTable
-DROP TABLE `merchantshareholder`;
-
--- DropTable
-DROP TABLE `merchanttransaction`;
-
--- DropTable
-DROP TABLE `monoconnect`;
-
--- DropTable
-DROP TABLE `passwordresettoken`;
-
--- DropTable
-DROP TABLE `paystackmerchanttransferrecipient`;
-
--- DropTable
-DROP TABLE `paystacktransfer`;
-
--- DropTable
-DROP TABLE `rejectionreason`;
-
--- DropTable
-DROP TABLE `scoringinputsnapshot`;
-
--- DropTable
-DROP TABLE `settlementsetting`;
-
--- DropTable
-DROP TABLE `timeoutsetting`;
+    INDEX `linked_user_userId_idx`(`userId`),
+    UNIQUE INDEX `linked_user_userId_provider_key`(`userId`, `provider`),
+    UNIQUE INDEX `linked_user_provider_providerUserId_key`(`provider`, `providerUserId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `password_reset_token` (
@@ -162,6 +56,108 @@ CREATE TABLE `password_reset_token` (
     INDEX `password_reset_token_userId_idx`(`userId`),
     INDEX `password_reset_token_token_idx`(`token`),
     INDEX `password_reset_token_expiresAt_idx`(`expiresAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `buyer` (
+    `id` VARCHAR(191) NOT NULL,
+    `splitrId` VARCHAR(30) NOT NULL,
+    `userId` VARCHAR(191) NOT NULL,
+    `firstName` VARCHAR(191) NULL,
+    `lastName` VARCHAR(191) NULL,
+    `DOB` VARCHAR(191) NULL,
+    `phoneNumber` VARCHAR(191) NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `address` VARCHAR(191) NULL,
+    `gender` VARCHAR(191) NULL,
+    `idType` VARCHAR(191) NULL,
+    `idNumber` VARCHAR(191) NULL,
+    `sinNumber` VARCHAR(191) NULL,
+    `sinExpiryDate` VARCHAR(191) NULL,
+    `photo` VARCHAR(191) NULL,
+    `state` VARCHAR(191) NULL,
+    `province` VARCHAR(191) NULL,
+    `city` VARCHAR(191) NULL,
+    `houseNo` VARCHAR(191) NULL,
+    `postalCode` VARCHAR(191) NULL,
+    `isActive` BOOLEAN NOT NULL DEFAULT false,
+    `isVerified` BOOLEAN NOT NULL DEFAULT false,
+    `isEmailVerified` BOOLEAN NOT NULL DEFAULT true,
+    `isPhoneVerified` BOOLEAN NOT NULL DEFAULT true,
+    `status` VARCHAR(191) NOT NULL DEFAULT 'active',
+    `IsTermsAndConditionAccepted` BOOLEAN NOT NULL DEFAULT false,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `buyer_splitrId_key`(`splitrId`),
+    UNIQUE INDEX `buyer_userId_key`(`userId`),
+    UNIQUE INDEX `buyer_email_key`(`email`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `merchant` (
+    `id` VARCHAR(191) NOT NULL,
+    `splitrId` VARCHAR(30) NOT NULL,
+    `logoUrl` VARCHAR(191) NULL,
+    `businessName` VARCHAR(191) NOT NULL,
+    `businessEmail` VARCHAR(191) NOT NULL,
+    `authorizedPerson` VARCHAR(191) NULL,
+    `authorizedDesignation` VARCHAR(191) NULL,
+    `authorizedPhoneNo` VARCHAR(191) NULL,
+    `authorizedEmail` VARCHAR(191) NULL,
+    `typeOfServiceOrProducts` VARCHAR(191) NULL,
+    `cacNumber` VARCHAR(191) NULL,
+    `dateOfIncorporation` VARCHAR(191) NULL,
+    `tin` VARCHAR(191) NULL,
+    `registrationAddress` VARCHAR(191) NULL,
+    `businessDescription` VARCHAR(30000) NULL,
+    `businessCategory` VARCHAR(191) NULL,
+    `businessType` VARCHAR(191) NULL,
+    `businessTypes` JSON NULL,
+    `businessPhone` VARCHAR(191) NULL,
+    `officeWebsite` VARCHAR(191) NULL,
+    `IsTermsAndConditionAccepted` BOOLEAN NOT NULL DEFAULT false,
+    `isBusinessInfoVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `isAuthorizedPersonVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `isDirectorsVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `isShareholdersVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `isAuthorisersVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `isBankAccountVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `cacCertificate` VARCHAR(191) NULL,
+    `isCACCertificateVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `memart` VARCHAR(191) NULL,
+    `isMEMERTCertificateVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `cac2Form` VARCHAR(191) NULL,
+    `isCAC2CAC7FormVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `utilityBill` VARCHAR(191) NULL,
+    `utilityBillVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `boardResolution` VARCHAR(191) NULL,
+    `boardResolutionVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `documentStatus` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `applicationStatus` ENUM('Pending', 'Approved', 'Rejected', 'Inactive', 'Active', 'Suspended', 'Deleted') NULL DEFAULT 'Pending',
+    `verificationStatus` ENUM('Pending', 'Approved', 'Rejected', 'Inactive', 'Active', 'Suspended', 'Deleted') NULL DEFAULT 'Pending',
+    `bankAccount` VARCHAR(191) NULL,
+    `accountName` VARCHAR(191) NULL,
+    `walletId` BIGINT NULL,
+    `bankName` VARCHAR(191) NULL,
+    `bankCode` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+    `isDeleted` BOOLEAN NULL DEFAULT false,
+    `merchantCharge` DECIMAL(65, 30) NULL DEFAULT 0,
+    `isAgreedToTerms` BOOLEAN NULL DEFAULT false,
+    `agreedToTermsAt` DATETIME(3) NULL,
+    `agreedToTermsBy` VARCHAR(191) NULL,
+
+    UNIQUE INDEX `merchant_splitrId_key`(`splitrId`),
+    UNIQUE INDEX `merchant_businessEmail_key`(`businessEmail`),
+    UNIQUE INDEX `merchant_authorizedEmail_key`(`authorizedEmail`),
+    UNIQUE INDEX `merchant_cacNumber_key`(`cacNumber`),
+    UNIQUE INDEX `merchant_tin_key`(`tin`),
+    UNIQUE INDEX `merchant_businessPhone_key`(`businessPhone`),
+    UNIQUE INDEX `merchant_officeWebsite_key`(`officeWebsite`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -194,6 +190,16 @@ CREATE TABLE `bank_account` (
     `accountName` VARCHAR(191) NOT NULL,
     `accountNumber` VARCHAR(191) NOT NULL,
 
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `bank` (
+    `id` VARCHAR(191) NOT NULL,
+    `bankCode` VARCHAR(191) NOT NULL,
+    `bankName` VARCHAR(191) NOT NULL,
+
+    UNIQUE INDEX `bank_bankCode_key`(`bankCode`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -274,6 +280,46 @@ CREATE TABLE `time_out_setting` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `loan` (
+    `id` VARCHAR(191) NOT NULL,
+    `splitrId` VARCHAR(30) NOT NULL,
+    `buyerId` VARCHAR(191) NOT NULL,
+    `invoiceId` VARCHAR(191) NULL,
+    `loanAmount` DECIMAL(65, 30) NOT NULL,
+    `purchaseAmount` DECIMAL(65, 30) NULL,
+    `downPaymentAmount` DECIMAL(65, 30) NULL,
+    `merchantId` VARCHAR(191) NULL,
+    `referenceNumber` VARCHAR(191) NULL,
+    `adminCharge` DECIMAL(65, 30) NULL,
+    `insurance` DECIMAL(65, 30) NULL,
+    `monthlyRepayment` DECIMAL(65, 30) NULL,
+    `loanTenure` INTEGER NOT NULL,
+    `loanInterestRate` DECIMAL(65, 30) NOT NULL,
+    `loanStartDate` DATETIME(3) NOT NULL,
+    `loanEndDate` DATETIME(3) NULL,
+    `loanStatus` ENUM('Pending', 'Approved', 'Active', 'Cancel', 'Complete', 'Pause', 'Default') NOT NULL,
+    `loanType` ENUM('Personal', 'Corporate') NOT NULL,
+    `returnStatus` ENUM('Active', 'Approved', 'Rejected', 'Refunded', 'Pending') NULL DEFAULT 'Active',
+    `returnAmount` DECIMAL(65, 30) NULL,
+    `returnReason` VARCHAR(191) NULL,
+    `returnNote` VARCHAR(191) NULL,
+    `returnReference` VARCHAR(191) NULL,
+    `returnInitiatedDate` DATETIME(3) NULL,
+    `returnInitiatedBy` VARCHAR(191) NULL,
+    `returnApprovedBy` VARCHAR(191) NULL,
+    `returnApprovedDate` DATETIME(3) NULL,
+    `loanPurpose` VARCHAR(191) NOT NULL,
+    `loanDocument` VARCHAR(191) NULL,
+    `loanDocumentVerified` ENUM('Pending', 'Approved', 'Rejected') NULL DEFAULT 'Pending',
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `loan_splitrId_key`(`splitrId`),
+    UNIQUE INDEX `loan_invoiceId_key`(`invoiceId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -449,6 +495,36 @@ CREATE TABLE `scoring_input_snapshot` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `invoice` (
+    `id` VARCHAR(191) NOT NULL,
+    `splitrId` VARCHAR(30) NOT NULL,
+    `customerName` VARCHAR(191) NOT NULL,
+    `customerEmail` VARCHAR(191) NOT NULL,
+    `customerPhoneNumber` VARCHAR(191) NOT NULL,
+    `dueDate` DATETIME(3) NOT NULL,
+    `note` VARCHAR(191) NULL,
+    `amount` DECIMAL(65, 30) NOT NULL,
+    `buyerId` VARCHAR(191) NULL,
+    `merchantId` VARCHAR(191) NOT NULL,
+    `status` ENUM('Pending', 'Paid', 'Cancelled', 'Refunded', 'Expired') NOT NULL DEFAULT 'Pending',
+    `type` ENUM('Purchase', 'Ecommerce', 'Shopping', 'Services', 'Invoice') NOT NULL DEFAULT 'Purchase',
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+    `returnStatus` ENUM('Active', 'Approved', 'Rejected', 'Refunded', 'Pending') NULL DEFAULT 'Active',
+    `returnAmount` DECIMAL(65, 30) NULL,
+    `returnReason` VARCHAR(191) NULL,
+    `returnNote` VARCHAR(191) NULL,
+    `returnReference` VARCHAR(191) NULL,
+    `returnInitiatedDate` DATETIME(3) NULL,
+    `returnInitiatedBy` VARCHAR(191) NULL,
+    `returnApprovedBy` VARCHAR(191) NULL,
+    `returnApprovedDate` DATETIME(3) NULL,
+
+    UNIQUE INDEX `invoice_splitrId_key`(`splitrId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `mandate_debit` (
     `id` VARCHAR(191) NOT NULL,
     `invoiceId` VARCHAR(191) NULL,
@@ -507,6 +583,57 @@ CREATE TABLE `direct_pay` (
     `isActive` BOOLEAN NOT NULL DEFAULT true,
 
     UNIQUE INDEX `direct_pay_reference_key`(`reference`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `item` (
+    `id` VARCHAR(191) NOT NULL,
+    `invoiceId` VARCHAR(191) NOT NULL,
+    `description` VARCHAR(191) NOT NULL,
+    `quantity` INTEGER NOT NULL,
+    `amount` DECIMAL(65, 30) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `tier` (
+    `id` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `from` DECIMAL(65, 30) NOT NULL,
+    `to` DECIMAL(65, 30) NOT NULL,
+    `status` ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    `discounted` DECIMAL(65, 30) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `revenue` (
+    `id` VARCHAR(191) NOT NULL,
+    `splitrId` VARCHAR(30) NOT NULL,
+    `credit` DECIMAL(65, 30) NOT NULL DEFAULT 0,
+    `debit` DECIMAL(65, 30) NOT NULL DEFAULT 0,
+    `description` VARCHAR(191) NOT NULL,
+    `parentTable` VARCHAR(191) NULL,
+    `type` ENUM('Repayment', 'Settlement', 'DownPayment', 'Refund') NOT NULL,
+    `status` ENUM('Pending', 'Completed', 'Failed', 'Cancelled') NOT NULL DEFAULT 'Pending',
+    `referenceIds` TEXT NOT NULL,
+    `detail` TEXT NULL,
+    `buyerId` VARCHAR(191) NULL,
+    `merchantId` VARCHAR(191) NULL,
+    `loanId` VARCHAR(191) NULL,
+    `invoiceId` VARCHAR(191) NULL,
+    `transactionDate` DATETIME(3) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `revenue_splitrId_key`(`splitrId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -580,6 +707,15 @@ CREATE TABLE `paystack_transfer` (
 
     UNIQUE INDEX `paystack_transfer_referenceId_key`(`referenceId`),
     PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `splitr_sequence` (
+    `prefix` VARCHAR(10) NOT NULL,
+    `year_month` CHAR(4) NOT NULL,
+    `seq` INTEGER NOT NULL DEFAULT 100000,
+
+    PRIMARY KEY (`prefix`, `year_month`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
@@ -725,42 +861,3 @@ ALTER TABLE `paystack_transfer` ADD CONSTRAINT `paystack_transfer_merchantId_fke
 
 -- AddForeignKey
 ALTER TABLE `paystack_transfer` ADD CONSTRAINT `paystack_transfer_buyerId_fkey` FOREIGN KEY (`buyerId`) REFERENCES `buyer`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- RenameIndex
-ALTER TABLE `bank` RENAME INDEX `Bank_bankCode_key` TO `bank_bankCode_key`;
-
--- RenameIndex
-ALTER TABLE `invoice` RENAME INDEX `Invoice_splitrId_key` TO `invoice_splitrId_key`;
-
--- RenameIndex
-ALTER TABLE `loan` RENAME INDEX `Loan_invoiceId_key` TO `loan_invoiceId_key`;
-
--- RenameIndex
-ALTER TABLE `loan` RENAME INDEX `Loan_splitrId_key` TO `loan_splitrId_key`;
-
--- RenameIndex
-ALTER TABLE `merchant` RENAME INDEX `Merchant_authorizedEmail_key` TO `merchant_authorizedEmail_key`;
-
--- RenameIndex
-ALTER TABLE `merchant` RENAME INDEX `Merchant_businessEmail_key` TO `merchant_businessEmail_key`;
-
--- RenameIndex
-ALTER TABLE `merchant` RENAME INDEX `Merchant_businessPhone_key` TO `merchant_businessPhone_key`;
-
--- RenameIndex
-ALTER TABLE `merchant` RENAME INDEX `Merchant_cacNumber_key` TO `merchant_cacNumber_key`;
-
--- RenameIndex
-ALTER TABLE `merchant` RENAME INDEX `Merchant_officeWebsite_key` TO `merchant_officeWebsite_key`;
-
--- RenameIndex
-ALTER TABLE `merchant` RENAME INDEX `Merchant_splitrId_key` TO `merchant_splitrId_key`;
-
--- RenameIndex
-ALTER TABLE `merchant` RENAME INDEX `Merchant_tin_key` TO `merchant_tin_key`;
-
--- RenameIndex
-ALTER TABLE `revenue` RENAME INDEX `Revenue_splitrId_key` TO `revenue_splitrId_key`;
-
--- RenameIndex
-ALTER TABLE `user` RENAME INDEX `User_email_key` TO `user_email_key`;
