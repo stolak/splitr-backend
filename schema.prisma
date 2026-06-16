@@ -245,6 +245,7 @@ model Buyer {
   directPays          DirectPay[]
   paystackTransfers   PaystackTransfer[]
  PaystackMerchantTransferRecipient PaystackMerchantTransferRecipient[]
+  personaInquiries    PersonaInquiry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1020,4 +1021,23 @@ model SplitrSequence {
 
   @@id([prefix, yearMonth])
   @@map("splitr_sequence")
+}
+
+enum PersonaInquiryStatus {
+  Created
+  Completed
+  Failed
+}
+model PersonaInquiry {
+  id String @id @default(uuid())
+  inquiryId String @unique
+  inquiryTemplateId String
+  buyerId String
+  buyer Buyer @relation(fields: [buyerId], references: [id])
+  status PersonaInquiryStatus @default(Created)
+  response Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("persona_inquiry")
 }

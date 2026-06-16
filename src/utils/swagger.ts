@@ -35,6 +35,7 @@ const options: swaggerJSDoc.Options = {
       { name: 'Location', description: 'Location management' },
       { name: 'Merchant', description: 'Merchant management' },
       { name: 'Mono', description: 'Mono integration' },
+      { name: 'Persona', description: 'Persona inquiry endpoints' },
       { name: 'Scoring', description: 'Scoring calculation endpoints' },
       { name: 'Upload', description: 'File upload management' },
     ],

@@ -39,6 +39,7 @@ import scoringInputSnapshotRoutes from "./scoringInputSnapshot";
 import scoringInputSnapshotEvaluationRoutes from "./scoringInputSnapshotEvaluation";
 import bankStatementAnalysisRoutes from "./bankStatementAnalysis";
 import mandateDebitRoutes from "./mandateDebit";
+import personaInquiryRoutes from "./personaInquiry";
 import { Router } from "express";
 
 const router = Router();
@@ -83,6 +84,7 @@ router.use("/scoring-input-snapshots", scoringInputSnapshotRoutes);
 router.use("/scoring-input-snapshot-evaluations", scoringInputSnapshotEvaluationRoutes);
 router.use("/bank-statement-analysis", bankStatementAnalysisRoutes);
 router.use("/mandate-debits", mandateDebitRoutes);
+router.use("/persona", personaInquiryRoutes);
 
 /**
  * @swagger
