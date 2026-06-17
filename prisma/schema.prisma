@@ -1029,6 +1029,8 @@ enum PersonaInquiryStatus {
   Created
   Completed
   Failed
+  Pending
+  Expired
 }
 model PersonaInquiry {
   id String @id @default(uuid())

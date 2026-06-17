@@ -118,6 +118,20 @@ import { personaInquiryService } from "../services/personaInquiryService";
  *           description: True when a new inquiry was created; false when an existing record was returned
  *         record:
  *           $ref: '#/components/schemas/PersonaInquiryRecord'
+ *     UpdatePersonaInquiryResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           description: True when Persona inquiry is completed and buyer was verified
+ *         message:
+ *           type: string
+ *         buyer:
+ *           type: object
+ *           description: Updated buyer record when completed; otherwise mapped field data from Persona
+ *         record:
+ *           $ref: '#/components/schemas/PersonaInquiryRecord'
+ *           description: Present when inquiry is completed
  */
 
 /**
@@ -159,9 +173,7 @@ export async function createInquiry(req: Request, res: Response) {
     return res.status(200).json(result);
   } catch (error: any) {
     const message =
-      typeof error === "string"
-        ? error
-        : error?.message || "Failed to create Persona inquiry";
+      typeof error === "string" ? error : error?.message || "Failed to create Persona inquiry";
     return res.status(400).json({ message });
   }
 }
@@ -196,9 +208,7 @@ export async function listInquiries(_req: Request, res: Response) {
     return res.status(200).json(result);
   } catch (error: any) {
     const message =
-      typeof error === "string"
-        ? error
-        : error?.message || "Failed to list Persona inquiries";
+      typeof error === "string" ? error : error?.message || "Failed to list Persona inquiries";
     return res.status(500).json({ message });
   }
 }
@@ -249,9 +259,7 @@ export async function getInquiry(req: Request, res: Response) {
     return res.status(200).json(result);
   } catch (error: any) {
     const message =
-      typeof error === "string"
-        ? error
-        : error?.message || "Failed to retrieve Persona inquiry";
+      typeof error === "string" ? error : error?.message || "Failed to retrieve Persona inquiry";
     return res.status(400).json({ message });
   }
 }
@@ -330,6 +338,71 @@ export async function getOrCreateInquiryForBuyer(req: Request, res: Response) {
         : error?.message || "Failed to get or create Persona inquiry for buyer";
 
     if (message === "Buyer not found") {
+      return res.status(404).json({ message });
+    }
+
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/persona/inquiries/{inquiryId}/sync:
+ *   patch:
+ *     summary: Sync a local Persona inquiry record with Persona
+ *     description: Fetches the latest inquiry status from Persona using the Persona inquiry ID. If status is completed, verifies the linked user and buyer and maps Persona field data to the buyer profile. Otherwise updates the local inquiry status and response only.
+ *     tags: [Persona]
+ *     parameters:
+ *       - in: path
+ *         name: inquiryId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Persona inquiry ID
+ *         example: inq_ArBFGqt47V5UidzFu1RKkeKeiSuTm3
+ *     responses:
+ *       200:
+ *         description: Inquiry synced successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UpdatePersonaInquiryResponse'
+ *       400:
+ *         description: Persona API or validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Local inquiry record not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ */
+export async function updateInquiry(req: Request, res: Response) {
+  try {
+    const { inquiryId } = req.params;
+
+    if (!inquiryId) {
+      return res.status(400).json({ message: "inquiryId is required" });
+    }
+
+    const result = await personaInquiryService.updateInquiry(inquiryId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message =
+      typeof error === "string"
+        ? error
+        : error?.message || "Failed to sync Persona inquiry";
+
+    if (message === "Inquiry not found") {
       return res.status(404).json({ message });
     }
 

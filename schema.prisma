@@ -1026,8 +1026,10 @@ model SplitrSequence {
 
 enum PersonaInquiryStatus {
   Created
+  Pending
   Completed
   Failed
+  Expired
 }
 model PersonaInquiry {
   id String @id @default(uuid())

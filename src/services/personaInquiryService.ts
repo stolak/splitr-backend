@@ -33,7 +33,81 @@ function mapPersonaInquiryStatus(status?: string): PersonaInquiryStatus {
     return PersonaInquiryStatus.Failed;
   }
 
+  if (normalized === "pending") {
+    return PersonaInquiryStatus.Pending;
+  }
+  if (normalized === "expired") {
+    return PersonaInquiryStatus.Expired;
+  }
+
   return PersonaInquiryStatus.Created;
+}
+
+type PersonaInquiryFields = Record<string, { value?: string | null } | undefined>;
+
+function getPersonaFieldValue(
+  fields: PersonaInquiryFields | undefined,
+  key: string
+): string | undefined {
+  const value = fields?.[key]?.value;
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+  return value;
+}
+
+function mapPersonaFieldsToBuyerData(fields: PersonaInquiryFields | undefined) {
+  const street1 = getPersonaFieldValue(fields, "address_street_1");
+  const street2 = getPersonaFieldValue(fields, "address_street_2");
+  const province = getPersonaFieldValue(fields, "address_subdivision");
+
+  const data: Record<string, string | boolean> = {
+    isVerified: true,
+    status: "verified",
+  };
+
+  const firstName = getPersonaFieldValue(fields, "name_first");
+  if (firstName) data.firstName = firstName;
+
+  const lastName = getPersonaFieldValue(fields, "name_last");
+  if (lastName) data.lastName = lastName;
+
+  const dob = getPersonaFieldValue(fields, "birthdate");
+  if (dob) data.DOB = dob;
+
+  const email = getPersonaFieldValue(fields, "email_address");
+  if (email) data.email = email;
+
+  const phoneNumber = getPersonaFieldValue(fields, "phone_number");
+  if (phoneNumber) data.phoneNumber = phoneNumber;
+
+  if (street1) {
+    data.address = street2 ? `${street1}, ${street2}` : street1;
+  }
+
+  if (street2) data.houseNo = street2;
+
+  const city = getPersonaFieldValue(fields, "address_city");
+  if (city) data.city = city;
+
+  if (province) {
+    data.province = province;
+    data.state = province;
+  }
+
+  const postalCode = getPersonaFieldValue(fields, "address_postal_code");
+  if (postalCode) data.postalCode = postalCode;
+
+  const idType = getPersonaFieldValue(fields, "identification_class");
+  if (idType) data.idType = idType;
+
+  const idNumber = getPersonaFieldValue(fields, "identification_number");
+  if (idNumber) data.idNumber = idNumber;
+
+  const sinNumber = getPersonaFieldValue(fields, "social_security_number");
+  if (sinNumber) data.sinNumber = sinNumber;
+
+  return data;
 }
 
 async function personaApiRequest<T = any>({
@@ -101,10 +175,7 @@ export class PersonaInquiryService {
     });
   }
 
-  async getOrCreateInquiryForBuyer(
-    buyerId: string,
-    inquiryTemplateId?: string
-  ) {
+  async getOrCreateInquiryForBuyer(buyerId: string, inquiryTemplateId?: string) {
     if (!buyerId) {
       throw new Error("buyerId is required");
     }
@@ -118,12 +189,29 @@ export class PersonaInquiryService {
     }
 
     const existing = await prisma.personaInquiry.findFirst({
-      where: { buyerId },
+      where: {
+        buyerId,
+        status: { in: [PersonaInquiryStatus.Created, PersonaInquiryStatus.Pending] },
+      },
       orderBy: { createdAt: "desc" },
     });
 
     if (existing) {
-      return { record: existing, created: false };
+      // check is still active
+      // call the persona api to get the inquiry status
+      const inquiry = await this.getInquiry(existing.inquiryId);
+      if (
+        inquiry?.data?.attributes?.status === "completed" ||
+        inquiry?.data?.attributes?.status === "pending" ||
+        inquiry?.data?.attributes?.status === "created"
+      ) {
+        return { record: existing, created: false };
+      }
+      // update the inquiry status
+      await prisma.personaInquiry.update({
+        where: { id: existing.id },
+        data: { status: mapPersonaInquiryStatus(inquiry?.data?.attributes?.status) },
+      });
     }
 
     const templateId = inquiryTemplateId || PERSONA_INQUIRY_TEMPLATE_ID;
@@ -146,7 +234,73 @@ export class PersonaInquiryService {
 
     return { record, created: true };
   }
+
+  async updateInquiry(inquiryId: string) {
+    const inquiryRecord = await prisma.personaInquiry.findUnique({
+      where: { inquiryId: inquiryId },
+      include: {
+        buyer: {
+          select: {
+            id: true,
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (!inquiryRecord) {
+      throw new Error("Inquiry not found");
+    }
+
+    const inquiry = await this.getInquiry(inquiryRecord.inquiryId);
+    if (!inquiry?.data?.attributes) {
+      throw new Error("Inquiry not found");
+    }
+
+    const personaStatus = inquiry.data.attributes.status;
+    const personaFields = inquiry.data.attributes.fields as PersonaInquiryFields;
+
+    if (personaStatus === "completed") {
+      await prisma.user.update({
+        where: { id: inquiryRecord.buyer.userId },
+        data: { isVerified: true },
+      });
+
+      const buyer = await prisma.buyer.update({
+        where: { id: inquiryRecord.buyerId },
+        data: mapPersonaFieldsToBuyerData(personaFields),
+      });
+
+      const record = await prisma.personaInquiry.update({
+        where: { inquiryId },
+        data: {
+          status: mapPersonaInquiryStatus(personaStatus),
+          response: inquiry,
+        },
+      });
+
+      return {
+        success: true,
+        message: "Inquiry updated successfully and buyer is verified",
+        buyer,
+        record,
+      };
+    }
+
+    await prisma.personaInquiry.update({
+      where: { inquiryId },
+      data: {
+        status: mapPersonaInquiryStatus(personaStatus),
+        response: inquiry,
+      },
+    });
+    const buyerData = mapPersonaFieldsToBuyerData(personaFields);
+    return {
+      success: false,
+      message: "Inquiry updated successfully but buyer is not verified",
+      buyer: buyerData,
+    };
+  }
 }
 
 export const personaInquiryService = new PersonaInquiryService();
-
