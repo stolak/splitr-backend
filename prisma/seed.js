@@ -1,27 +1,27 @@
-const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
-const fs = require('fs');
-const path = require('path');
+const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
+const fs = require("fs");
+const path = require("path");
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting database seeding...');
+  console.log("🌱 Starting database seeding...");
 
   try {
     // Create sample users
-    const hashedPassword = await bcrypt.hash('12345', 10);
+    const hashedPassword = await bcrypt.hash("12345", 10);
 
     await prisma.user.upsert({
-      where: { email: 'admin@admin.com' },
+      where: { email: "admin@admin.com" },
       update: {},
       create: {
-        email: 'admin@admin.com',
+        email: "admin@admin.com",
         password: hashedPassword,
-        firstName: 'Admin',
-        lastName: 'User',
-        userType: 'Admin',
-        role: 'SuperAdmin',
+        firstName: "Admin",
+        lastName: "User",
+        userType: "Admin",
+        role: "SuperAdmin",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -29,15 +29,15 @@ async function main() {
     });
 
     await prisma.user.upsert({
-      where: { email: 'admin@example.com' },
+      where: { email: "admin@example.com" },
       update: {},
       create: {
-        email: 'admin@example.com',
+        email: "admin@example.com",
         password: hashedPassword,
-        firstName: 'Admin',
-        lastName: 'User',
-        userType: 'Admin',
-        role: 'SuperAdmin',
+        firstName: "Admin",
+        lastName: "User",
+        userType: "Admin",
+        role: "SuperAdmin",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -46,15 +46,15 @@ async function main() {
 
     // Create merchant users for each merchant
     const merchantUser1 = await prisma.user.upsert({
-      where: { email: 'merchant@example.com' },
+      where: { email: "merchant@example.com" },
       update: {},
       create: {
-        email: 'merchant@example.com',
+        email: "merchant@example.com",
         password: hashedPassword,
-        firstName: 'John',
-        lastName: 'Merchant',
-        userType: 'Merchant',
-        role: 'Merchant',
+        firstName: "John",
+        lastName: "Merchant",
+        userType: "Merchant",
+        role: "Merchant",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -62,15 +62,15 @@ async function main() {
     });
 
     const merchantUser2 = await prisma.user.upsert({
-      where: { email: 'merchant2@example.com' },
+      where: { email: "merchant2@example.com" },
       update: {},
       create: {
-        email: 'merchant2@example.com',
+        email: "merchant2@example.com",
         password: hashedPassword,
-        firstName: 'Mary',
-        lastName: 'Johnson',
-        userType: 'Merchant',
-        role: 'Merchant',
+        firstName: "Mary",
+        lastName: "Johnson",
+        userType: "Merchant",
+        role: "Merchant",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -78,15 +78,15 @@ async function main() {
     });
 
     const merchantUser3 = await prisma.user.upsert({
-      where: { email: 'merchant3@example.com' },
+      where: { email: "merchant3@example.com" },
       update: {},
       create: {
-        email: 'merchant3@example.com',
+        email: "merchant3@example.com",
         password: hashedPassword,
-        firstName: 'David',
-        lastName: 'Wilson',
-        userType: 'Merchant',
-        role: 'Merchant',
+        firstName: "David",
+        lastName: "Wilson",
+        userType: "Merchant",
+        role: "Merchant",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -94,15 +94,15 @@ async function main() {
     });
 
     const merchantUser4 = await prisma.user.upsert({
-      where: { email: 'merchant4@example.com' },
+      where: { email: "merchant4@example.com" },
       update: {},
       create: {
-        email: 'merchant4@example.com',
+        email: "merchant4@example.com",
         password: hashedPassword,
-        firstName: 'Emma',
-        lastName: 'Brown',
-        userType: 'Merchant',
-        role: 'Merchant',
+        firstName: "Emma",
+        lastName: "Brown",
+        userType: "Merchant",
+        role: "Merchant",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -110,15 +110,15 @@ async function main() {
     });
 
     const merchantUser5 = await prisma.user.upsert({
-      where: { email: 'merchant5@example.com' },
+      where: { email: "merchant5@example.com" },
       update: {},
       create: {
-        email: 'merchant5@example.com',
+        email: "merchant5@example.com",
         password: hashedPassword,
-        firstName: 'Michael',
-        lastName: 'Taylor',
-        userType: 'Merchant',
-        role: 'Merchant',
+        firstName: "Michael",
+        lastName: "Taylor",
+        userType: "Merchant",
+        role: "Merchant",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -126,58 +126,58 @@ async function main() {
     });
 
     const buyerUser = await prisma.user.upsert({
-      where: { email: 'buyer@example.com' },
+      where: { email: "buyer@example.com" },
       update: {},
       create: {
-        email: 'buyer@example.com',
+        email: "buyer@example.com",
         password: hashedPassword,
-        firstName: 'Jane',
-        lastName: 'Buyer',
-        userType: 'Buyer',
-        role: 'Buyer',
+        firstName: "Jane",
+        lastName: "Buyer",
+        userType: "Buyer",
+        role: "Buyer",
         isActive: true,
-        isVerified: true,
+        isVerified: false,
         isEmailVerified: true,
       },
     });
 
     const buyerUser2 = await prisma.user.upsert({
-      where: { email: 'bobohavilah@gmail.com' },
+      where: { email: "bobohavilah@gmail.com" },
       update: {},
       create: {
-        email: 'bobohavilah@gmail.com',
+        email: "bobohavilah@gmail.com",
         password: hashedPassword,
-        firstName: 'Stephen',
-        lastName: 'AKINBOBOLA',
-        userType: 'Buyer',
-        role: 'Buyer',
+        firstName: "Stephen",
+        lastName: "AKINBOBOLA",
+        userType: "Buyer",
+        role: "Buyer",
         isActive: true,
-        isVerified: true,
+        isVerified: false,
         isEmailVerified: true,
       },
     });
     const buyerUser3 = await prisma.user.upsert({
-      where: { email: 'efatoyinbo@gmail.com' },
+      where: { email: "efatoyinbo@gmail.com" },
       update: {},
       create: {
-        email: 'efatoyinbo@gmail.com',
+        email: "efatoyinbo@gmail.com",
         password: hashedPassword,
-        firstName: 'Fatoyinbo',
-        lastName: 'Emmanuel',
-        userType: 'Buyer',
-        role: 'Buyer',
+        firstName: "Fatoyinbo",
+        lastName: "Emmanuel",
+        userType: "Buyer",
+        role: "Buyer",
         isActive: true,
-        isVerified: true,
+        isVerified: false,
         isEmailVerified: true,
       },
     });
 
-    console.log('✅ Users created successfully');
+    console.log("✅ Users created successfully");
 
     // Seed banks from banks.json
-    console.log('🏦 Seeding banks...');
-    const banksPath = path.join(__dirname, '..', 'banks.json');
-    const banksData = JSON.parse(fs.readFileSync(banksPath, 'utf8'));
+    console.log("🏦 Seeding banks...");
+    const banksPath = path.join(__dirname, "..", "banks.json");
+    const banksData = JSON.parse(fs.readFileSync(banksPath, "utf8"));
 
     // Bulk insert (fast). If a bankCode already exists, it will be skipped.
     // Note: this does NOT update existing bankName values. If you need updates too,
@@ -195,238 +195,238 @@ async function main() {
 
     // Create sample merchants
     const merchant1 = await prisma.merchant.upsert({
-      where: { businessEmail: 'techcorp@example.com' },
+      where: { businessEmail: "techcorp@example.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
-        businessName: 'TechCorp Solutions Ltd',
-        businessEmail: 'techcorp@example.com',
-        authorizedPerson: 'John Doe',
-        authorizedDesignation: 'CEO',
-        authorizedPhoneNo: '+2348012345678',
-        authorizedEmail: 'john.doe@techcorp.com',
-        typeOfServiceOrProducts: 'Software Development',
-        cacNumber: 'RC123456789',
-        dateOfIncorporation: '2020-01-15',
-        tin: 'TIN123456789',
-        registrationAddress: '123 Tech Street, Lagos',
-        businessDescription: 'Leading software development company',
-        businessCategory: 'Technology & Communications',
-        businessType: 'Software & SaaS Providers',
-        businessPhone: '+2348012345678',
-        officeWebsite: 'https://techcorp.com',
-        documentStatus: 'Pending',
-        applicationStatus: 'Pending',
-        verificationStatus: 'Pending',
+        businessName: "TechCorp Solutions Ltd",
+        businessEmail: "techcorp@example.com",
+        authorizedPerson: "John Doe",
+        authorizedDesignation: "CEO",
+        authorizedPhoneNo: "+2348012345678",
+        authorizedEmail: "john.doe@techcorp.com",
+        typeOfServiceOrProducts: "Software Development",
+        cacNumber: "RC123456789",
+        dateOfIncorporation: "2020-01-15",
+        tin: "TIN123456789",
+        registrationAddress: "123 Tech Street, Lagos",
+        businessDescription: "Leading software development company",
+        businessCategory: "Technology & Communications",
+        businessType: "Software & SaaS Providers",
+        businessPhone: "+2348012345678",
+        officeWebsite: "https://techcorp.com",
+        documentStatus: "Pending",
+        applicationStatus: "Pending",
+        verificationStatus: "Pending",
         isDeleted: false,
-        merchantCharge: 3.5
+        merchantCharge: 3.5,
       },
     });
 
     const merchant2 = await prisma.merchant.upsert({
-      where: { businessEmail: 'retailstore@example.com' },
+      where: { businessEmail: "retailstore@example.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
-        businessName: 'Retail Store Nigeria Ltd',
-        businessEmail: 'retailstore@example.com',
-        authorizedPerson: 'Mary Johnson',
-        authorizedDesignation: 'Managing Director',
-        authorizedPhoneNo: '+2348023456789',
-        authorizedEmail: 'mary.johnson@retailstore.com',
-        typeOfServiceOrProducts: 'Retail & E-commerce',
-        cacNumber: 'RC987654321',
-        dateOfIncorporation: '2019-03-20',
-        tin: 'TIN987654321',
-        registrationAddress: '456 Commerce Avenue, Abuja',
-        businessDescription: 'Premium retail and e-commerce platform',
-        businessCategory: 'Retail & Consumer Goods',
-        businessType: 'E-commerce & Marketplaces',
-        businessPhone: '+2348023456789',
-        officeWebsite: 'https://retailstore.ng',
+        businessName: "Retail Store Nigeria Ltd",
+        businessEmail: "retailstore@example.com",
+        authorizedPerson: "Mary Johnson",
+        authorizedDesignation: "Managing Director",
+        authorizedPhoneNo: "+2348023456789",
+        authorizedEmail: "mary.johnson@retailstore.com",
+        typeOfServiceOrProducts: "Retail & E-commerce",
+        cacNumber: "RC987654321",
+        dateOfIncorporation: "2019-03-20",
+        tin: "TIN987654321",
+        registrationAddress: "456 Commerce Avenue, Abuja",
+        businessDescription: "Premium retail and e-commerce platform",
+        businessCategory: "Retail & Consumer Goods",
+        businessType: "E-commerce & Marketplaces",
+        businessPhone: "+2348023456789",
+        officeWebsite: "https://retailstore.ng",
         // All verification statuses approved
-        isBusinessInfoVerified: 'Approved',
-        isAuthorizedPersonVerified: 'Approved',
-        isDirectorsVerified: 'Approved',
-        isShareholdersVerified: 'Approved',
-        isAuthorisersVerified: 'Approved',
-        isBankAccountVerified: 'Approved',
+        isBusinessInfoVerified: "Approved",
+        isAuthorizedPersonVerified: "Approved",
+        isDirectorsVerified: "Approved",
+        isShareholdersVerified: "Approved",
+        isAuthorisersVerified: "Approved",
+        isBankAccountVerified: "Approved",
         // Document URLs provided
-        cacCertificate: 'https://docs.retailstore.ng/cac-certificate.pdf',
-        isCACCertificateVerified: 'Approved',
-        memart: 'https://docs.retailstore.ng/memart-certificate.pdf',
-        isMEMERTCertificateVerified: 'Approved',
-        cac2Form: 'https://docs.retailstore.ng/cac2-form.pdf',
-        isCAC2CAC7FormVerified: 'Approved',
-        utilityBill: 'https://docs.retailstore.ng/utility-bill.pdf',
-        utilityBillVerified: 'Approved',
-        boardResolution: 'https://docs.retailstore.ng/board-resolution.pdf',
-        boardResolutionVerified: 'Approved',
+        cacCertificate: "https://docs.retailstore.ng/cac-certificate.pdf",
+        isCACCertificateVerified: "Approved",
+        memart: "https://docs.retailstore.ng/memart-certificate.pdf",
+        isMEMERTCertificateVerified: "Approved",
+        cac2Form: "https://docs.retailstore.ng/cac2-form.pdf",
+        isCAC2CAC7FormVerified: "Approved",
+        utilityBill: "https://docs.retailstore.ng/utility-bill.pdf",
+        utilityBillVerified: "Approved",
+        boardResolution: "https://docs.retailstore.ng/board-resolution.pdf",
+        boardResolutionVerified: "Approved",
         // All statuses approved
-        documentStatus: 'Approved',
-        applicationStatus: 'Approved',
-        verificationStatus: 'Approved',
+        documentStatus: "Approved",
+        applicationStatus: "Approved",
+        verificationStatus: "Approved",
         // Bank account details
-        bankAccount: '1234567890',
-        accountName: 'Retail Store Nigeria Ltd',
+        bankAccount: "1234567890",
+        accountName: "Retail Store Nigeria Ltd",
         merchantCharge: 3.5,
-        bankName: 'Access Bank',
-        bankCode: '044',
+        bankName: "Access Bank",
+        bankCode: "044",
         // Terms and conditions
         isAgreedToTerms: true,
-        agreedToTermsAt: new Date('2023-01-15T10:30:00Z'),
+        agreedToTermsAt: new Date("2023-01-15T10:30:00Z"),
         agreedToTermsBy: merchantUser2.id,
         isDeleted: false,
       },
     });
 
     const merchant3 = await prisma.merchant.upsert({
-      where: { businessEmail: 'foodservice@example.com' },
+      where: { businessEmail: "foodservice@example.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
-        businessName: 'Food Service Solutions',
-        businessEmail: 'foodservice@example.com',
-        authorizedPerson: 'David Wilson',
-        authorizedDesignation: 'Operations Manager',
-        authorizedPhoneNo: '+2348034567890',
-        authorizedEmail: 'david.wilson@foodservice.com',
-        typeOfServiceOrProducts: 'Food & Beverage',
-        cacNumber: 'RC456789123',
-        dateOfIncorporation: '2021-06-10',
-        tin: 'TIN456789123',
-        registrationAddress: '789 Food Court, Port Harcourt',
-        businessDescription: 'Quality food and beverage services',
-        businessCategory: 'Hospitality & Food Services',
-        businessType: 'Restaurants & Quick Service Outlets',
-        businessPhone: '+2348034567890',
-        officeWebsite: 'https://foodservice.ng',
-        documentStatus: 'Rejected',
-        applicationStatus: 'Rejected',
-        verificationStatus: 'Rejected',
+        businessName: "Food Service Solutions",
+        businessEmail: "foodservice@example.com",
+        authorizedPerson: "David Wilson",
+        authorizedDesignation: "Operations Manager",
+        authorizedPhoneNo: "+2348034567890",
+        authorizedEmail: "david.wilson@foodservice.com",
+        typeOfServiceOrProducts: "Food & Beverage",
+        cacNumber: "RC456789123",
+        dateOfIncorporation: "2021-06-10",
+        tin: "TIN456789123",
+        registrationAddress: "789 Food Court, Port Harcourt",
+        businessDescription: "Quality food and beverage services",
+        businessCategory: "Hospitality & Food Services",
+        businessType: "Restaurants & Quick Service Outlets",
+        businessPhone: "+2348034567890",
+        officeWebsite: "https://foodservice.ng",
+        documentStatus: "Rejected",
+        applicationStatus: "Rejected",
+        verificationStatus: "Rejected",
         isDeleted: false,
-        merchantCharge: 3.5
+        merchantCharge: 3.5,
       },
     });
 
     const merchant4 = await prisma.merchant.upsert({
-      where: { businessEmail: 'logistics@example.com' },
+      where: { businessEmail: "logistics@example.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
-        businessName: 'Swift Logistics Nigeria Ltd',
-        businessEmail: 'logistics@example.com',
-        authorizedPerson: 'Emma Brown',
-        authorizedDesignation: 'Chief Executive Officer',
-        authorizedPhoneNo: '+2348045678901',
-        authorizedEmail: 'emma.brown@swiftlogistics.com',
-        typeOfServiceOrProducts: 'Logistics & Transportation',
-        cacNumber: 'RC111222333',
-        dateOfIncorporation: '2020-05-15',
-        tin: 'TIN111222333',
-        registrationAddress: '789 Transport Hub, Ikeja, Lagos',
-        businessDescription: 'Premium logistics and transportation services',
-        businessCategory: 'Logistics & Transportation',
-        businessType: 'Courier & Delivery Services',
-        businessPhone: '+2348045678901',
-        officeWebsite: 'https://swiftlogistics.ng',
+        businessName: "Swift Logistics Nigeria Ltd",
+        businessEmail: "logistics@example.com",
+        authorizedPerson: "Emma Brown",
+        authorizedDesignation: "Chief Executive Officer",
+        authorizedPhoneNo: "+2348045678901",
+        authorizedEmail: "emma.brown@swiftlogistics.com",
+        typeOfServiceOrProducts: "Logistics & Transportation",
+        cacNumber: "RC111222333",
+        dateOfIncorporation: "2020-05-15",
+        tin: "TIN111222333",
+        registrationAddress: "789 Transport Hub, Ikeja, Lagos",
+        businessDescription: "Premium logistics and transportation services",
+        businessCategory: "Logistics & Transportation",
+        businessType: "Courier & Delivery Services",
+        businessPhone: "+2348045678901",
+        officeWebsite: "https://swiftlogistics.ng",
         // All verification statuses approved
-        isBusinessInfoVerified: 'Approved',
-        isAuthorizedPersonVerified: 'Approved',
-        isDirectorsVerified: 'Approved',
-        isShareholdersVerified: 'Approved',
-        isAuthorisersVerified: 'Approved',
-        isBankAccountVerified: 'Approved',
+        isBusinessInfoVerified: "Approved",
+        isAuthorizedPersonVerified: "Approved",
+        isDirectorsVerified: "Approved",
+        isShareholdersVerified: "Approved",
+        isAuthorisersVerified: "Approved",
+        isBankAccountVerified: "Approved",
         // Document URLs provided
-        cacCertificate: 'https://docs.swiftlogistics.ng/cac-certificate.pdf',
-        isCACCertificateVerified: 'Approved',
-        memart: 'https://docs.swiftlogistics.ng/memart-certificate.pdf',
-        isMEMERTCertificateVerified: 'Approved',
-        cac2Form: 'https://docs.swiftlogistics.ng/cac2-form.pdf',
-        isCAC2CAC7FormVerified: 'Approved',
-        utilityBill: 'https://docs.swiftlogistics.ng/utility-bill.pdf',
-        utilityBillVerified: 'Approved',
-        boardResolution: 'https://docs.swiftlogistics.ng/board-resolution.pdf',
-        boardResolutionVerified: 'Approved',
+        cacCertificate: "https://docs.swiftlogistics.ng/cac-certificate.pdf",
+        isCACCertificateVerified: "Approved",
+        memart: "https://docs.swiftlogistics.ng/memart-certificate.pdf",
+        isMEMERTCertificateVerified: "Approved",
+        cac2Form: "https://docs.swiftlogistics.ng/cac2-form.pdf",
+        isCAC2CAC7FormVerified: "Approved",
+        utilityBill: "https://docs.swiftlogistics.ng/utility-bill.pdf",
+        utilityBillVerified: "Approved",
+        boardResolution: "https://docs.swiftlogistics.ng/board-resolution.pdf",
+        boardResolutionVerified: "Approved",
         // All statuses approved
-        documentStatus: 'Approved',
-        applicationStatus: 'Approved',
-        verificationStatus: 'Approved',
+        documentStatus: "Approved",
+        applicationStatus: "Approved",
+        verificationStatus: "Approved",
         // Bank account details
-        bankAccount: '9876543210',
-        accountName: 'Swift Logistics Nigeria Ltd',
+        bankAccount: "9876543210",
+        accountName: "Swift Logistics Nigeria Ltd",
         merchantCharge: 2.5,
-        bankName: 'Zenith Bank',
-        bankCode: '057',
+        bankName: "Zenith Bank",
+        bankCode: "057",
         // Terms and conditions
         isAgreedToTerms: true,
-        agreedToTermsAt: new Date('2023-02-20T10:30:00Z'),
+        agreedToTermsAt: new Date("2023-02-20T10:30:00Z"),
         agreedToTermsBy: merchantUser4.id,
         isDeleted: false,
       },
     });
 
     const merchant5 = await prisma.merchant.upsert({
-      where: { businessEmail: 'healthcare@example.com' },
+      where: { businessEmail: "healthcare@example.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
-        businessName: 'Prime Healthcare Services Ltd',
-        businessEmail: 'healthcare@example.com',
-        authorizedPerson: 'Michael Taylor',
-        authorizedDesignation: 'Medical Director',
-        authorizedPhoneNo: '+2348056789012',
-        authorizedEmail: 'michael.taylor@primehealthcare.com',
-        typeOfServiceOrProducts: 'Healthcare & Medical Services',
-        cacNumber: 'RC444555666',
-        dateOfIncorporation: '2018-11-25',
-        tin: 'TIN444555666',
-        registrationAddress: '321 Medical Center, Wuse 2, Abuja',
-        businessDescription: 'Comprehensive healthcare and medical services',
-        businessCategory: 'Healthcare & Medical Services',
-        businessType: 'Hospitals & Clinics',
-        businessPhone: '+2348056789012',
-        officeWebsite: 'https://primehealthcare.ng',
+        businessName: "Prime Healthcare Services Ltd",
+        businessEmail: "healthcare@example.com",
+        authorizedPerson: "Michael Taylor",
+        authorizedDesignation: "Medical Director",
+        authorizedPhoneNo: "+2348056789012",
+        authorizedEmail: "michael.taylor@primehealthcare.com",
+        typeOfServiceOrProducts: "Healthcare & Medical Services",
+        cacNumber: "RC444555666",
+        dateOfIncorporation: "2018-11-25",
+        tin: "TIN444555666",
+        registrationAddress: "321 Medical Center, Wuse 2, Abuja",
+        businessDescription: "Comprehensive healthcare and medical services",
+        businessCategory: "Healthcare & Medical Services",
+        businessType: "Hospitals & Clinics",
+        businessPhone: "+2348056789012",
+        officeWebsite: "https://primehealthcare.ng",
         // All verification statuses approved
-        isBusinessInfoVerified: 'Approved',
-        isAuthorizedPersonVerified: 'Approved',
-        isDirectorsVerified: 'Approved',
-        isShareholdersVerified: 'Approved',
-        isAuthorisersVerified: 'Approved',
-        isBankAccountVerified: 'Approved',
+        isBusinessInfoVerified: "Approved",
+        isAuthorizedPersonVerified: "Approved",
+        isDirectorsVerified: "Approved",
+        isShareholdersVerified: "Approved",
+        isAuthorisersVerified: "Approved",
+        isBankAccountVerified: "Approved",
         // Document URLs provided
-        cacCertificate: 'https://docs.primehealthcare.ng/cac-certificate.pdf',
-        isCACCertificateVerified: 'Approved',
-        memart: 'https://docs.primehealthcare.ng/memart-certificate.pdf',
-        isMEMERTCertificateVerified: 'Approved',
-        cac2Form: 'https://docs.primehealthcare.ng/cac2-form.pdf',
-        isCAC2CAC7FormVerified: 'Approved',
-        utilityBill: 'https://docs.primehealthcare.ng/utility-bill.pdf',
-        utilityBillVerified: 'Approved',
-        boardResolution: 'https://docs.primehealthcare.ng/board-resolution.pdf',
-        boardResolutionVerified: 'Approved',
+        cacCertificate: "https://docs.primehealthcare.ng/cac-certificate.pdf",
+        isCACCertificateVerified: "Approved",
+        memart: "https://docs.primehealthcare.ng/memart-certificate.pdf",
+        isMEMERTCertificateVerified: "Approved",
+        cac2Form: "https://docs.primehealthcare.ng/cac2-form.pdf",
+        isCAC2CAC7FormVerified: "Approved",
+        utilityBill: "https://docs.primehealthcare.ng/utility-bill.pdf",
+        utilityBillVerified: "Approved",
+        boardResolution: "https://docs.primehealthcare.ng/board-resolution.pdf",
+        boardResolutionVerified: "Approved",
         // All statuses approved
-        documentStatus: 'Approved',
-        applicationStatus: 'Approved',
-        verificationStatus: 'Approved',
+        documentStatus: "Approved",
+        applicationStatus: "Approved",
+        verificationStatus: "Approved",
         // Bank account details
-        bankAccount: '5555555555',
-        accountName: 'Prime Healthcare Services Ltd',
+        bankAccount: "5555555555",
+        accountName: "Prime Healthcare Services Ltd",
         merchantCharge: 4.0,
-        bankName: 'United Bank for Africa',
-        bankCode: '033',
+        bankName: "United Bank for Africa",
+        bankCode: "033",
         // Terms and conditions
         isAgreedToTerms: true,
-        agreedToTermsAt: new Date('2023-03-10T14:00:00Z'),
+        agreedToTermsAt: new Date("2023-03-10T14:00:00Z"),
         agreedToTermsBy: merchantUser5.id,
         isDeleted: false,
       },
     });
 
-    console.log('✅ Merchants created successfully');
+    console.log("✅ Merchants created successfully");
 
     // Log generated splitr IDs for merchants
-    console.log('🏷️  Generated Merchant splitr IDs:');
+    console.log("🏷️  Generated Merchant splitr IDs:");
     console.log(`   ${merchant1.splitrId} - ${merchant1.businessName}`);
     console.log(`   ${merchant2.splitrId} - ${merchant2.businessName}`);
     console.log(`   ${merchant3.splitrId} - ${merchant3.businessName}`);
@@ -444,11 +444,6 @@ async function main() {
       data: { merchantId: merchant2.id },
     });
 
-
-
-
-
-
     await prisma.user.update({
       where: { id: merchantUser3.id },
       data: { merchantId: merchant3.id },
@@ -464,32 +459,32 @@ async function main() {
       data: { merchantId: merchant5.id },
     });
 
-    console.log('✅ User-merchant relationships created');
+    console.log("✅ User-merchant relationships created");
 
     // Create sample buyers
     const buyer1 = await prisma.buyer.upsert({
-      where: { email: 'buyer@example.com' },
+      where: { email: "buyer@example.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
         userId: buyerUser.id,
-        firstName: 'Jane',
-        lastName: 'Buyer',
-        phoneNumber: '+2348045678901',
-        email: 'buyer@example.com',
-        address: '321 Buyer Street, Lagos',
-        gender: 'Female',
-        idType: 'National ID',
-        idNumber: 'ID123456789',
-        sinNumber: '123456789',
-        sinExpiryDate: '2030-12-31',
-        state: 'Ontario',
-        province: 'Ontario',
-        city: 'Toronto',
-        houseNo: '321',
-        postalCode: 'M5H 2N2',
+        firstName: "Jane",
+        lastName: "Buyer",
+        phoneNumber: "+2348045678901",
+        email: "buyer@example.com",
+        address: "321 Buyer Street, Lagos",
+        gender: "Female",
+        idType: "National ID",
+        idNumber: "ID123456789",
+        sinNumber: "123456789",
+        sinExpiryDate: "2030-12-31",
+        state: "Ontario",
+        province: "Ontario",
+        city: "Toronto",
+        houseNo: "321",
+        postalCode: "M5H 2N2",
         isActive: true,
-        isVerified: true,
+        isVerified: false,
         isEmailVerified: true,
         IsTermsAndConditionAccepted: true,
       },
@@ -497,66 +492,65 @@ async function main() {
 
     // Create additional sample buyers
     const buyer2 = await prisma.buyer.upsert({
-      where: { email: 'bobohavilah@gmail.com' },
+      where: { email: "bobohavilah@gmail.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
         userId: buyerUser2.id, // Using the second buyer user
-        firstName: 'Stephen',
-        lastName: 'AKINBOBOLA',
-        phoneNumber: '+23480567890101',
-        email: 'bobohavilah@gmail.com',
-        address: '456 Customer Avenue, Abuja',
-        gender: 'Male',
-        idType: 'Driver License',
-        idNumber: 'DL987654321',
-        sinNumber: '987654321',
-        sinExpiryDate: '2029-06-30',
-        state: 'Alberta',
-        province: 'Alberta',
-        city: 'Calgary',
-        houseNo: '456',
-        postalCode: 'T2P 1J9',
+        firstName: "Stephen",
+        lastName: "AKINBOBOLA",
+        phoneNumber: "+23480567890101",
+        email: "bobohavilah@gmail.com",
+        address: "456 Customer Avenue, Abuja",
+        gender: "Male",
+        idType: "Driver License",
+        idNumber: "DL987654321",
+        sinNumber: "987654321",
+        sinExpiryDate: "2029-06-30",
+        state: "Alberta",
+        province: "Alberta",
+        city: "Calgary",
+        houseNo: "456",
+        postalCode: "T2P 1J9",
         isActive: true,
-        isVerified: true,
+        isVerified: false,
         isEmailVerified: true,
         IsTermsAndConditionAccepted: true,
       },
     });
 
-
     const buyer3 = await prisma.buyer.upsert({
-      where: { email: 'efatoyinbo@gmail.com' },
+      where: { email: "efatoyinbo@gmail.com" },
       update: {},
       create: {
         splitrId: "", // Will be auto-generated by trigger
-        userId: buyerUser3.id,// Using the second buyer user
-        firstName: 'Fatoyinbo',
-        lastName: 'Emmanuel',
-        phoneNumber: '+23480567890102',
-        email: 'efatoyinbo@gmail.com',
-        address: '456 Customer Avenue, Abuja',
-        gender: 'Male',
-        idType: 'Driver License',
-        idNumber: 'DL987654322',
-        sinNumber: '987654322',
-        sinExpiryDate: '2028-03-15',
-        state: 'British Columbia',
-        province: 'British Columbia',
-        city: 'Vancouver',
-        houseNo: '456',
-        postalCode: 'V6B 1A1',
+        userId: buyerUser3.id, // Using the second buyer user
+        firstName: "Fatoyinbo",
+        lastName: "Emmanuel",
+        phoneNumber: "+23480567890102",
+        email: "efatoyinbo@gmail.com",
+        address: "456 Customer Avenue, Abuja",
+        gender: "Male",
+        idType: "Driver License",
+        idNumber: "DL987654322",
+        sinNumber: "987654322",
+        sinExpiryDate: "2028-03-15",
+        state: "British Columbia",
+        province: "British Columbia",
+        city: "Vancouver",
+        houseNo: "456",
+        postalCode: "V6B 1A1",
         isActive: true,
-        isVerified: true,
+        isVerified: false,
         isEmailVerified: true,
         IsTermsAndConditionAccepted: true,
       },
     });
 
-    console.log('✅ Buyers created successfully');
+    console.log("✅ Buyers created successfully");
 
     // Log generated splitr IDs for buyers
-    console.log('🏷️  Generated Buyer splitr IDs:');
+    console.log("🏷️  Generated Buyer splitr IDs:");
     console.log(`   ${buyer1.splitrId} - ${buyer1.firstName} ${buyer1.lastName}`);
     console.log(`   ${buyer2.splitrId} - ${buyer2.firstName} ${buyer2.lastName}`);
     console.log(`   ${buyer3.splitrId} - ${buyer3.firstName} ${buyer3.lastName}`);
@@ -566,155 +560,155 @@ async function main() {
       data: [
         {
           merchantId: merchant1.id,
-          director: 'John Doe',
-          position: 'CEO',
-          doc: 'ceo_doc.pdf',
+          director: "John Doe",
+          position: "CEO",
+          doc: "ceo_doc.pdf",
         },
         {
           merchantId: merchant1.id,
-          director: 'Sarah Smith',
-          position: 'CTO',
-          doc: 'cto_doc.pdf',
+          director: "Sarah Smith",
+          position: "CTO",
+          doc: "cto_doc.pdf",
         },
         {
           merchantId: merchant2.id,
-          director: 'Mary Johnson',
-          position: 'Managing Director',
-          doc: 'md_doc.pdf',
+          director: "Mary Johnson",
+          position: "Managing Director",
+          doc: "md_doc.pdf",
         },
         {
           merchantId: merchant4.id,
-          director: 'Emma Brown',
-          position: 'Chief Executive Officer',
-          doc: 'ceo_doc.pdf',
+          director: "Emma Brown",
+          position: "Chief Executive Officer",
+          doc: "ceo_doc.pdf",
         },
         {
           merchantId: merchant5.id,
-          director: 'Michael Taylor',
-          position: 'Medical Director',
-          doc: 'md_doc.pdf',
+          director: "Michael Taylor",
+          position: "Medical Director",
+          doc: "md_doc.pdf",
         },
       ],
       skipDuplicates: true,
     });
 
-    console.log('✅ Merchant directors created successfully');
+    console.log("✅ Merchant directors created successfully");
 
     // Create sample merchant shareholders
     await prisma.merchantShareHolder.createMany({
       data: [
         {
           merchantId: merchant1.id,
-          shareholder: 'John Doe',
-          holding: '60%',
+          shareholder: "John Doe",
+          holding: "60%",
         },
         {
           merchantId: merchant1.id,
-          shareholder: 'Sarah Smith',
-          holding: '40%',
+          shareholder: "Sarah Smith",
+          holding: "40%",
         },
         {
           merchantId: merchant2.id,
-          shareholder: 'Mary Johnson',
-          holding: '100%',
+          shareholder: "Mary Johnson",
+          holding: "100%",
         },
         {
           merchantId: merchant4.id,
-          shareholder: 'Emma Brown',
-          holding: '75%',
+          shareholder: "Emma Brown",
+          holding: "75%",
         },
         {
           merchantId: merchant4.id,
-          shareholder: 'Robert Brown',
-          holding: '25%',
+          shareholder: "Robert Brown",
+          holding: "25%",
         },
         {
           merchantId: merchant5.id,
-          shareholder: 'Michael Taylor',
-          holding: '60%',
+          shareholder: "Michael Taylor",
+          holding: "60%",
         },
         {
           merchantId: merchant5.id,
-          shareholder: 'Dr. Sarah Taylor',
-          holding: '40%',
+          shareholder: "Dr. Sarah Taylor",
+          holding: "40%",
         },
       ],
       skipDuplicates: true,
     });
 
-    console.log('✅ Merchant shareholders created successfully');
+    console.log("✅ Merchant shareholders created successfully");
 
     // Create sample merchant authorisers for merchant2 (approved merchant)
     await prisma.merchantAuthoriser.createMany({
       data: [
         {
           merchantId: merchant2.id,
-          authoriserName: 'Mary Johnson',
-          designation: 'Managing Director',
-          authoriserEmail: 'mary.johnson@retailstore.com',
-          authoriserPhone: '+2348023456789',
-          bvn: 'BVN987654321',
-          nin: 'NIN987654321',
+          authoriserName: "Mary Johnson",
+          designation: "Managing Director",
+          authoriserEmail: "mary.johnson@retailstore.com",
+          authoriserPhone: "+2348023456789",
+          bvn: "BVN987654321",
+          nin: "NIN987654321",
         },
         {
           merchantId: merchant2.id,
-          authoriserName: 'James Wilson',
-          designation: 'Financial Controller',
-          authoriserEmail: 'james.wilson@retailstore.com',
-          authoriserPhone: '+2348023456790',
-          bvn: 'BVN987654322',
-          nin: 'NIN987654322',
+          authoriserName: "James Wilson",
+          designation: "Financial Controller",
+          authoriserEmail: "james.wilson@retailstore.com",
+          authoriserPhone: "+2348023456790",
+          bvn: "BVN987654322",
+          nin: "NIN987654322",
         },
         {
           merchantId: merchant2.id,
-          authoriserName: 'Sarah Davis',
-          designation: 'Operations Manager',
-          authoriserEmail: 'sarah.davis@retailstore.com',
-          authoriserPhone: '+2348023456791',
-          bvn: 'BVN987654323',
-          nin: 'NIN987654323',
+          authoriserName: "Sarah Davis",
+          designation: "Operations Manager",
+          authoriserEmail: "sarah.davis@retailstore.com",
+          authoriserPhone: "+2348023456791",
+          bvn: "BVN987654323",
+          nin: "NIN987654323",
         },
         {
           merchantId: merchant4.id,
-          authoriserName: 'Emma Brown',
-          designation: 'Chief Executive Officer',
-          authoriserEmail: 'emma.brown@swiftlogistics.com',
-          authoriserPhone: '+2348045678901',
-          bvn: 'BVN111222333',
-          nin: 'NIN111222333',
+          authoriserName: "Emma Brown",
+          designation: "Chief Executive Officer",
+          authoriserEmail: "emma.brown@swiftlogistics.com",
+          authoriserPhone: "+2348045678901",
+          bvn: "BVN111222333",
+          nin: "NIN111222333",
         },
         {
           merchantId: merchant4.id,
-          authoriserName: 'Robert Brown',
-          designation: 'Chief Financial Officer',
-          authoriserEmail: 'robert.brown@swiftlogistics.com',
-          authoriserPhone: '+2348045678902',
-          bvn: 'BVN111222334',
-          nin: 'NIN111222334',
+          authoriserName: "Robert Brown",
+          designation: "Chief Financial Officer",
+          authoriserEmail: "robert.brown@swiftlogistics.com",
+          authoriserPhone: "+2348045678902",
+          bvn: "BVN111222334",
+          nin: "NIN111222334",
         },
         {
           merchantId: merchant5.id,
-          authoriserName: 'Michael Taylor',
-          designation: 'Medical Director',
-          authoriserEmail: 'michael.taylor@primehealthcare.com',
-          authoriserPhone: '+2348056789012',
-          bvn: 'BVN444555666',
-          nin: 'NIN444555666',
+          authoriserName: "Michael Taylor",
+          designation: "Medical Director",
+          authoriserEmail: "michael.taylor@primehealthcare.com",
+          authoriserPhone: "+2348056789012",
+          bvn: "BVN444555666",
+          nin: "NIN444555666",
         },
         {
           merchantId: merchant5.id,
-          authoriserName: 'Dr. Sarah Taylor',
-          designation: 'Chief Medical Officer',
-          authoriserEmail: 'sarah.taylor@primehealthcare.com',
-          authoriserPhone: '+2348056789013',
-          bvn: 'BVN444555667',
-          nin: 'NIN444555667',
+          authoriserName: "Dr. Sarah Taylor",
+          designation: "Chief Medical Officer",
+          authoriserEmail: "sarah.taylor@primehealthcare.com",
+          authoriserPhone: "+2348056789013",
+          bvn: "BVN444555667",
+          nin: "NIN444555667",
         },
       ],
       skipDuplicates: true,
     });
 
-    console.log('✅ Merchant authorisers created successfully');
+    console.log("✅ Merchant authorisers created successfully");
 
     // Create sample bank accounts for merchant2 (approved merchant)
     // First, get Access Bank ID
@@ -724,209 +718,203 @@ async function main() {
         {
           bankId: "6920724a-73b7-4471-8d00-f17ff9b9b773",
           merchantId: merchant2.id,
-          accountName: 'Akinbobola Olawole Stephen',
-          accountNumber: '0041916727',
+          accountName: "Akinbobola Olawole Stephen",
+          accountNumber: "0041916727",
         },
         {
-          bankId: '362c4170-7fed-4c9a-b8aa-e3dff0dac14b',
+          bankId: "362c4170-7fed-4c9a-b8aa-e3dff0dac14b",
           merchantId: merchant2.id,
-          accountName: 'Akinbobola Olawole Stephen',
-          accountNumber: '8032196222',
+          accountName: "Akinbobola Olawole Stephen",
+          accountNumber: "8032196222",
         },
         {
-          bankId: '362c4170-7fed-4c9a-b8aa-e3dff0dac14b',
+          bankId: "362c4170-7fed-4c9a-b8aa-e3dff0dac14b",
           merchantId: merchant4.id,
-          accountName: 'Damilola',
-          accountNumber: '7066066089',
+          accountName: "Damilola",
+          accountNumber: "7066066089",
         },
 
         {
-          bankId: '42d6bebc-90fa-4cfd-bd3b-e3560a327a8b',
+          bankId: "42d6bebc-90fa-4cfd-bd3b-e3560a327a8b",
           merchantId: merchant5.id,
-          accountName: 'Akinbobola Olawole Stephen',
-          accountNumber: '8032196222',
+          accountName: "Akinbobola Olawole Stephen",
+          accountNumber: "8032196222",
         },
-
       ],
       skipDuplicates: true,
     });
 
-
-
-
-    console.log('✅ Bank accounts created successfully');
+    console.log("✅ Bank accounts created successfully");
 
     // Seed Loan Penalties
-    console.log('\n📊 Seeding loan penalties...');
+    console.log("\n📊 Seeding loan penalties...");
     const penalty1 = await prisma.loanPenalty.upsert({
-      where: { id: 'penalty-6-days' },
+      where: { id: "penalty-6-days" },
       update: {},
       create: {
-        id: 'penalty-6-days',
+        id: "penalty-6-days",
         dayAfter: 5,
         percentage: 1.0,
-        status: 'Active',
+        status: "Active",
       },
     });
 
     const penalty2 = await prisma.loanPenalty.upsert({
-      where: { id: 'penalty-8-days' },
+      where: { id: "penalty-8-days" },
       update: {},
       create: {
-        id: 'penalty-8-days',
+        id: "penalty-8-days",
         dayAfter: 7,
         percentage: 1.5,
-        status: 'Active',
+        status: "Active",
       },
     });
 
     const penalty3 = await prisma.loanPenalty.upsert({
-      where: { id: 'penalty-11-days' },
+      where: { id: "penalty-11-days" },
       update: {},
       create: {
-        id: 'penalty-11-days',
+        id: "penalty-11-days",
         dayAfter: 10,
         percentage: 2.5,
-        status: 'Active',
+        status: "Active",
       },
     });
     await prisma.loanPenalty.upsert({
-      where: { id: 'penalty-20-days' },
+      where: { id: "penalty-20-days" },
       update: {},
       create: {
-        id: 'penalty-20-days',
+        id: "penalty-20-days",
         dayAfter: 20,
         percentage: 3.0,
-        status: 'Active',
+        status: "Active",
       },
     });
 
-
-
-    console.log('✅ Loan penalties seeded successfully');
+    console.log("✅ Loan penalties seeded successfully");
 
     // Seed Loan Debit Trials
-    console.log('\n📊 Seeding loan debit trials...');
+    console.log("\n📊 Seeding loan debit trials...");
     const debitTrial1 = await prisma.loanDebitTrial.upsert({
-      where: { id: 'debit-trial-1-day' },
+      where: { id: "debit-trial-1-day" },
       update: {},
       create: {
-        id: 'debit-trial-1-day',
+        id: "debit-trial-1-day",
         dayAfter: 1,
-        status: 'Active',
+        status: "Active",
       },
     });
 
     const debitTrial2 = await prisma.loanDebitTrial.upsert({
-      where: { id: 'debit-trial-3-days' },
+      where: { id: "debit-trial-3-days" },
       update: {},
       create: {
-        id: 'debit-trial-3-days',
+        id: "debit-trial-3-days",
         dayAfter: 3,
-        status: 'Active',
+        status: "Active",
       },
     });
 
     const debitTrial3 = await prisma.loanDebitTrial.upsert({
-      where: { id: 'debit-trial-5-days' },
+      where: { id: "debit-trial-5-days" },
       update: {},
       create: {
-        id: 'debit-trial-5-days',
+        id: "debit-trial-5-days",
         dayAfter: 5,
-        status: 'Active',
+        status: "Active",
       },
     });
 
     const debitTrial4 = await prisma.loanDebitTrial.upsert({
-      where: { id: 'debit-trial-inactive' },
+      where: { id: "debit-trial-inactive" },
       update: {},
       create: {
-        id: 'debit-trial-inactive',
+        id: "debit-trial-inactive",
         dayAfter: 10,
-        status: 'Inactive',
+        status: "Inactive",
       },
     });
 
-    console.log('✅ Loan debit trials seeded successfully');
+    console.log("✅ Loan debit trials seeded successfully");
 
     // Seed Tiers
-    console.log('\n🎯 Seeding tiers...');
+    console.log("\n🎯 Seeding tiers...");
 
     const tier1 = await prisma.tier.upsert({
-      where: { id: 'tier-basic' },
+      where: { id: "tier-basic" },
       update: {},
       create: {
-        id: 'tier-basic',
-        name: 'Basic Tier',
+        id: "tier-basic",
+        name: "Basic Tier",
         from: 0,
         to: 10000,
-        status: 'Active',
+        status: "Active",
         discounted: 0,
       },
     });
 
     const tier2 = await prisma.tier.upsert({
-      where: { id: 'tier-silver' },
+      where: { id: "tier-silver" },
       update: {},
       create: {
-        id: 'tier-silver',
-        name: 'Silver Tier',
+        id: "tier-silver",
+        name: "Silver Tier",
         from: 10001,
         to: 50000,
-        status: 'Active',
+        status: "Active",
         discounted: 2.5,
       },
     });
 
     const tier3 = await prisma.tier.upsert({
-      where: { id: 'tier-gold' },
+      where: { id: "tier-gold" },
       update: {},
       create: {
-        id: 'tier-gold',
-        name: 'Gold Tier',
+        id: "tier-gold",
+        name: "Gold Tier",
         from: 50001,
         to: 100000,
-        status: 'Active',
+        status: "Active",
         discounted: 5,
       },
     });
 
     const tier4 = await prisma.tier.upsert({
-      where: { id: 'tier-platinum' },
+      where: { id: "tier-platinum" },
       update: {},
       create: {
-        id: 'tier-platinum',
-        name: 'Platinum Tier',
+        id: "tier-platinum",
+        name: "Platinum Tier",
         from: 100001,
         to: 500000,
-        status: 'Active',
+        status: "Active",
         discounted: 7.5,
       },
     });
 
     const tier5 = await prisma.tier.upsert({
-      where: { id: 'tier-diamond' },
+      where: { id: "tier-diamond" },
       update: {},
       create: {
-        id: 'tier-diamond',
-        name: 'Diamond Tier',
+        id: "tier-diamond",
+        name: "Diamond Tier",
         from: 500001,
         to: 999999999,
-        status: 'Active',
+        status: "Active",
         discounted: 10,
       },
     });
 
-    console.log('✅ Tiers seeded successfully');
+    console.log("✅ Tiers seeded successfully");
 
     // Seed Eligibility and Score
-    console.log('\n📊 Seeding eligibility and score records...');
+    console.log("\n📊 Seeding eligibility and score records...");
 
     const eligibility1 = await prisma.eligibilityAndScore.upsert({
-      where: { id: 'eligibility-buyer1' },
+      where: { id: "eligibility-buyer1" },
       update: {},
       create: {
-        id: 'eligibility-buyer1',
+        id: "eligibility-buyer1",
         buyerId: buyer1.id,
         approved: true,
         eligibility: 85.5,
@@ -936,7 +924,7 @@ async function main() {
         averageBalanceScore: 18.5,
         employmentStatusScore: 12,
         overdraftScore: 10,
-        message: 'Excellent credit profile. Approved for loan.',
+        message: "Excellent credit profile. Approved for loan.",
         finalApprovedLoan: 500000,
         maxEligibleLoan: 600000,
         monthlyRepayment: 45000,
@@ -946,10 +934,10 @@ async function main() {
     });
 
     const eligibility2 = await prisma.eligibilityAndScore.upsert({
-      where: { id: 'eligibility-buyer2' },
+      where: { id: "eligibility-buyer2" },
       update: {},
       create: {
-        id: 'eligibility-buyer2',
+        id: "eligibility-buyer2",
         buyerId: buyer2.id,
         approved: true,
         eligibility: 72.5,
@@ -959,7 +947,7 @@ async function main() {
         averageBalanceScore: 15.5,
         employmentStatusScore: 12,
         overdraftScore: 10,
-        message: 'Good credit profile. Approved for moderate loan amount.',
+        message: "Good credit profile. Approved for moderate loan amount.",
         finalApprovedLoan: 300000,
         maxEligibleLoan: 400000,
         monthlyRepayment: 27500,
@@ -969,10 +957,10 @@ async function main() {
     });
 
     const eligibility3 = await prisma.eligibilityAndScore.upsert({
-      where: { id: 'eligibility-buyer3' },
+      where: { id: "eligibility-buyer3" },
       update: {},
       create: {
-        id: 'eligibility-buyer3',
+        id: "eligibility-buyer3",
         buyerId: buyer3.id,
         approved: false,
         eligibility: 45.0,
@@ -982,7 +970,7 @@ async function main() {
         averageBalanceScore: 12,
         employmentStatusScore: 8,
         overdraftScore: 7,
-        message: 'Below minimum threshold. Application declined.',
+        message: "Below minimum threshold. Application declined.",
         finalApprovedLoan: 0,
         maxEligibleLoan: 100000,
         monthlyRepayment: 0,
@@ -991,24 +979,26 @@ async function main() {
       },
     });
 
+    console.log("✅ Eligibility and score records seeded successfully");
 
-
-    console.log('✅ Eligibility and score records seeded successfully');
-
-  
-
-    console.log('\n🎉 Database seeding completed successfully!');
-    console.log('\n📋 Sample Data Created:');
-    console.log('👥 Users:');
-    console.log('  - Admin: admin@example.com (password: 12345)');
-    console.log('  - Merchant (Pending): merchant@example.com (password: 12345) → TechCorp Solutions Ltd');
-    console.log('  - Merchant (Approved): merchant2@example.com (password: 12345) → Retail Store Nigeria Ltd');
-    console.log('  - Merchant (Rejected): merchant3@example.com (password: 12345) → Food Service Solutions');
-    console.log('  - Buyer: buyer@example.com (password: 12345)');
-    console.log('  - Buyer: stephen@example.com (password: 12345)');
-    console.log('\n🏦 Banks:');
+    console.log("\n🎉 Database seeding completed successfully!");
+    console.log("\n📋 Sample Data Created:");
+    console.log("👥 Users:");
+    console.log("  - Admin: admin@example.com (password: 12345)");
+    console.log(
+      "  - Merchant (Pending): merchant@example.com (password: 12345) → TechCorp Solutions Ltd"
+    );
+    console.log(
+      "  - Merchant (Approved): merchant2@example.com (password: 12345) → Retail Store Nigeria Ltd"
+    );
+    console.log(
+      "  - Merchant (Rejected): merchant3@example.com (password: 12345) → Food Service Solutions"
+    );
+    console.log("  - Buyer: buyer@example.com (password: 12345)");
+    console.log("  - Buyer: stephen@example.com (password: 12345)");
+    console.log("\n🏦 Banks:");
     console.log(`  - ${banksData.length} Nigerian banks seeded`);
-    console.log('\n🏢 Merchants with splitr IDs:');
+    console.log("\n🏢 Merchants with splitr IDs:");
     console.log(`  - ${merchant1.splitrId} - TechCorp Solutions Ltd (Pending)`);
     console.log(`  - ${merchant2.splitrId} - Retail Store Nigeria Ltd (FULLY APPROVED)`);
     console.log(`    ✅ All verifications approved`);
@@ -1017,42 +1007,47 @@ async function main() {
     console.log(`    ✅ Authorisers configured`);
     console.log(`    ✅ Terms and conditions accepted`);
     console.log(`  - ${merchant3.splitrId} - Food Service Solutions (Rejected)`);
-    console.log('\n👤 Buyers with splitr IDs:');
+    console.log("\n👤 Buyers with splitr IDs:");
     console.log(`  - ${buyer1.splitrId} - ${buyer1.firstName} ${buyer1.lastName}`);
     console.log(`  - ${buyer2.splitrId} - ${buyer2.firstName} ${buyer2.lastName}`);
-    console.log('\n🏦 Bank Accounts:');
+    console.log("\n🏦 Bank Accounts:");
     console.log(`  - Retail Store Nigeria Ltd: 2 accounts (Access Bank)`);
     console.log(`  - TechCorp Solutions Ltd: 1 account`);
     console.log(`  - Food Service Solutions: 1 account`);
-    console.log('\n👥 Merchant Authorisers:');
+    console.log("\n👥 Merchant Authorisers:");
     console.log(`  - Retail Store Nigeria Ltd: 3 authorisers (MD, FC, OM)`);
-    console.log('\n🏪 Outlets:');
+    console.log("\n🏪 Outlets:");
     console.log(`  - ${merchant1.businessName}: 1 outlet (TechCorp HQ)`);
     console.log(`  - ${merchant2.businessName}: 3 outlets (VI, Ikeja, Lekki)`);
     console.log(`  - ${merchant3.businessName}: 1 outlet (Main Branch)`);
-    console.log('\n💰 Loan Penalties:');
+    console.log("\n💰 Loan Penalties:");
     console.log(`  - 7 days late: 2.5% penalty (Active)`);
     console.log(`  - 14 days late: 5.0% penalty (Active)`);
     console.log(`  - 30 days late: 10.0% penalty (Active)`);
     console.log(`  - 60 days late: 15.0% penalty (Inactive)`);
-    console.log('\n🔄 Loan Debit Trials:');
+    console.log("\n🔄 Loan Debit Trials:");
     console.log(`  - 1 day after due: Debit trial (Active)`);
     console.log(`  - 3 days after due: Debit trial (Active)`);
     console.log(`  - 5 days after due: Debit trial (Active)`);
     console.log(`  - 10 days after due: Debit trial (Inactive)`);
-    console.log('\n🎯 Tiers:');
+    console.log("\n🎯 Tiers:");
     console.log(`  - Basic Tier: ₦0 - ₦10,000 (0% discount) - Active`);
     console.log(`  - Silver Tier: ₦10,001 - ₦50,000 (2.5% discount) - Active`);
     console.log(`  - Gold Tier: ₦50,001 - ₦100,000 (5% discount) - Active`);
     console.log(`  - Platinum Tier: ₦100,001 - ₦500,000 (7.5% discount) - Active`);
     console.log(`  - Diamond Tier: ₦500,001+ (10% discount) - Active`);
-    console.log('\n📊 Eligibility & Score:');
-    console.log(`  - ${buyer1.firstName} ${buyer1.lastName}: Score 85.5 (Approved) - ₦500,000 loan`);
-    console.log(`  - ${buyer2.firstName} ${buyer2.lastName}: Score 72.5 (Approved) - ₦300,000 loan`);
-    console.log(`  - ${buyer3.firstName} ${buyer3.lastName}: Score 45.0 (Declined) - Below threshold`);
-
+    console.log("\n📊 Eligibility & Score:");
+    console.log(
+      `  - ${buyer1.firstName} ${buyer1.lastName}: Score 85.5 (Approved) - ₦500,000 loan`
+    );
+    console.log(
+      `  - ${buyer2.firstName} ${buyer2.lastName}: Score 72.5 (Approved) - ₦300,000 loan`
+    );
+    console.log(
+      `  - ${buyer3.firstName} ${buyer3.lastName}: Score 45.0 (Declined) - Below threshold`
+    );
   } catch (error) {
-    console.error('❌ Error during seeding:', error);
+    console.error("❌ Error during seeding:", error);
     throw error;
   }
 }

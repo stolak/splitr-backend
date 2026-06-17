@@ -724,7 +724,7 @@ CREATE TABLE `persona_inquiry` (
     `inquiryId` VARCHAR(191) NOT NULL,
     `inquiryTemplateId` VARCHAR(191) NOT NULL,
     `buyerId` VARCHAR(191) NOT NULL,
-    `status` ENUM('Created', 'Completed', 'Failed') NOT NULL DEFAULT 'Created',
+    `status` ENUM('Created', 'Pending', 'Completed', 'Failed', 'Expired') NOT NULL DEFAULT 'Created',
     `response` JSON NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
