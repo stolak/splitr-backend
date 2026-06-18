@@ -12,7 +12,11 @@ import {
   DirectPayType,
   LoanInstallmentType,
 } from "@prisma/client";
-import { normalizeToMidnight, getDayBeforeNextCycle, getNextCycle } from "../utils/helper";
+import {
+  normalizeToMidnight,
+  getDayBeforeNextCycleByInstallmentType,
+  getNextCycleByInstallmentType,
+} from "../utils/helper";
 import { RevenueService } from "./revenueService";
 import { AccountDetailsService } from "./accountDetailsService";
 import { InvoiceMandateService } from "./invoiceMandateService";
@@ -269,23 +273,40 @@ export class LoanService {
       });
 
       // Create loan schedules
+      const installmentType = input.installmentType ?? LoanInstallmentType.Monthly;
       let expectedBalance = input.loanAmount;
-      let nextcycle = getNextCycle(new Date(loanStartDate).toISOString());
+      let nextcycle = getNextCycleByInstallmentType(
+        new Date(loanStartDate).toISOString(),
+        installmentType
+      );
       for (let i = 1; i <= input.loanTenure; i++) {
+        const cycleEnd =
+          installmentType === LoanInstallmentType.OneTime
+            ? (loanEndDate ?? nextcycle)
+            : getDayBeforeNextCycleByInstallmentType(
+                new Date(nextcycle).toISOString(),
+                installmentType
+              );
+
         this.createLoanSchedule({
           loanId: loan.id,
           start: nextcycle,
-          end: getDayBeforeNextCycle(new Date(nextcycle).toISOString()),
+          end: cycleEnd,
           expectedPayment: Number(input.monthlyRepayment),
           expectedBalance: expectedBalance,
           expectedClosingBalance:
             expectedBalance +
-            INTEREST_RATE * 0.01 * expectedBalance -
+            Number(loan.loanInterestRate) * 0.01 * expectedBalance -
             Number(input.monthlyRepayment),
         });
-        nextcycle = getNextCycle(new Date(nextcycle).toISOString());
+        nextcycle = getNextCycleByInstallmentType(
+          new Date(nextcycle).toISOString(),
+          installmentType
+        );
         expectedBalance =
-          expectedBalance + INTEREST_RATE * 0.01 * expectedBalance - Number(input.monthlyRepayment);
+          expectedBalance +
+          Number(loan.loanInterestRate) * 0.01 * expectedBalance -
+          Number(input.monthlyRepayment);
       }
       if (input.loanStatus === LoanStatus.Active) {
         await this.createLoanTransaction({
@@ -729,21 +750,23 @@ export class LoanService {
         },
       });
       // Create penalty schedules
-      const getAllLoanPenalties = await this.getAllLoanPenalties(LoanPenaltyStatus.Active);
-      if (getAllLoanPenalties.success && getAllLoanPenalties.data) {
-        for (let i = 0; i < getAllLoanPenalties.data.length; i++) {
-          const penalty = getAllLoanPenalties.data[i];
 
-          await this.createLoanPenaltySchedule({
-            loanScheduleId: schedule.id,
-            start: new Date(schedule.start.getTime() + penalty.dayAfter * 24 * 60 * 60 * 1000),
-            end: input.end,
-            percentage: Number(penalty.percentage),
-            isExecuted: false,
-          });
+      if (loan.loanInstallmentType === LoanInstallmentType.Monthly) {
+        const getAllLoanPenalties = await this.getAllLoanPenalties(LoanPenaltyStatus.Active);
+        if (getAllLoanPenalties.success && getAllLoanPenalties.data) {
+          for (let i = 0; i < getAllLoanPenalties.data.length; i++) {
+            const penalty = getAllLoanPenalties.data[i];
+
+            await this.createLoanPenaltySchedule({
+              loanScheduleId: schedule.id,
+              start: new Date(schedule.start.getTime() + penalty.dayAfter * 24 * 60 * 60 * 1000),
+              end: input.end,
+              percentage: Number(penalty.percentage),
+              isExecuted: false,
+            });
+          }
         }
       }
-
       // Create debit trial schedules
       const getAllLoanDebitTrials = await this.getAllLoanDebitTrials(LoanPenaltyStatus.Active);
       if (getAllLoanDebitTrials.success && getAllLoanDebitTrials.data) {

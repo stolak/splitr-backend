@@ -787,7 +787,7 @@ model Invoice {
   items                Item[]
   status               InvoiceStatus         @default(Pending)
   type                 InvoiceType           @default(Purchase)
-  installmentType      LoanInstallmentType?   @default(Monthly)
+  installmentType      LoanInstallmentType   @default(Monthly)
   loan                 Loan?                 @relation("InvoiceLoan")
   merchantTransactions MerchantTransaction[]
   mandates             InvoiceMandate[]

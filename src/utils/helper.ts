@@ -19,6 +19,82 @@ export function normalizeToEalerMoning(date: Date | string | number): Date {
 export function getTodayAtMidnight(): Date {
   return normalizeToMidnight(new Date());
 }
+
+function addDaysUTC(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function addMonthsUTC(date: Date, months: number): Date {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+  const next = new Date(Date.UTC(year, month + months, day));
+
+  const expectedMonth = (month + months) % 12;
+  if (next.getUTCMonth() !== expectedMonth) {
+    return new Date(Date.UTC(year, month + months + 1, 0));
+  }
+
+  return next;
+}
+
+export type InstallmentCycleType =
+  | "Weekly"
+  | "BiWeekly"
+  | "Monthly"
+  | "BiMonthly"
+  | "Quarterly"
+  | "BiQuarterly"
+  | "HalfYearly"
+  | "BiHalfYearly"
+  | "Yearly"
+  | "BiYearly"
+  | "OneTime";
+
+export function getNextCycleByInstallmentType(
+  dateStr: string,
+  installmentType: InstallmentCycleType = "Monthly"
+): Date {
+  const date = new Date(dateStr);
+
+  switch (installmentType) {
+    case "Weekly":
+      return addDaysUTC(date, 7);
+    case "BiWeekly":
+      return addDaysUTC(date, 14);
+    case "Monthly":
+      return getNextCycle(dateStr);
+    case "BiMonthly":
+      return addMonthsUTC(date, 2);
+    case "Quarterly":
+      return addMonthsUTC(date, 3);
+    case "BiQuarterly":
+    case "HalfYearly":
+      return addMonthsUTC(date, 6);
+    case "BiHalfYearly":
+    case "Yearly":
+      return addMonthsUTC(date, 12);
+    case "BiYearly":
+      return addMonthsUTC(date, 24);
+    case "OneTime":
+      return date;
+    default:
+      return getNextCycle(dateStr);
+  }
+}
+
+export function getDayBeforeNextCycleByInstallmentType(
+  dateStr: string,
+  installmentType: InstallmentCycleType = "Monthly"
+): Date {
+  if (installmentType === "OneTime") {
+    return new Date(dateStr);
+  }
+
+  const nextCycle = getNextCycleByInstallmentType(dateStr, installmentType);
+  return addDaysUTC(nextCycle, -1);
+}
+
 export function getNextCycle(dateStr: string): Date {
   const date = new Date(dateStr);
 

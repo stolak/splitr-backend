@@ -476,6 +476,98 @@ import { InvoiceStatus, InvoiceType, LoanReturnStatus } from '@prisma/client';
  *         description: Internal server error
  */
 
+/**
+ * @swagger
+ * /api/v1/invoices/{id}/approve-and-create-loan-splitr:
+ *   post:
+ *     summary: Approve invoice and create loan (Splitr flow)
+ *     description: |
+ *       Updates the invoice with buyer and installment details, marks it as paid,
+ *       and creates an active loan with repayment calculated from the installment type.
+ *       Unlike the standard approve flow, this endpoint accepts an explicit buyerId and loanAmount.
+ *     tags: [Invoice]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Invoice ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - buyerId
+ *               - installmentType
+ *               - loanTenure
+ *               - downPaymentAmount
+ *               - loanAmount
+ *             properties:
+ *               buyerId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Buyer ID
+ *               installmentType:
+ *                 type: string
+ *                 enum:
+ *                   - Weekly
+ *                   - BiWeekly
+ *                   - Monthly
+ *                   - BiMonthly
+ *                   - Quarterly
+ *                   - BiQuarterly
+ *                   - HalfYearly
+ *                   - BiHalfYearly
+ *                   - Yearly
+ *                   - BiYearly
+ *                   - OneTime
+ *                 example: Monthly
+ *               loanTenure:
+ *                 type: integer
+ *                 description: Number of installments
+ *                 example: 12
+ *               downPaymentAmount:
+ *                 type: number
+ *                 description: Down payment amount
+ *                 example: 100000
+ *               loanAmount:
+ *                 type: number
+ *                 description: Principal loan amount
+ *                 example: 500000
+ *     responses:
+ *       200:
+ *         description: Invoice approved and loan created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Invoice updated successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     invoice:
+ *                       type: object
+ *                     loan:
+ *                       type: object
+ *       400:
+ *         description: Validation failed or loan creation failed
+ *       404:
+ *         description: Invoice or buyer not found
+ *       500:
+ *         description: Internal server error
+ */
+
 export class InvoiceController {
   /**
    * Create a new invoice with items
@@ -908,6 +1000,47 @@ export class InvoiceController {
         success: false,
         message: error.message || 'Failed to approve invoice and create loan',
       });
+    }
+  }
+
+  /**
+   * Approve invoice and create loan (Splitr flow)
+   */
+  async approveAndCreateLoanSplitr(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { buyerId, installmentType, loanTenure, downPaymentAmount, loanAmount } = req.body;
+
+      if (!buyerId || !installmentType || !loanTenure || downPaymentAmount === undefined || !loanAmount) {
+        return res.status(400).json({
+          success: false,
+          message: 'buyerId, installmentType, loanTenure, downPaymentAmount, and loanAmount are required',
+        });
+      }
+
+      const result = await invoiceService.approveAndCreateLoanInvoiceSplitr(
+        id,
+        installmentType,
+        Number(loanTenure),
+        Number(downPaymentAmount),
+        Number(loanAmount),
+        buyerId,
+      );
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      const message = error.message || 'Failed to approve invoice and create loan';
+
+      if (message === 'Buyer not found' || message === 'Invoice not found') {
+        return res.status(404).json({ success: false, message });
+      }
+
+      console.error('Error approving invoice and creating loan (Splitr):', error);
+      return res.status(500).json({ success: false, message });
     }
   }
 

@@ -10,6 +10,7 @@ import {
   RevenueType,
   LoanReturnStatus,
   PaystackTransferStatus,
+  LoanInstallmentType,
 } from "@prisma/client";
 import { loanService } from "./loanService";
 import { LoanSettingService } from "./loanSettingService";
@@ -1929,151 +1930,82 @@ export class InvoiceService {
       throw new Error(error.message || "Failed to rollback refund status");
     }
   }
-  // async approveAndCreateLoanInvoiceSplitr(
-  //   id: string,
-  //   loanTenure: number,
-  //   downPaymentAmount: number,
-  //   buyerId: string,
-  //   installments: number = 0,
-  //   regenerateMandate: boolean = false
-  // ) {
-  //   const buyer = await prisma.buyer.findUnique({
-  //     where: { id: buyerId },
-  //   });
-  //   if (!buyer) {
-  //     throw new Error("Buyer not found");
-  //   }
-  //   const invoice = await prisma.invoice.findUnique({
-  //     where: { id: id },
-  //   });
-  //   if (!invoice) {
-  //     throw new Error("Invoice not found");
-  //   }
-  //   const eligibilityAndScore = await loanSettingService.liveEligibilityPurchase({
-  //     purchaseAmount: Number(invoice.amount),
-  //     downPaymentAmount: downPaymentAmount,
-  //     months: loanTenure,
-  //     buyerId: buyerId,
-  //   });
-  //   if (!eligibilityAndScore) {
-  //     throw new Error("Eligibility and score not found");
-  //   }
+  async approveAndCreateLoanInvoiceSplitr(
+    id: string,
+    installmentType: LoanInstallmentType,
+    loanTenure: number,
+    downPaymentAmount: number,
+    loanAmount: number,
+    buyerId: string
+  ) {
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: buyerId },
+    });
+    if (!buyer) {
+      throw new Error("Buyer not found");
+    }
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: id },
+    });
+    if (!invoice) {
+      throw new Error("Invoice not found");
+    }
 
-  //   const updateData: any = {
-  //     status: InvoiceStatus.Pending,
-  //     buyerId: buyerId,
-  //     customerName: `${buyer.firstName} ${buyer.lastName}`,
-  //     customerEmail: buyer.email,
-  //     customerPhoneNumber: buyer.phoneNumber,
-  //   };
+    const updateData = {
+      status: InvoiceStatus.Paid,
+      buyer: { connect: { id: buyerId } },
+      customerName: `${buyer.firstName ?? ""} ${buyer.lastName ?? ""}`.trim(),
+      customerEmail: buyer.email,
+      customerPhoneNumber: buyer.phoneNumber ?? invoice.customerPhoneNumber,
+      installmentType,
+    };
 
-  //   if (!("approved" in eligibilityAndScore) || !eligibilityAndScore.approved) {
-  //     return {
-  //       success: false,
-  //       message: "Eligibility and score not valid",
-  //       data: eligibilityAndScore,
-  //     };
-  //   }
+    const updatedInvoice = await prisma.invoice.update({
+      where: { id: id },
+      data: updateData,
+      include: {
+        items: true,
+      },
+    });
 
-  //   //Before creating the loan, check if mandate exists for the invoice and downpayment already paid
+    // create invoice mandate
+    //generate short alphanumeric referenceId (max 24 characters)
+    const referenceId = generateShortReferenceId();
+    const interest = installmentType === LoanInstallmentType.Monthly ? Number(INTERST_RATE) : 0;
+    const monthlyRate = interest * 0.01;
+    const factor = Math.pow(1 + monthlyRate, loanTenure);
+    const monthlyRepayment = (loan: number) =>
+      monthlyRate === 0 ? loan / loanTenure : (loan * monthlyRate * factor) / (factor - 1);
+    const loanResult = await loanService.createLoan({
+      buyerId: buyerId,
+      invoiceId: id,
+      loanAmount: loanAmount,
+      loanTenure: loanTenure,
+      loanStartDate: new Date(),
+      loanStatus: LoanStatus.Active,
+      loanType: LoanType.Personal,
+      loanInterestRate: interest,
+      loanPurpose: "Loan",
+      purchaseAmount: Number(invoice.amount),
+      downPaymentAmount: downPaymentAmount,
+      merchantId: invoice.merchantId ?? undefined,
+      referenceNumber: referenceId,
+      installmentType: installmentType,
+      monthlyRepayment: monthlyRepayment(loanAmount),
+    });
 
-  //   const updatedInvoice = await prisma.invoice.update({
-  //     where: { id: id },
-  //     data: updateData,
-  //     include: {
-  //       items: true,
-  //     },
-  //   });
+    if (!loanResult.success) {
+      throw new Error(loanResult.error || "Failed to create loan");
+    }
 
-  //   // create invoice mandate
-  //   //generate short alphanumeric referenceId (max 24 characters)
-  //   const referenceId = generateShortReferenceId();
-
-  //   // verify customer id is valid
-
-  //   const mandate = await invoiceMandateService.getMandatesByInvoiceId(id);
-  //   if (mandate?.length > 0) {
-  //     updateMandateUrl = mandate[0].updateMandateUrl || "";
-
-  //     if (mandate[0].status != "Active" || regenerateMandate == true) {
-  //       // cancel the mandate
-  //       await accountDetailsService.cancelMonoMandate(mandate[0].monoMandateId || "");
-  //       const createEmandate = await accountDetailsService.createVariableMandate({
-  //         customerId: accountDetails.data?.data?.customer?.id,
-  //         maxAmount: Math.ceil(Number(eligibilityAndScore.monthlyRepayment) * 100),
-  //         startDate: new Date().toISOString(),
-  //         endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
-  //         reference: referenceId,
-  //         description: `Repayment for ${updatedInvoice.customerName}`,
-  //         name: updatedInvoice.customerName,
-  //         email: updatedInvoice.customerEmail,
-  //         phone: updatedInvoice.customerPhoneNumber,
-  //       });
-
-  //       // update the mandate
-  //       await invoiceMandateService.updateInvoiceMandate(mandate[0].id, {
-  //         monoMandateId: createEmandate.data?.data?.mandate_id || "",
-  //         status: MandateStatus.Pending,
-  //         updateMandateUrl: createEmandate.data?.data?.mono_url,
-  //         monoAccountId: accountDetails.data?.data?.account?.id,
-  //         tenure: loanTenure,
-  //         downPayment: eligibilityAndScore.requiredDownPayment,
-  //         referenceId: referenceId,
-  //         amount: eligibilityAndScore.requiredDownPayment,
-  //       });
-  //       updateMandateUrl = createEmandate.data?.data?.mono_url || "";
-  //     }
-  //     if (mandate[0].status == "Active" && regenerateMandate == false) {
-  //       // chech if direct pay exists for the mandate
-  //       await directPayService.regenerateDirectPay(mandate[0].id);
-
-  //       // initiate direct pay
-  //       const directPay = await this.initiateUpfrontPayment(id);
-  //       if (directPay.success && directPay.data?.directPay) {
-  //         updateMandateUrl =
-  //           (directPay.data.directPay as { monoUrl?: string | null }).monoUrl || "";
-  //       }
-  //     }
-  //   } else {
-  //     const createEmandate = await accountDetailsService.createVariableMandate({
-  //       customerId: accountDetails.data?.data?.customer?.id,
-  //       maxAmount: Math.ceil(Number(eligibilityAndScore.monthlyRepayment) * 100),
-  //       startDate: new Date().toISOString(),
-  //       endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
-  //       reference: referenceId,
-  //       description: `Repayment for ${updatedInvoice.customerName}`,
-  //       name: updatedInvoice.customerName,
-  //       email: updatedInvoice.customerEmail,
-  //       phone: updatedInvoice.customerPhoneNumber,
-  //     });
-
-  //     await invoiceMandateService.createInvoiceMandate({
-  //       invoiceId: id,
-  //       monoMandateId: createEmandate.data?.data?.mandate_id || "",
-  //       monoAccountId: accountDetails.data?.data?.account?.id || "",
-  //       monoCustomerId: accountDetails.data?.data?.customer?.id || "",
-  //       buyerId: buyerId,
-  //       referenceId: referenceId,
-  //       amount: Number(eligibilityAndScore.monthlyRepayment.toFixed(2)),
-  //       updateMandateUrl: createEmandate.data?.data?.mono_url,
-  //       tenure: loanTenure,
-  //       downPayment: eligibilityAndScore.requiredDownPayment,
-  //       status: MandateStatus.Pending,
-  //     });
-  //     updateMandateUrl = createEmandate.data?.data?.mono_url || "";
-  //   }
-  //   // initiate mandate
-
-  //   // perform merchant payment
-
-  //   return {
-  //     success: true,
-  //     message: "Invoice updated successfully",
-  //     data: {
-  //       invoice: updatedInvoice,
-  //       updateMandateUrl: updateMandateUrl,
-  //     },
-  //   };
-  // }
+    return {
+      success: true,
+      message: "Invoice updated successfully",
+      data: {
+        invoice: updatedInvoice,
+        loan: loanResult.data,
+      },
+    };
+  }
 }
 export const invoiceService = new InvoiceService();
