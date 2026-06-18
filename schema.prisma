@@ -71,6 +71,20 @@ enum LoanType {
   Corporate
 }
 
+enum LoanInstallmentType {
+  Weekly
+  BiWeekly
+  Monthly
+  BiMonthly
+  Quarterly
+  BiQuarterly
+  HalfYearly
+  BiHalfYearly
+  Yearly
+  BiYearly
+  OneTime
+}
+
 enum LoanPenaltyStatus {
   Active
   Inactive
@@ -483,6 +497,7 @@ model Loan {
   loanEndDate          DateTime?
   loanStatus           LoanStatus
   loanType             LoanType
+  loanInstallmentType  LoanInstallmentType @default(Monthly)
 
   returnStatus         LoanReturnStatus? @default(Active)
   returnAmount         Decimal?
