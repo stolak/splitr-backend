@@ -71,6 +71,19 @@ enum LoanType {
   Corporate
 }
 
+enum LoanInstallmentType {
+  Weekly
+  BiWeekly
+  Monthly
+  BiMonthly
+  Quarterly
+  BiQuarterly
+  HalfYearly
+  BiHalfYearly
+  Yearly
+  BiYearly
+  OneTime
+}
 enum LoanPenaltyStatus {
   Active
   Inactive
@@ -484,6 +497,7 @@ model Loan {
   loanEndDate          DateTime?
   loanStatus           LoanStatus
   loanType             LoanType
+  loanInstallmentType  LoanInstallmentType @default(Monthly)
 
   returnStatus         LoanReturnStatus? @default(Active)
   returnAmount         Decimal?
@@ -773,6 +787,7 @@ model Invoice {
   items                Item[]
   status               InvoiceStatus         @default(Pending)
   type                 InvoiceType           @default(Purchase)
+  installmentType      LoanInstallmentType   @default(Monthly)
   loan                 Loan?                 @relation("InvoiceLoan")
   merchantTransactions MerchantTransaction[]
   mandates             InvoiceMandate[]
