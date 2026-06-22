@@ -1953,7 +1953,7 @@ export class InvoiceService {
 
     const updateData = {
       status: InvoiceStatus.Paid,
-      buyer: { connect: { id: buyerId } },
+      buyerId,
       customerName: `${buyer.firstName ?? ""} ${buyer.lastName ?? ""}`.trim(),
       customerEmail: buyer.email,
       customerPhoneNumber: buyer.phoneNumber ?? invoice.customerPhoneNumber,
