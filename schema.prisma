@@ -1060,3 +1060,26 @@ model PersonaInquiry {
 
   @@map("persona_inquiry")
 }
+
+enum StripeMandateStatus {
+  Active
+  Inactive
+  Revoked
+}
+
+model StripeMandate {
+  id              String              @id @default(uuid())
+  customerId      String
+  paymentMethodId String?
+  setupIntentId   String?
+  name            String?
+  email           String?
+  signed          Boolean             @default(false)
+  status          StripeMandateStatus @default(Active)
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([customerId])
+  @@map("stripe_mandate")
+}

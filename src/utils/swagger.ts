@@ -36,6 +36,7 @@ const options: swaggerJSDoc.Options = {
       { name: 'Merchant', description: 'Merchant management' },
       { name: 'Mono', description: 'Mono integration' },
       { name: 'Persona', description: 'Persona inquiry endpoints' },
+      { name: 'Stripe', description: 'Stripe payment and mandate endpoints' },
       { name: 'Scoring', description: 'Scoring calculation endpoints' },
       { name: 'Upload', description: 'File upload management' },
     ],
