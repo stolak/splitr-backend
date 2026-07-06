@@ -238,11 +238,11 @@ export class InvoiceService {
         emailService.sendTemplateEmail({
           to: invoice.customerEmail,
           templateName: "invoiceCreated",
-          subject: `New Invoice from ${invoice.merchant.businessName} - ${invoice.splitrId}`,
+          subject: `New Invoice from ${invoice.merchant?.businessName ?? ""} - ${invoice.splitrId}`,
           data: {
             customer_name: invoice.customerName,
-            merchant_name: invoice.merchant.businessName,
-            merchant_email: invoice.merchant.businessEmail,
+            merchant_name: invoice.merchant?.businessName ?? "",
+            merchant_email: invoice.merchant?.businessEmail ?? "",
             invoice_id: invoice.splitrId,
             due_date: formattedDueDate,
             items: formattedItems,
@@ -722,7 +722,7 @@ export class InvoiceService {
       loanPurpose: "Loan",
       purchaseAmount: Number(invoice.amount),
       downPaymentAmount: eligibilityAndScore.requiredDownPayment,
-      merchantId: invoice.merchantId,
+      merchantId: invoice.merchantId ?? "",
       referenceNumber: invoice.splitrId,
       adminCharge: eligibilityAndScore.adminCharge,
       insurance: eligibilityAndScore.insurance,
@@ -738,7 +738,7 @@ export class InvoiceService {
     }
     // perform merchant payment
     await merchantTransactionService.createMerchantTransaction({
-      merchantId: invoice.merchantId,
+      merchantId: invoice.merchantId ?? "",
       invoiceRef: invoice.id,
       credit: Number(invoice.amount),
       debit: 0,
@@ -869,7 +869,7 @@ export class InvoiceService {
 
       if (willReturn) {
         merchantTransactionService.createMerchantTransaction({
-          merchantId: invoice.merchantId,
+          merchantId: invoice.merchantId ?? "",
           invoiceRef: invoice.id,
           credit: 0,
           debit: Number(invoice.amount),
@@ -1856,7 +1856,7 @@ export class InvoiceService {
       const amount = Number(Number(refund.data?.calculation?.refundDue || 0).toFixed(2));
       const paystackTransfer = await paystackTransferService.createPaystackTransfer({
         referenceId: referenceId,
-        merchantId: invoice.merchantId,
+        merchantId: invoice.merchantId ?? "",
         buyerId: buyerId,
         amount,
         recipientCode: transferRecipient.data?.recipientCode || "",

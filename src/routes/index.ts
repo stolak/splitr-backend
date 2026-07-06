@@ -41,6 +41,7 @@ import bankStatementAnalysisRoutes from "./bankStatementAnalysis";
 import mandateDebitRoutes from "./mandateDebit";
 import personaInquiryRoutes from "./personaInquiry";
 import stripeRoutes from "./stripe";
+import plaidRoutes from "./plaid";
 import { Router } from "express";
 
 const router = Router();
@@ -87,6 +88,7 @@ router.use("/bank-statement-analysis", bankStatementAnalysisRoutes);
 router.use("/mandate-debits", mandateDebitRoutes);
 router.use("/persona", personaInquiryRoutes);
 router.use("/stripe", stripeRoutes);
+router.use("/plaid", plaidRoutes);
 
 /**
  * @swagger
