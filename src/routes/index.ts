@@ -42,6 +42,7 @@ import mandateDebitRoutes from "./mandateDebit";
 import personaInquiryRoutes from "./personaInquiry";
 import stripeRoutes from "./stripe";
 import plaidRoutes from "./plaid";
+import plaidAccountRoutes from "./plaidAccount";
 import { Router } from "express";
 
 const router = Router();
@@ -89,6 +90,7 @@ router.use("/mandate-debits", mandateDebitRoutes);
 router.use("/persona", personaInquiryRoutes);
 router.use("/stripe", stripeRoutes);
 router.use("/plaid", plaidRoutes);
+router.use("/plaid-accounts", plaidAccountRoutes);
 
 /**
  * @swagger

@@ -261,6 +261,7 @@ model Buyer {
   paystackTransfers   PaystackTransfer[]
  PaystackMerchantTransferRecipient PaystackMerchantTransferRecipient[]
   personaInquiries    PersonaInquiry[]
+  plaidAccounts       PlaidAccount[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1082,4 +1083,23 @@ model StripeMandate {
 
   @@index([customerId])
   @@map("stripe_mandate")
+}
+
+model PlaidAccount {
+  id String @id @default(uuid())
+  userId String @unique
+  buyerId String?
+  buyer Buyer? @relation(fields: [buyerId], references: [id])
+  linkToken String?
+  expiration DateTime?
+  publicToken String?
+  accessToken String?
+  itemId String?
+  requestId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([buyerId])
+  @@map("plaid_account")
 }

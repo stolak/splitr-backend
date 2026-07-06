@@ -14,6 +14,9 @@ import { plaidService } from "../services/plaidService";
  *         expiration:
  *           type: string
  *           format: date-time
+ *         plaidAccountId:
+ *           type: string
+ *           format: uuid
  *     PlaidExchangePublicTokenInput:
  *       type: object
  *       required:
@@ -29,6 +32,21 @@ import { plaidService } from "../services/plaidService";
  *           type: string
  *         requestId:
  *           type: string
+ *         plaidAccountId:
+ *           type: string
+ *           format: uuid
+ *     PlaidBankIncomeInput:
+ *       type: object
+ *       required:
+ *         - userToken
+ *       properties:
+ *         userToken:
+ *           type: string
+ *           description: Plaid user token for the linked user
+ *         count:
+ *           type: integer
+ *           default: 1
+ *           description: Number of bank income reports to fetch
  */
 
 /**
@@ -109,14 +127,64 @@ export async function exchangePublicToken(req: Request, res: Response) {
       return res.status(400).json({ message: "publicToken is required" });
     }
 
-    const result = await plaidService.exchangePublicToken(publicToken);
+    const result = await plaidService.exchangePublicToken(userId, publicToken);
 
     return res.status(200).json({
       itemId: result.itemId,
       requestId: result.requestId,
+      plaidAccountId: result.plaidAccountId,
     });
   } catch (error: any) {
     const message = error?.message || "Failed to exchange public token";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/plaid/bank-income:
+ *   post:
+ *     summary: Get Plaid bank income
+ *     description: Fetches bank income data for a user via Plaid's credit/bank_income/get endpoint.
+ *     tags: [Plaid]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PlaidBankIncomeInput'
+ *     responses:
+ *       200:
+ *         description: Bank income retrieved
+ *       401:
+ *         description: Unauthorized
+ *       400:
+ *         description: Validation or Plaid error
+ */
+export async function getBankIncome(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const { userToken, count } = req.body || {};
+
+    if (!userToken) {
+      return res.status(400).json({ message: "userToken is required" });
+    }
+
+    const result = await plaidService.getBankIncome({
+      userToken,
+      count: count !== undefined ? Number(count) : undefined,
+    });
+
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to fetch bank income";
     return res.status(400).json({ message });
   }
 }
