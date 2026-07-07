@@ -262,6 +262,7 @@ model Buyer {
  PaystackMerchantTransferRecipient PaystackMerchantTransferRecipient[]
   personaInquiries    PersonaInquiry[]
   plaidAccounts       PlaidAccount[]
+  stripeMandates      StripeMandate[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -517,6 +518,7 @@ model Loan {
   loanTransactions     LoanTransaction[]
   mandates             InvoiceMandate[]  @relation("LoanMandate")
   mandateDebits        MandateDebit[]
+  stripeMandates       StripeMandate[]
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   revenues             Revenue[]
@@ -794,6 +796,7 @@ model Invoice {
   mandates             InvoiceMandate[]
   mandateDebits        MandateDebit[]
   directPays           DirectPay[]
+  stripeMandates       StripeMandate[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   revenues             Revenue[]
@@ -1068,13 +1071,25 @@ enum StripeMandateStatus {
   Revoked
 }
 
+enum PaymentMethodType {
+  Card
+  BankAccount
+}
+
 model StripeMandate {
   id              String              @id @default(uuid())
   customerId      String
   paymentMethodId String?
+  paymentMethodType String?
   setupIntentId   String?
   name            String?
   email           String?
+  invoiceId       String?
+  invoice         Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  loanId          String?
+  loan            Loan?               @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  buyerId         String?
+  buyer           Buyer?              @relation(fields: [buyerId], references: [id], onDelete: SetNull)
   signed          Boolean             @default(false)
   status          StripeMandateStatus @default(Active)
   metadata        Json?

@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import prisma from "../utils/prisma";
 import { stripeService } from "../services/stripeService";
 
 /**
@@ -45,6 +46,36 @@ import { stripeService } from "../services/stripeService";
  *         clientSecret:
  *           type: string
  *           description: Pass to Stripe.js on the client to confirm the setup intent
+ *     StripeInvoiceSetupIntentInput:
+ *       type: object
+ *       required:
+ *         - invoiceId
+ *       properties:
+ *         invoiceId:
+ *           type: string
+ *           format: uuid
+ *         buyerId:
+ *           type: string
+ *           format: uuid
+ *           description: Optional; defaults to the authenticated buyer
+ *     StripeInvoiceSetupIntentResponse:
+ *       type: object
+ *       properties:
+ *         customerId:
+ *           type: string
+ *         setupIntentId:
+ *           type: string
+ *         clientSecret:
+ *           type: string
+ *         mandateId:
+ *           type: string
+ *           format: uuid
+ *         invoiceId:
+ *           type: string
+ *           format: uuid
+ *         buyerId:
+ *           type: string
+ *           format: uuid
  *     StripeCompleteMandateInput:
  *       type: object
  *       required:
@@ -193,6 +224,41 @@ export async function createCustomer(req: Request, res: Response) {
 
 /**
  * @openapi
+ * /api/v1/stripe/customers/{customerId}:
+ *   get:
+ *     summary: Get a Stripe customer by ID
+ *     tags: [Stripe]
+ *     parameters:
+ *       - in: path
+ *         name: customerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: cus_abc123
+ *     responses:
+ *       200:
+ *         description: Customer retrieved
+ *       404:
+ *         description: Customer not found
+ *       400:
+ *         description: Validation or Stripe error
+ */
+export async function getCustomer(req: Request, res: Response) {
+  try {
+    const { customerId } = req.params;
+    const result = await stripeService.getCustomer(customerId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to retrieve customer";
+    if (error?.code === "resource_missing" || error?.statusCode === 404) {
+      return res.status(404).json({ message });
+    }
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
  * /api/v1/stripe/setup-intent:
  *   post:
  *     summary: Create a Stripe setup intent
@@ -223,6 +289,83 @@ export async function createSetupIntent(req: Request, res: Response) {
     return res.status(201).json(result);
   } catch (error: any) {
     const message = error?.message || "Failed to create setup intent";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/invoices/setup-intent:
+ *   post:
+ *     summary: Create a Stripe setup intent for an invoice
+ *     description: Links the buyer to the invoice, creates a Stripe setup intent, and upserts a local Stripe mandate record.
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StripeInvoiceSetupIntentInput'
+ *     responses:
+ *       201:
+ *         description: Setup intent created for invoice
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StripeInvoiceSetupIntentResponse'
+ *       400:
+ *         description: Validation or Stripe error
+ *       403:
+ *         description: Only buyers can perform this action
+ *       401:
+ *         description: Unauthorized
+ */
+export async function createInvoiceSetupIntent(req: Request, res: Response) {
+  try {
+    const user = req.user;
+
+    if (!user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    console.log("user", user);
+    if (user.userType.toUpperCase() !== "BUYER") {
+      return res.status(403).json({ message: "Only buyers can create invoice setup intents" });
+    }
+
+    const { invoiceId, buyerId: requestedBuyerId } = req.body || {};
+
+    if (!invoiceId) {
+      return res.status(400).json({ message: "invoiceId is required" });
+    }
+
+    let buyerId = (user as { buyerId?: string }).buyerId;
+
+    if (!buyerId) {
+      const buyer = await prisma.buyer.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+      buyerId = buyer?.id;
+    }
+
+    if (!buyerId) {
+      return res.status(403).json({ message: "Buyer profile not found for authenticated user" });
+    }
+
+    if (requestedBuyerId && requestedBuyerId !== buyerId) {
+      return res.status(403).json({ message: "buyerId does not match authenticated buyer" });
+    }
+
+    const result = await stripeService.createInvoiceSetupIntent({
+      invoiceId,
+      buyerId,
+    });
+
+    return res.status(201).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to create invoice setup intent";
     return res.status(400).json({ message });
   }
 }

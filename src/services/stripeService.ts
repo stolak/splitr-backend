@@ -28,6 +28,11 @@ export interface CreateSetupIntentInput {
   customerId?: string;
 }
 
+export interface CreateInvoiceSetupIntentInput {
+  invoiceId: string;
+  buyerId: string;
+}
+
 export interface CompleteMandateInput {
   customerId: string;
   paymentMethodId?: string;
@@ -63,6 +68,15 @@ export class StripeService {
     return { customerId: customer.id, customer };
   }
 
+  async getCustomer(customerId: string) {
+    if (!customerId) {
+      throw new Error("customerId is required");
+    }
+
+    const customer = await getStripe().customers.retrieve(customerId);
+
+    return { customer };
+  }
   /**
    * Create a one-off payment intent with automatic payment methods enabled
    */
@@ -99,17 +113,117 @@ export class StripeService {
       });
       customerId = customer.id;
     }
-
+    const paymentMethodType = "card"; //"acss_debit";
     const setupIntent = await getStripe().setupIntents.create({
       customer: customerId,
       usage: "off_session",
-      payment_method_types: ["card"],
+      // payment_method_types: ["card"],
+      payment_method_types: [paymentMethodType],
     });
 
     return {
       customerId,
       setupIntentId: setupIntent.id,
       clientSecret: setupIntent.client_secret,
+      paymentMethodType,
+      paymentMethodId: setupIntent.payment_method,
+    };
+  }
+
+  /**
+   * Attach a buyer to an invoice, create a Stripe setup intent, and upsert a local mandate record.
+   */
+  async createInvoiceSetupIntent(input: CreateInvoiceSetupIntentInput) {
+    if (!input.invoiceId) {
+      throw new Error("invoiceId is required");
+    }
+
+    if (!input.buyerId) {
+      throw new Error("buyerId is required");
+    }
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: input.invoiceId },
+      include: {
+        loan: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new Error("Invoice not found");
+    }
+
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: input.buyerId },
+    });
+
+    if (!buyer) {
+      throw new Error("Buyer not found");
+    }
+
+    const customerName =
+      [buyer.firstName, buyer.lastName].filter(Boolean).join(" ").trim() || buyer.email;
+    const customerEmail = buyer.email;
+    const customerPhoneNumber = buyer.phoneNumber ?? invoice.customerPhoneNumber;
+
+    const updatedInvoice = await prisma.invoice.update({
+      where: { id: input.invoiceId },
+      data: {
+        buyerId: buyer.id,
+        customerName,
+        customerEmail,
+        customerPhoneNumber,
+      },
+    });
+
+    const existingMandate = await prisma.stripeMandate.findFirst({
+      where: {
+        invoiceId: input.invoiceId,
+        buyerId: input.buyerId,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const setupIntentResult = await this.createSetupIntent({
+      name: customerName,
+      email: customerEmail,
+      customerId: existingMandate?.customerId,
+    });
+
+    const mandateData = {
+      customerId: setupIntentResult.customerId,
+      setupIntentId: setupIntentResult.setupIntentId,
+      name: customerName,
+      email: customerEmail,
+      invoiceId: input.invoiceId,
+      buyerId: input.buyerId,
+      loanId: invoice.loan?.id ?? null,
+      signed: false,
+      status: StripeMandateStatus.Active,
+      // paymentMethodId: setupIntentResult.paymentMethodId,
+      paymentMethodType: setupIntentResult.paymentMethodType,
+    };
+
+    const mandate = existingMandate
+      ? await prisma.stripeMandate.update({
+          where: { id: existingMandate.id },
+          data: mandateData,
+        })
+      : await prisma.stripeMandate.create({
+          data: mandateData,
+        });
+
+    return {
+      customerId: setupIntentResult.customerId,
+      setupIntentId: setupIntentResult.setupIntentId,
+      clientSecret: setupIntentResult.clientSecret,
+      mandateId: mandate.id,
+      invoiceId: updatedInvoice.id,
+      buyerId: buyer.id,
+      paymentMethodId: setupIntentResult.paymentMethodId,
+      paymentMethodType: setupIntentResult.paymentMethodType,
     };
   }
 
