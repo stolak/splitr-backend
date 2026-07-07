@@ -33,3 +33,22 @@ export function getPlaidClient(): PlaidApi {
 
   return plaidClient;
 }
+
+export function getPlaidErrorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "response" in error) {
+    const data = (error as { response?: { data?: { error_message?: string; error_code?: string } } })
+      .response?.data;
+
+    if (data?.error_message) {
+      return data.error_code
+        ? `${data.error_code}: ${data.error_message}`
+        : data.error_message;
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Plaid request failed";
+}

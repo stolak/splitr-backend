@@ -37,12 +37,7 @@ import { plaidService } from "../services/plaidService";
  *           format: uuid
  *     PlaidBankIncomeInput:
  *       type: object
- *       required:
- *         - userToken
  *       properties:
- *         userToken:
- *           type: string
- *           description: Plaid user token for the linked user
  *         count:
  *           type: integer
  *           default: 1
@@ -145,7 +140,7 @@ export async function exchangePublicToken(req: Request, res: Response) {
  * /api/v1/plaid/bank-income:
  *   post:
  *     summary: Get Plaid bank income
- *     description: Fetches bank income data for a user via Plaid's credit/bank_income/get endpoint.
+ *     description: Fetches bank income for the authenticated user using the Plaid user created during link token setup.
  *     tags: [Plaid]
  *     security:
  *       - bearerAuth: []
@@ -171,16 +166,12 @@ export async function getBankIncome(req: Request, res: Response) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { userToken, count } = req.body || {};
+    const { count } = req.body || {};
 
-    if (!userToken) {
-      return res.status(400).json({ message: "userToken is required" });
-    }
-
-    const result = await plaidService.getBankIncome({
-      userToken,
-      count: count !== undefined ? Number(count) : undefined,
-    });
+    const result = await plaidService.getBankIncomeRest(
+      userId,
+      count !== undefined ? Number(count) : 1
+    );
 
     return res.status(200).json(result);
   } catch (error: any) {

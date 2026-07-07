@@ -1094,6 +1094,8 @@ model PlaidAccount {
   expiration DateTime?
   publicToken String?
   accessToken String?
+  plaidUserId String?
+  userToken String?
   itemId String?
   requestId String?
   createdAt DateTime @default(now())
