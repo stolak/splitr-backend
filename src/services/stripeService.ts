@@ -113,12 +113,21 @@ export class StripeService {
       });
       customerId = customer.id;
     }
-    const paymentMethodType = "card"; //"acss_debit";
+    const paymentMethodType = "acss_debit"; //"acss_debit";//"card"
     const setupIntent = await getStripe().setupIntents.create({
       customer: customerId,
       usage: "off_session",
       // payment_method_types: ["card"],
       payment_method_types: [paymentMethodType],
+      payment_method_options: {
+        acss_debit: {
+          currency: "cad",
+          mandate_options: {
+            payment_schedule: "sporadic",
+            transaction_type: "personal",
+          },
+        },
+      },
     });
 
     return {

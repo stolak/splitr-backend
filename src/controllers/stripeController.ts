@@ -329,7 +329,7 @@ export async function createInvoiceSetupIntent(req: Request, res: Response) {
     if (!user?.id) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    console.log("user", user);
+
     if (user.userType.toUpperCase() !== "BUYER") {
       return res.status(403).json({ message: "Only buyers can create invoice setup intents" });
     }
