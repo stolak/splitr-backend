@@ -9,6 +9,7 @@ import {
   createMerchantConnectOnboarding,
   getConnectAccount,
   listConnectAccounts,
+  syncMerchantConnectAccount,
   getCustomer,
   createInvoiceSetupIntent,
   createPaymentIntent,
@@ -33,6 +34,7 @@ router.post("/mandates/charge", chargeMandate);
 router.post("/connect/accounts", authenticateJWT, createConnectAccount);
 router.get("/connect/accounts", authenticateJWT, listConnectAccounts);
 router.get("/connect/accounts/:accountId", authenticateJWT, getConnectAccount);
+router.post("/connect/sync-merchant", authenticateJWT, syncMerchantConnectAccount);
 router.post("/connect/account-links", authenticateJWT, createConnectAccountLink);
 router.post("/connect/onboarding", authenticateJWT, createMerchantConnectOnboarding);
 

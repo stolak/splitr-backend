@@ -1,12 +1,12 @@
 import Stripe from "stripe";
-import { StripeMandateStatus } from "@prisma/client";
+import { DocumentStatus, MerchantStatus, Prisma, StripeMandateStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_DEFAULT_CURRENCY = process.env.STRIPE_DEFAULT_CURRENCY || "usd";
 const STRIPE_CONNECT_COUNTRY = process.env.STRIPE_CONNECT_COUNTRY || "CA";
-const STRIPE_CONNECT_REFRESH_URL = process.env.STRIPE_CONNECT_REFRESH_URL;
-const STRIPE_CONNECT_RETURN_URL = process.env.STRIPE_CONNECT_RETURN_URL;
+const STRIPE_CONNECT_REFRESH_URL = process.env.FRONTEND_URL + "/merchant/onboarding";
+const STRIPE_CONNECT_RETURN_URL = process.env.FRONTEND_URL + "/merchant/onboarding";
 
 let stripeClient: Stripe | null = null;
 
@@ -80,6 +80,11 @@ export interface CreateMerchantConnectOnboardingInput {
 export interface ListConnectAccountsInput {
   limit?: number;
   startingAfter?: string;
+}
+
+export interface SyncMerchantConnectAccountInput {
+  merchantId: string;
+  accountId: string;
 }
 
 export class StripeService {
@@ -190,10 +195,18 @@ export class StripeService {
       country: input.country,
     });
 
+    const merchantId = input.merchantId;
+    const stripeAccount = accountResult.accountId;
+
+    const params = new URLSearchParams({
+      merchantId,
+      stripeAccount,
+    });
+
     const linkResult = await this.createConnectAccountLink({
       accountId: accountResult.accountId,
-      refreshUrl: input.refreshUrl,
-      returnUrl: input.returnUrl,
+      refreshUrl: input.refreshUrl ?? STRIPE_CONNECT_REFRESH_URL + "?" + params.toString(),
+      returnUrl: input.returnUrl ?? STRIPE_CONNECT_RETURN_URL + "?" + params.toString(),
     });
 
     return {
@@ -238,6 +251,105 @@ export class StripeService {
     return {
       accountId: account.id,
       account,
+    };
+  }
+
+  /**
+   * Retrieve a Stripe Connect account and sync relevant details onto the merchant record.
+   * details_submitted === true is treated as verified for now.
+   */
+  async syncMerchantConnectAccount(input: SyncMerchantConnectAccountInput) {
+    if (!input.merchantId) {
+      throw new Error("merchantId is required");
+    }
+    if (!input.accountId) {
+      throw new Error("accountId is required");
+    }
+
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: input.merchantId },
+    });
+
+    if (!merchant) {
+      throw new Error("Merchant not found");
+    }
+
+    if (merchant.stripeConnectAccountId && merchant.stripeConnectAccountId !== input.accountId) {
+      throw new Error("accountId does not match merchant Stripe Connect account");
+    }
+
+    const account = await getStripe().accounts.retrieve(input.accountId);
+
+    if (account.deleted) {
+      throw new Error("Stripe Connect account has been deleted");
+    }
+
+    const company = account.company;
+    const companyAddress = company?.address;
+    const businessProfile = account.business_profile;
+    const externalAccounts = account.external_accounts?.data ?? [];
+    const bankAccount = externalAccounts.find(
+      (item): item is Stripe.BankAccount => item.object === "bank_account"
+    );
+
+    const registrationAddress = companyAddress
+      ? [
+          companyAddress.line1,
+          companyAddress.line2,
+          companyAddress.city,
+          companyAddress.state,
+          companyAddress.postal_code,
+          companyAddress.country,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : undefined;
+
+    const isVerified = account.details_submitted === true;
+    const verifiedStatus = isVerified ? MerchantStatus.Approved : MerchantStatus.Pending;
+    const verifiedDocStatus = isVerified ? DocumentStatus.Approved : DocumentStatus.Pending;
+
+    const updateData: Prisma.MerchantUpdateInput = {
+      stripeConnectAccountId: account.id,
+      ...(company?.name ? { businessName: company.name } : {}),
+      ...(account.email ? { businessEmail: account.email } : {}),
+      ...(company?.phone || businessProfile?.support_phone
+        ? { businessPhone: company?.phone || businessProfile?.support_phone || undefined }
+        : {}),
+      ...(businessProfile?.url ? { officeWebsite: businessProfile.url } : {}),
+      ...(registrationAddress ? { registrationAddress } : {}),
+      ...(businessProfile?.name ? { authorizedPerson: businessProfile.name } : {}),
+      ...(company?.phone || businessProfile?.support_phone
+        ? {
+            authorizedPhoneNo: company?.phone || businessProfile?.support_phone || undefined,
+          }
+        : {}),
+      ...(bankAccount?.last4 ? { bankAccount: bankAccount.last4 } : {}),
+      ...(bankAccount?.bank_name ? { bankName: bankAccount.bank_name } : {}),
+      ...(bankAccount?.routing_number ? { bankCode: bankAccount.routing_number } : {}),
+      ...(bankAccount?.account_holder_name
+        ? { accountName: bankAccount.account_holder_name }
+        : company?.name
+          ? { accountName: company.name }
+          : {}),
+      verificationStatus: verifiedStatus,
+      applicationStatus: verifiedStatus,
+      documentStatus: verifiedDocStatus,
+      isBusinessInfoVerified: verifiedDocStatus,
+      isBankAccountVerified: bankAccount ? verifiedDocStatus : DocumentStatus.Pending,
+      isAuthorizedPersonVerified: verifiedDocStatus,
+    };
+
+    const updatedMerchant = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: updateData,
+    });
+
+    return {
+      accountId: account.id,
+      account,
+      merchant: updatedMerchant,
+      verified: isVerified,
     };
   }
 

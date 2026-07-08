@@ -953,3 +953,79 @@ export async function getConnectAccount(req: Request, res: Response) {
     return res.status(400).json({ message });
   }
 }
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/sync-merchant:
+ *   post:
+ *     summary: Retrieve Stripe Connect account and sync merchant profile
+ *     description: Fetches account details from Stripe and updates the merchant record. details_submitted=true is treated as verified.
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - merchantId
+ *               - accountId
+ *             properties:
+ *               merchantId:
+ *                 type: string
+ *                 format: uuid
+ *               accountId:
+ *                 type: string
+ *                 example: acct_1Tqr1K213KwDOd5a
+ *     responses:
+ *       200:
+ *         description: Account retrieved and merchant updated
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Merchant or account not found
+ */
+export async function syncMerchantConnectAccount(req: Request, res: Response) {
+  try {
+    const { merchantId: requestedMerchantId, accountId } = req.body || {};
+
+    if (!accountId) {
+      return res.status(400).json({ message: "accountId is required" });
+    }
+
+    const resolved = resolveMerchantId(req, requestedMerchantId);
+
+    if ("error" in resolved && resolved.error) {
+      return res.status(resolved.error.status).json({ message: resolved.error.message });
+    }
+
+    if (!resolved.merchantId) {
+      return res.status(400).json({ message: "merchantId is required" });
+    }
+
+    const result = await stripeService.syncMerchantConnectAccount({
+      merchantId: resolved.merchantId,
+      accountId,
+    });
+
+    return res.status(200).json({
+      accountId: result.accountId,
+      account: result.account,
+      merchant: result.merchant,
+      verified: result.verified,
+    });
+  } catch (error: any) {
+    const message = error?.message || "Failed to sync Stripe Connect account";
+    if (message === "Merchant not found") {
+      return res.status(404).json({ message });
+    }
+    if (error?.code === "resource_missing" || error?.statusCode === 404) {
+      return res.status(404).json({ message });
+    }
+    return res.status(400).json({ message });
+  }
+}
