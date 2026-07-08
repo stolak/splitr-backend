@@ -4,6 +4,9 @@ import prisma from "../utils/prisma";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_DEFAULT_CURRENCY = process.env.STRIPE_DEFAULT_CURRENCY || "usd";
+const STRIPE_CONNECT_COUNTRY = process.env.STRIPE_CONNECT_COUNTRY || "CA";
+const STRIPE_CONNECT_REFRESH_URL = process.env.STRIPE_CONNECT_REFRESH_URL;
+const STRIPE_CONNECT_RETURN_URL = process.env.STRIPE_CONNECT_RETURN_URL;
 
 let stripeClient: Stripe | null = null;
 
@@ -55,6 +58,30 @@ export interface CreatePaymentIntentInput {
   description?: string;
 }
 
+export interface CreateConnectAccountInput {
+  merchantId: string;
+  country?: string;
+}
+
+export interface CreateConnectAccountLinkInput {
+  accountId: string;
+  refreshUrl?: string;
+  returnUrl?: string;
+  type?: "account_onboarding" | "account_update";
+}
+
+export interface CreateMerchantConnectOnboardingInput {
+  merchantId: string;
+  country?: string;
+  refreshUrl?: string;
+  returnUrl?: string;
+}
+
+export interface ListConnectAccountsInput {
+  limit?: number;
+  startingAfter?: string;
+}
+
 export class StripeService {
   /**
    * Create a Stripe customer
@@ -77,6 +104,143 @@ export class StripeService {
 
     return { customer };
   }
+
+  /**
+   * Create a Stripe Connect Express account for a merchant.
+   */
+  async createConnectAccount(input: CreateConnectAccountInput) {
+    if (!input.merchantId) {
+      throw new Error("merchantId is required");
+    }
+
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: input.merchantId },
+    });
+
+    if (!merchant) {
+      throw new Error("Merchant not found");
+    }
+
+    if (merchant.stripeConnectAccountId) {
+      const account = await getStripe().accounts.retrieve(merchant.stripeConnectAccountId);
+      return {
+        accountId: account.id,
+        account,
+        existing: true,
+      };
+    }
+
+    const email = merchant.businessEmail || merchant.authorizedEmail;
+    if (!email) {
+      throw new Error("Merchant email is required");
+    }
+
+    const account = await getStripe().accounts.create({
+      type: "express",
+      country: input.country || STRIPE_CONNECT_COUNTRY,
+      email,
+    });
+
+    await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: { stripeConnectAccountId: account.id },
+    });
+
+    return {
+      accountId: account.id,
+      account,
+      existing: false,
+    };
+  }
+
+  /**
+   * Create a Stripe Connect account onboarding or update link.
+   */
+  async createConnectAccountLink(input: CreateConnectAccountLinkInput) {
+    if (!input.accountId) {
+      throw new Error("accountId is required");
+    }
+
+    const refreshUrl = input.refreshUrl || STRIPE_CONNECT_REFRESH_URL;
+    const returnUrl = input.returnUrl || STRIPE_CONNECT_RETURN_URL;
+
+    if (!refreshUrl || !returnUrl) {
+      throw new Error("refreshUrl and returnUrl are required");
+    }
+
+    const accountLink = await getStripe().accountLinks.create({
+      account: input.accountId,
+      refresh_url: refreshUrl,
+      return_url: returnUrl,
+      type: input.type || "account_onboarding",
+    });
+
+    return {
+      url: accountLink.url,
+      expiresAt: accountLink.expires_at,
+    };
+  }
+
+  /**
+   * Create a Connect account (if needed) and return an onboarding link URL.
+   */
+  async createMerchantConnectOnboarding(input: CreateMerchantConnectOnboardingInput) {
+    const accountResult = await this.createConnectAccount({
+      merchantId: input.merchantId,
+      country: input.country,
+    });
+
+    const linkResult = await this.createConnectAccountLink({
+      accountId: accountResult.accountId,
+      refreshUrl: input.refreshUrl,
+      returnUrl: input.returnUrl,
+    });
+
+    return {
+      accountId: accountResult.accountId,
+      existingAccount: accountResult.existing,
+      url: linkResult.url,
+      expiresAt: linkResult.expiresAt,
+    };
+  }
+
+  /**
+   * List Stripe Connect accounts.
+   */
+  async listConnectAccounts(input: ListConnectAccountsInput = {}) {
+    const limit = input.limit ?? 10;
+
+    if (limit < 1 || limit > 100) {
+      throw new Error("limit must be between 1 and 100");
+    }
+
+    const accounts = await getStripe().accounts.list({
+      limit,
+      ...(input.startingAfter ? { starting_after: input.startingAfter } : {}),
+    });
+
+    return {
+      data: accounts.data,
+      hasMore: accounts.has_more,
+    };
+  }
+
+  /**
+   * Retrieve a Stripe Connect account by ID.
+   */
+  async getConnectAccount(accountId: string) {
+    if (!accountId) {
+      throw new Error("accountId is required");
+    }
+
+    const account = await getStripe().accounts.retrieve(accountId);
+
+    return {
+      accountId: account.id,
+      account,
+    };
+  }
+
   /**
    * Create a one-off payment intent with automatic payment methods enabled
    */

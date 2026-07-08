@@ -354,6 +354,7 @@ model Merchant {
   revenues                   Revenue[]
   paystackTransferRecipients PaystackMerchantTransferRecipient[]
   paystackTransfers          PaystackTransfer[]
+  stripeConnectAccountId     String?                             @unique
 
   @@map("merchant")
 }

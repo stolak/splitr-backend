@@ -3,7 +3,12 @@ import { authenticateJWT } from "../middlewares/auth";
 import {
   chargeMandate,
   completeMandate,
+  createConnectAccount,
+  createConnectAccountLink,
   createCustomer,
+  createMerchantConnectOnboarding,
+  getConnectAccount,
+  listConnectAccounts,
   getCustomer,
   createInvoiceSetupIntent,
   createPaymentIntent,
@@ -25,5 +30,10 @@ router.post("/mandates/complete", completeMandate);
 router.get("/mandates", listMandates);
 router.get("/mandates/:mandateId", getMandate);
 router.post("/mandates/charge", chargeMandate);
+router.post("/connect/accounts", authenticateJWT, createConnectAccount);
+router.get("/connect/accounts", authenticateJWT, listConnectAccounts);
+router.get("/connect/accounts/:accountId", authenticateJWT, getConnectAccount);
+router.post("/connect/account-links", authenticateJWT, createConnectAccountLink);
+router.post("/connect/onboarding", authenticateJWT, createMerchantConnectOnboarding);
 
 export default router;

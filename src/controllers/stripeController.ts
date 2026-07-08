@@ -638,3 +638,318 @@ export async function chargeMandate(req: Request, res: Response) {
     return res.status(400).json({ message });
   }
 }
+
+function resolveMerchantId(req: Request, requestedMerchantId?: string) {
+  const user = req.user;
+
+  if (!user?.id) {
+    return { error: { status: 401, message: "Unauthorized" } };
+  }
+
+  if (user.userType.toUpperCase() !== "MERCHANT" && user.userType.toUpperCase() !== "ADMIN") {
+    return {
+      error: { status: 403, message: "Only merchants can manage Stripe Connect onboarding" },
+    };
+  }
+
+  const merchantId = requestedMerchantId || user.merchantId;
+
+  if (!merchantId) {
+    return { error: { status: 403, message: "Merchant profile not found for authenticated user" } };
+  }
+
+  if (
+    user.userType.toUpperCase() === "MERCHANT" &&
+    requestedMerchantId &&
+    user.merchantId &&
+    requestedMerchantId !== user.merchantId
+  ) {
+    return { error: { status: 403, message: "merchantId does not match authenticated merchant" } };
+  }
+
+  return { merchantId };
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/accounts:
+ *   post:
+ *     summary: Create a Stripe Connect Express account for a merchant
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               merchantId:
+ *                 type: string
+ *                 format: uuid
+ *               country:
+ *                 type: string
+ *                 example: CA
+ *     responses:
+ *       201:
+ *         description: Connect account created or retrieved
+ *       403:
+ *         description: Forbidden
+ */
+export async function createConnectAccount(req: Request, res: Response) {
+  try {
+    const { merchantId: requestedMerchantId, country } = req.body || {};
+    const resolved = resolveMerchantId(req, requestedMerchantId);
+
+    if ("error" in resolved && resolved.error) {
+      return res.status(resolved.error.status).json({ message: resolved.error.message });
+    }
+
+    const result = await stripeService.createConnectAccount({
+      merchantId: resolved.merchantId,
+      country,
+    });
+
+    return res.status(result.existing ? 200 : 201).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to create Stripe Connect account";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/account-links:
+ *   post:
+ *     summary: Create a Stripe Connect account onboarding link
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - accountId
+ *             properties:
+ *               accountId:
+ *                 type: string
+ *               refreshUrl:
+ *                 type: string
+ *               returnUrl:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *                 enum: [account_onboarding, account_update]
+ *     responses:
+ *       201:
+ *         description: Account link created
+ */
+export async function createConnectAccountLink(req: Request, res: Response) {
+  try {
+    const user = req.user;
+
+    if (!user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const { accountId, refreshUrl, returnUrl, type } = req.body || {};
+
+    if (!accountId) {
+      return res.status(400).json({ message: "accountId is required" });
+    }
+
+    const result = await stripeService.createConnectAccountLink({
+      accountId,
+      refreshUrl,
+      returnUrl,
+      type,
+    });
+
+    return res.status(201).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to create Stripe Connect account link";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/onboarding:
+ *   post:
+ *     summary: Create Connect account and return onboarding URL
+ *     description: Creates a Stripe Express account for the merchant (if needed) and returns an onboarding link URL.
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               merchantId:
+ *                 type: string
+ *                 format: uuid
+ *               country:
+ *                 type: string
+ *                 example: CA
+ *               refreshUrl:
+ *                 type: string
+ *               returnUrl:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Onboarding link created
+ */
+export async function createMerchantConnectOnboarding(req: Request, res: Response) {
+  try {
+    const { merchantId: requestedMerchantId, country, refreshUrl, returnUrl } = req.body || {};
+    const resolved = resolveMerchantId(req, requestedMerchantId);
+
+    if ("error" in resolved && resolved.error) {
+      return res.status(resolved.error.status).json({ message: resolved.error.message });
+    }
+
+    const result = await stripeService.createMerchantConnectOnboarding({
+      merchantId: resolved.merchantId,
+      country,
+      refreshUrl,
+      returnUrl,
+    });
+
+    return res.status(201).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to create Stripe Connect onboarding link";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/accounts:
+ *   get:
+ *     summary: List Stripe Connect accounts
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *           minimum: 1
+ *           maximum: 100
+ *       - in: query
+ *         name: startingAfter
+ *         schema:
+ *           type: string
+ *         description: Cursor for pagination (Stripe account ID)
+ *     responses:
+ *       200:
+ *         description: Connect accounts retrieved
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+export async function listConnectAccounts(req: Request, res: Response) {
+  try {
+    const user = req.user;
+
+    if (!user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (user.userType.toUpperCase() !== "MERCHANT" && user.userType.toUpperCase() !== "ADMIN") {
+      return res
+        .status(403)
+        .json({ message: "Only merchants and admins can list Connect accounts" });
+    }
+
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const startingAfter = req.query.startingAfter as string | undefined;
+
+    const result = await stripeService.listConnectAccounts({
+      limit,
+      startingAfter,
+    });
+
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to list Stripe Connect accounts";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/accounts/{accountId}:
+ *   get:
+ *     summary: Get a Stripe Connect account by ID
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: accountId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: acct_abc123
+ *     responses:
+ *       200:
+ *         description: Connect account retrieved
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Account not found
+ */
+export async function getConnectAccount(req: Request, res: Response) {
+  try {
+    const user = req.user;
+
+    if (!user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (user.userType.toUpperCase() !== "MERCHANT" && user.userType.toUpperCase() !== "ADMIN") {
+      return res
+        .status(403)
+        .json({ message: "Only merchants and admins can view Connect accounts" });
+    }
+
+    const { accountId } = req.params;
+
+    if (!accountId) {
+      return res.status(400).json({ message: "accountId is required" });
+    }
+
+    if (user.userType.toUpperCase() === "MERCHANT" && user.merchantId) {
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: user.merchantId },
+        select: { stripeConnectAccountId: true },
+      });
+
+      if (merchant?.stripeConnectAccountId !== accountId) {
+        return res.status(403).json({ message: "You can only view your own Connect account" });
+      }
+    }
+
+    const result = await stripeService.getConnectAccount(accountId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to retrieve Stripe Connect account";
+    if (error?.code === "resource_missing" || error?.statusCode === 404) {
+      return res.status(404).json({ message });
+    }
+    return res.status(400).json({ message });
+  }
+}
