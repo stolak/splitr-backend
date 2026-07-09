@@ -1,12 +1,12 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { randomBytes } from 'crypto';
-import type { DecodedIdToken } from 'firebase-admin/auth';
-import { getJwtSecret } from '../utils/env';
-import { verifyFirebaseIdToken } from '../utils/firebase';
-import { extractFirebaseProviderLinks, FirebaseProviderLink } from '../utils/linkedProviderMapper';
-import prisma from '../utils/prisma';
-import { emailService } from './emailService';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { randomBytes } from "crypto";
+import type { DecodedIdToken } from "firebase-admin/auth";
+import { getJwtSecret } from "../utils/env";
+import { verifyFirebaseIdToken } from "../utils/firebase";
+import { extractFirebaseProviderLinks, FirebaseProviderLink } from "../utils/linkedProviderMapper";
+import prisma from "../utils/prisma";
+import { emailService } from "./emailService";
 
 export interface AuthResponse {
   success: boolean;
@@ -17,7 +17,7 @@ export interface AuthResponse {
       email: string;
       profileImageUrl?: string;
       name: string;
-      userType: 'buyer' | 'merchant' | 'admin';
+      userType: "buyer" | "merchant" | "admin";
       isVerified: boolean;
       isTermsAndConditionAccepted: boolean;
       merchantId?: string;
@@ -42,8 +42,8 @@ export interface UserRegistrationInput {
   phoneNumber?: string;
   profileImageUrl?: string;
   merchantId?: string;
-  role?: 'Visitor' | 'Admin' | 'Merchant' | 'Buyer' | 'SuperAdmin' | 'CustomerSupport';
-  userType?: 'Admin' | 'Merchant' | 'Buyer';
+  role?: "Visitor" | "Admin" | "Merchant" | "Buyer" | "SuperAdmin" | "CustomerSupport";
+  userType?: "Admin" | "Merchant" | "Buyer";
   isVerified?: boolean;
   isPhoneVerified?: boolean;
   isEmailVerified?: boolean;
@@ -51,15 +51,15 @@ export interface UserRegistrationInput {
   address?: string;
 }
 
-function mapUserType(userType?: 'Admin' | 'Merchant' | 'Buyer'): 'buyer' | 'merchant' | 'admin' {
+function mapUserType(userType?: "Admin" | "Merchant" | "Buyer"): "buyer" | "merchant" | "admin" {
   switch (userType) {
-    case 'Admin':
-      return 'admin';
-    case 'Merchant':
-      return 'merchant';
-    case 'Buyer':
+    case "Admin":
+      return "admin";
+    case "Merchant":
+      return "merchant";
+    case "Buyer":
     default:
-      return 'buyer';
+      return "buyer";
   }
 }
 
@@ -70,7 +70,7 @@ function buildTokens(user: any) {
   const accessToken = jwt.sign({ user }, getJwtSecret(), {
     expiresIn: accessExpiresInSeconds,
   });
-  const refreshToken = jwt.sign({ ...user, type: 'refresh' }, getJwtSecret(), {
+  const refreshToken = jwt.sign({ ...user, type: "refresh" }, getJwtSecret(), {
     expiresIn: refreshExpiresInSeconds,
   });
 
@@ -104,24 +104,27 @@ const authUserSelect = {
   },
 } as const;
 
-function buildAuthResponseFromUser(user: {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  userType: string;
-  isVerified: boolean;
-  profileImageUrl: string | null;
-  merchantId: string | null;
-  merchant: {
-    isAgreedToTerms: boolean | null;
-    businessName: string;
-    merchantCharge: unknown;
-    logoUrl: string | null;
-  } | null;
-  buyer: { id: string } | null;
-}, message: string): AuthResponse {
-  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || '';
+function buildAuthResponseFromUser(
+  user: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    userType: string;
+    isVerified: boolean;
+    profileImageUrl: string | null;
+    merchantId: string | null;
+    merchant: {
+      isAgreedToTerms: boolean | null;
+      businessName: string;
+      merchantCharge: unknown;
+      logoUrl: string | null;
+    } | null;
+    buyer: { id: string } | null;
+  },
+  message: string
+): AuthResponse {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
   const tokens = buildTokens({
     id: user.id,
     email: user.email,
@@ -181,11 +184,11 @@ async function syncLinkedUsers(userId: string, providerLinks: FirebaseProviderLi
 function extractNameFromFirebaseToken(decoded: DecodedIdToken) {
   const firstName =
     (decoded as DecodedIdToken & { given_name?: string }).given_name ||
-    decoded.name?.split(' ')[0] ||
+    decoded.name?.split(" ")[0] ||
     undefined;
   const lastName =
     (decoded as DecodedIdToken & { family_name?: string }).family_name ||
-    decoded.name?.split(' ').slice(1).join(' ') ||
+    decoded.name?.split(" ").slice(1).join(" ") ||
     undefined;
 
   return { firstName, lastName };
@@ -198,18 +201,16 @@ export class AuthService {
     let existingUser;
     existingUser = await prisma.user.findFirst({ where: { OR: [{ email }] } });
     if (existingUser) {
-      throw new Error('User already exists with this email');
+      throw new Error("User already exists with this email");
     }
 
-    
-
     // Hash password
-    const validatedPassoword = password || '12345'; // auto-generated password
+    const validatedPassoword = password || "12345"; // auto-generated password
     const hashedPassword: string = await bcrypt.hash(validatedPassoword, 10);
     // Create user
     const user = await prisma.user.create({
       // `address` belongs to Buyer, not User (see `schema.prisma`).
-      data: { ...userInput, email, password: hashedPassword, profileImageUrl },
+      data: { ...userInput, merchantId, email, password: hashedPassword, profileImageUrl },
       select: {
         id: true,
         email: true,
@@ -225,16 +226,15 @@ export class AuthService {
             businessName: true,
           },
         },
-       
       },
     });
 
-    const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || '';
+    const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
     const tokens = buildTokens(user.id);
 
     return {
       success: true,
-      message: 'Registration successful',
+      message: "Registration successful",
       data: {
         user: {
           id: user.id,
@@ -246,7 +246,6 @@ export class AuthService {
           isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms || false,
           merchantId: user?.merchantId ?? undefined,
           merchantName: user?.merchant?.businessName ?? undefined,
-          
         },
         tokens,
       },
@@ -259,20 +258,20 @@ export class AuthService {
     if (userType) {
       where.userType = userType;
     }
-    console.log(where)
+    console.log(where);
     const user = await prisma.user.findFirst({
       where,
       select: authUserSelect,
     });
     if (!user) {
-      throw new Error('Invalid credentials');
+      throw new Error("Invalid credentials");
     }
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new Error('Invalid credentials');
+      throw new Error("Invalid credentials");
     }
 
-    return buildAuthResponseFromUser(user, 'Login successful');
+    return buildAuthResponseFromUser(user, "Login successful");
   }
 
   async loginWithFirebase(idToken: string): Promise<AuthResponse> {
@@ -280,12 +279,12 @@ export class AuthService {
     const email = decoded.email;
 
     if (!email) {
-      throw new Error('Firebase account must include an email address');
+      throw new Error("Firebase account must include an email address");
     }
 
     const providerLinks = extractFirebaseProviderLinks(decoded);
     if (providerLinks.length === 0) {
-      throw new Error('Unsupported Firebase sign-in provider');
+      throw new Error("Unsupported Firebase sign-in provider");
     }
 
     await this.validateFirebaseEmailAvailability(email);
@@ -315,12 +314,12 @@ export class AuthService {
     });
 
     if (!refreshedUser) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     return buildAuthResponseFromUser(
       refreshedUser,
-      isNewRegistration ? 'Registration successful' : 'Login successful',
+      isNewRegistration ? "Registration successful" : "Login successful"
     );
   }
 
@@ -336,14 +335,12 @@ export class AuthService {
       }),
     ]);
 
-    if (userByEmail && userByEmail.userType !== 'Buyer') {
-      throw new Error(
-        'The email already exists with a non-buyer user hence it cannot be used',
-      );
+    if (userByEmail && userByEmail.userType !== "Buyer") {
+      throw new Error("The email already exists with a non-buyer user hence it cannot be used");
     }
 
     if (userByEmail && buyerByEmail && buyerByEmail.userId !== userByEmail.id) {
-      throw new Error('Email already exists with another buyer');
+      throw new Error("Email already exists with another buyer");
     }
   }
 
@@ -382,7 +379,7 @@ export class AuthService {
       buyer: { id: string } | null;
     },
     decoded: DecodedIdToken,
-    email: string,
+    email: string
   ) {
     if (user.buyer) {
       return;
@@ -390,14 +387,14 @@ export class AuthService {
 
     const buyerWithEmail = await prisma.buyer.findUnique({ where: { email } });
     if (buyerWithEmail && buyerWithEmail.userId !== user.id) {
-      throw new Error('Email already exists with another buyer');
+      throw new Error("Email already exists with another buyer");
     }
 
     const { firstName, lastName } = extractNameFromFirebaseToken(decoded);
 
     await prisma.buyer.create({
       data: {
-        splitrId: '',
+        splitrId: "",
         userId: user.id,
         email,
         firstName: firstName ?? user.firstName,
@@ -413,15 +410,15 @@ export class AuthService {
   private async createFirebaseUserWithBuyer(
     decoded: DecodedIdToken,
     email: string,
-    providerLinks: FirebaseProviderLink[],
+    providerLinks: FirebaseProviderLink[]
   ) {
     const existingBuyer = await prisma.buyer.findUnique({ where: { email } });
     if (existingBuyer) {
-      throw new Error('Email already exists with another buyer');
+      throw new Error("Email already exists with another buyer");
     }
 
     const { firstName, lastName } = extractNameFromFirebaseToken(decoded);
-    const randomPassword = randomBytes(32).toString('hex');
+    const randomPassword = randomBytes(32).toString("hex");
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
     const profileImageUrl = (decoded as DecodedIdToken & { picture?: string }).picture;
 
@@ -433,8 +430,8 @@ export class AuthService {
           firstName,
           lastName,
           profileImageUrl,
-          userType: 'Buyer',
-          role: 'Buyer',
+          userType: "Buyer",
+          role: "Buyer",
           isEmailVerified: decoded.email_verified ?? true,
           isActive: true,
         },
@@ -442,7 +439,7 @@ export class AuthService {
 
       await tx.buyer.create({
         data: {
-          splitrId: '',
+          splitrId: "",
           userId: createdUser.id,
           email,
           firstName,
@@ -471,7 +468,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('Failed to create user');
+      throw new Error("Failed to create user");
     }
 
     return user;
@@ -481,7 +478,7 @@ export class AuthService {
     decoded: DecodedIdToken,
     email: string,
     buyer: { id: string; userId: string },
-    providerLinks: FirebaseProviderLink[],
+    providerLinks: FirebaseProviderLink[]
   ) {
     const existingUserForBuyer = await prisma.user.findUnique({
       where: { id: buyer.userId },
@@ -495,7 +492,7 @@ export class AuthService {
     }
 
     const { firstName, lastName } = extractNameFromFirebaseToken(decoded);
-    const randomPassword = randomBytes(32).toString('hex');
+    const randomPassword = randomBytes(32).toString("hex");
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
     const profileImageUrl = (decoded as DecodedIdToken & { picture?: string }).picture;
 
@@ -507,8 +504,8 @@ export class AuthService {
           firstName,
           lastName,
           profileImageUrl,
-          userType: 'Buyer',
-          role: 'Buyer',
+          userType: "Buyer",
+          role: "Buyer",
           isEmailVerified: decoded.email_verified ?? true,
           isActive: true,
         },
@@ -540,17 +537,15 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('Failed to create user for existing buyer');
+      throw new Error("Failed to create user for existing buyer");
     }
 
     return user;
   }
 
   private assertFirebaseBuyerUser(user: { userType: string }) {
-    if (user.userType !== 'Buyer') {
-      throw new Error(
-        'The email already exists with a non-buyer user hence it cannot be used',
-      );
+    if (user.userType !== "Buyer") {
+      throw new Error("The email already exists with a non-buyer user hence it cannot be used");
     }
   }
 
@@ -562,7 +557,7 @@ export class AuthService {
 
     // Validate required fields for merchant user
     if (!merchantId) {
-      throw new Error('merchantId is required for merchant users');
+      throw new Error("merchantId is required for merchant users");
     }
 
     // Verify merchant exists
@@ -571,32 +566,28 @@ export class AuthService {
     });
 
     if (!merchant) {
-      throw new Error('Merchant not found');
+      throw new Error("Merchant not found");
     }
 
     // Check if user already exists by email or phoneNumber
     let existingUser;
     existingUser = await prisma.user.findFirst({ where: { OR: [{ email }] } });
     if (existingUser) {
-      throw new Error('User already exists with this email');
+      throw new Error("User already exists with this email");
     }
 
-  
-    
-
     // Hash password
-    const validatedPassword = password || '12345'; // auto-generated password
+    const validatedPassword = password || "12345"; // auto-generated password
     const hashedPassword: string = await bcrypt.hash(validatedPassword, 10);
 
     // Create merchant user
     const user = await prisma.user.create({
       data: {
-  
         ...userInput,
         email,
         password: hashedPassword,
-        userType: 'Merchant',
-        role: input.role || 'Merchant',
+        userType: "Merchant",
+        role: input.role || "Merchant",
       },
       select: {
         id: true,
@@ -621,19 +612,18 @@ export class AuthService {
             logoUrl: true,
           },
         },
-        
       },
     });
 
-    const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || '';
+    const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
     const tokens = buildTokens({
       id: user.id,
       email: user.email,
       name,
       profileImageUrl: user.profileImageUrl ?? undefined,
       merchantId: user.merchantId,
-   
-      userType: 'merchant',
+
+      userType: "merchant",
       isVerified: user.isVerified ?? false,
       isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
       merchantCharge: user.merchant?.merchantCharge,
@@ -642,14 +632,14 @@ export class AuthService {
 
     return {
       success: true,
-      message: 'Merchant user created successfully',
+      message: "Merchant user created successfully",
       data: {
         user: {
           id: user.id,
           profileImageUrl: user.profileImageUrl ?? undefined,
           email: user.email,
           name,
-          userType: 'merchant',
+          userType: "merchant",
           isVerified: user.isVerified ?? false,
           isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms || false,
           merchantId: user.merchantId ?? undefined,
@@ -669,7 +659,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     return user;
@@ -695,12 +685,12 @@ export class AuthService {
       if (!user) {
         return {
           success: true,
-          message: 'If an account with that email exists, a password reset link has been sent.',
+          message: "If an account with that email exists, a password reset link has been sent.",
         };
       }
 
       // Generate secure random token
-      const resetToken = randomBytes(32).toString('hex');
+      const resetToken = randomBytes(32).toString("hex");
       const expiresAt = new Date();
       expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 minutes expiration
 
@@ -721,35 +711,35 @@ export class AuthService {
 
       // Build reset URL
       const frontendUrl =
-        process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:8080';
+        process.env.FRONTEND_URL || process.env.APP_URL || "http://localhost:8080";
       const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
       // Get user name
-      const userName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+      const userName = [user.firstName, user.lastName].filter(Boolean).join(" ") || "User";
 
       // Send password reset email
       await emailService.sendTemplateEmail({
         to: email,
-        templateName: 'passwordReset',
+        templateName: "passwordReset",
         data: {
-          appName: 'Lift Platform',
+          appName: "Lift Platform",
           userName,
           userEmail: email,
           resetLink,
-          expirationTime: '10',
+          expirationTime: "10",
         },
       });
 
       return {
         success: true,
-        message: 'If an account with that email exists, a password reset link has been sent.',
+        message: "If an account with that email exists, a password reset link has been sent.",
       };
     } catch (error: any) {
-      console.error('Error in forgotPassword:', error);
+      console.error("Error in forgotPassword:", error);
       // Still return success to prevent email enumeration
       return {
         success: true,
-        message: 'If an account with that email exists, a password reset link has been sent.',
+        message: "If an account with that email exists, a password reset link has been sent.",
       };
     }
   }
@@ -761,17 +751,17 @@ export class AuthService {
     email: string,
     token: string,
     newPassword: string,
-    confirmPassword: string,
+    confirmPassword: string
   ): Promise<{ success: boolean; message: string }> {
     try {
       // Validate passwords match
       if (newPassword !== confirmPassword) {
-        throw new Error('Passwords do not match');
+        throw new Error("Passwords do not match");
       }
 
       // Validate password strength (minimum 6 characters)
       if (newPassword.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
+        throw new Error("Password must be at least 6 characters long");
       }
 
       // Find user
@@ -781,7 +771,7 @@ export class AuthService {
       });
 
       if (!user) {
-        throw new Error('Invalid reset token or email');
+        throw new Error("Invalid reset token or email");
       }
 
       // Find valid reset token
@@ -797,7 +787,7 @@ export class AuthService {
       });
 
       if (!resetToken) {
-        throw new Error('Invalid or expired reset token');
+        throw new Error("Invalid or expired reset token");
       }
 
       // Hash new password
@@ -817,10 +807,10 @@ export class AuthService {
 
       return {
         success: true,
-        message: 'Password has been reset successfully',
+        message: "Password has been reset successfully",
       };
     } catch (error: any) {
-      throw new Error(error.message || 'Failed to reset password');
+      throw new Error(error.message || "Failed to reset password");
     }
   }
 
@@ -831,23 +821,23 @@ export class AuthService {
     userId: string,
     currentPassword: string,
     newPassword: string,
-    confirmPassword: string,
+    confirmPassword: string
   ): Promise<{ success: boolean; message: string }> {
     try {
       if (!userId) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
       if (!currentPassword || !newPassword || !confirmPassword) {
-        throw new Error('currentPassword, newPassword, and confirmPassword are required');
+        throw new Error("currentPassword, newPassword, and confirmPassword are required");
       }
 
       if (newPassword !== confirmPassword) {
-        throw new Error('Passwords do not match');
+        throw new Error("Passwords do not match");
       }
 
       if (newPassword.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
+        throw new Error("Password must be at least 6 characters long");
       }
 
       const user = await prisma.user.findUnique({
@@ -856,17 +846,17 @@ export class AuthService {
       });
 
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
       const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
       if (!isCurrentPasswordValid) {
-        throw new Error('Current password is incorrect');
+        throw new Error("Current password is incorrect");
       }
 
       const isSamePassword = await bcrypt.compare(newPassword, user.password);
       if (isSamePassword) {
-        throw new Error('New password must be different from current password');
+        throw new Error("New password must be different from current password");
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -878,10 +868,10 @@ export class AuthService {
 
       return {
         success: true,
-        message: 'Password changed successfully',
+        message: "Password changed successfully",
       };
     } catch (error: any) {
-      throw new Error(error.message || 'Failed to change password');
+      throw new Error(error.message || "Failed to change password");
     }
   }
 }
