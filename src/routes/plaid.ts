@@ -9,6 +9,7 @@ import {
   getIdentityVerification,
   listIdentityVerifications,
   retryIdentityVerification,
+  syncIdentityVerification,
 } from "../controllers/plaidController";
 
 const router = Router();
@@ -21,6 +22,11 @@ router.post(
   "/identity-verification/link-token",
   authenticateJWT,
   createIdentityVerificationLinkToken
+);
+router.post(
+  "/identity-verification/sync",
+  authenticateJWT,
+  syncIdentityVerification
 );
 router.post(
   "/identity-verification/retry",

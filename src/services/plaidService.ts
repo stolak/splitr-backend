@@ -2,6 +2,7 @@ import {
   CountryCode,
   CreditBankIncomeGetResponse,
   IdentityVerificationCreateRequestUser,
+  IdentityVerificationGetResponse,
   IdentityVerificationRequestUser,
   Products,
   Strategy,
@@ -43,7 +44,6 @@ export class PlaidService {
     const userResponse = await getPlaidClient().userCreate({
       client_user_id: userId,
     });
-
     return prisma.plaidAccount.upsert({
       where: { userId },
       update: {
@@ -122,7 +122,6 @@ export class PlaidService {
     const response = await getPlaidClient().itemPublicTokenExchange({
       public_token: publicToken,
     });
-    console.log("response", response);
 
     const plaidAccount = await prisma.plaidAccount.update({
       where: { userId },
@@ -199,10 +198,7 @@ export class PlaidService {
     return resolved;
   }
 
-  async createIdentityVerification(
-    userId: string,
-    input: CreateIdentityVerificationInput = {}
-  ) {
+  async createIdentityVerification(userId: string, input: CreateIdentityVerificationInput = {}) {
     if (!userId) {
       throw new Error("userId is required");
     }
@@ -241,6 +237,111 @@ export class PlaidService {
     }
   }
 
+  private mapIdentityVerificationToBuyerData(verification: IdentityVerificationGetResponse) {
+    const user = verification.user;
+    const address = user?.address;
+    const name = user?.name;
+    const idNumber = user?.id_number;
+    const kycSuccess = verification.kyc_check?.status === "success";
+    const smsSuccess = verification.verify_sms?.status === "success";
+
+    const data: Record<string, string | boolean> = {};
+
+    if (kycSuccess) {
+      data.isVerified = true;
+      data.status = "verified";
+    }
+
+    if (smsSuccess) {
+      data.isPhoneVerified = true;
+    }
+
+    if (name?.given_name) data.firstName = name.given_name;
+    if (name?.family_name) data.lastName = name.family_name;
+    if (user?.date_of_birth) data.DOB = user.date_of_birth;
+    if (user?.phone_number) data.phoneNumber = user.phone_number;
+    if (user?.email_address) data.email = user.email_address;
+
+    if (address?.street) {
+      data.address = address.street2 ? `${address.street}, ${address.street2}` : address.street;
+    }
+    if (address?.street2) data.houseNo = address.street2;
+    if (address?.city) data.city = address.city;
+    if (address?.region) {
+      data.province = address.region;
+      data.state = address.region;
+    }
+    if (address?.postal_code) data.postalCode = address.postal_code;
+
+    if (idNumber?.type) data.idType = idNumber.type;
+    if (idNumber?.value) {
+      data.idNumber = idNumber.value;
+      if (idNumber.type === "ca_sin") {
+        data.sinNumber = idNumber.value;
+      }
+    }
+
+    return { data, kycSuccess, smsSuccess };
+  }
+
+  async syncIdentityVerification(params: { userId: string; buyerId?: string; isAdmin?: boolean }) {
+    const { userId, buyerId, isAdmin = false } = params;
+
+    if (!userId) {
+      throw new Error("userId is required");
+    }
+
+    const buyer = buyerId
+      ? await prisma.buyer.findUnique({ where: { id: buyerId } })
+      : await prisma.buyer.findUnique({ where: { userId } });
+
+    if (!buyer) {
+      throw new Error("Buyer not found");
+    }
+
+    if (!isAdmin && buyer.userId !== userId) {
+      throw new Error("Unauthorized to sync this buyer");
+    }
+
+    if (!buyer.plaidIdentityVerificationId) {
+      throw new Error(
+        "Buyer has no plaidIdentityVerificationId. Complete identity verification first."
+      );
+    }
+
+    const verification = await this.getIdentityVerification(buyer.plaidIdentityVerificationId);
+
+    const { data, kycSuccess } = this.mapIdentityVerificationToBuyerData(verification);
+
+    if (Object.keys(data).length === 0) {
+      return {
+        buyer,
+        verification,
+        isVerified: buyer.isVerified,
+        updated: false,
+      };
+    }
+
+    if (kycSuccess) {
+      await prisma.user.update({
+        where: { id: buyer.userId },
+        data: { isVerified: true },
+      });
+    }
+
+    const updatedBuyer = await prisma.buyer.update({
+      where: { id: buyer.id },
+      data,
+    });
+
+    return {
+      buyer: updatedBuyer,
+      verification,
+      isVerified: updatedBuyer.isVerified,
+      updated: true,
+    };
+  }
+
   async listIdentityVerifications(
     userId: string,
     options: { templateId?: string; cursor?: string } = {}
@@ -264,10 +365,7 @@ export class PlaidService {
     }
   }
 
-  async retryIdentityVerification(
-    userId: string,
-    input: RetryIdentityVerificationInput = {}
-  ) {
+  async retryIdentityVerification(userId: string, input: RetryIdentityVerificationInput = {}) {
     if (!userId) {
       throw new Error("userId is required");
     }
@@ -279,9 +377,7 @@ export class PlaidService {
         client_user_id: userId,
         template_id: templateId,
         strategy: input.strategy ?? Strategy.Infer,
-        ...(input.isShareable !== undefined
-          ? { is_shareable: input.isShareable }
-          : {}),
+        ...(input.isShareable !== undefined ? { is_shareable: input.isShareable } : {}),
         ...(input.user ? { user: input.user } : {}),
       });
 
@@ -309,6 +405,9 @@ export class PlaidService {
     }
 
     const plaidAccount = await this.ensurePlaidUser(userId, buyer.id);
+    if (!plaidAccount.id) {
+      throw new Error("Failed to create Plaid user");
+    }
     const templateId = this.resolveIdvTemplateId(options.templateId);
 
     try {
@@ -335,7 +434,17 @@ export class PlaidService {
           expiration: response.data.expiration,
         },
       });
-
+      // update buyer with plaidIdentityVerificationId
+      const identityVerification = await this.createIdentityVerification(userId, {
+        templateId,
+        gaveConsent: options.gaveConsent ?? false,
+      });
+      await prisma.buyer.update({
+        where: { id: buyer.id },
+        data: {
+          plaidIdentityVerificationId: identityVerification.id,
+        },
+      });
       return {
         linkToken: response.data.link_token,
         expiration: response.data.expiration,

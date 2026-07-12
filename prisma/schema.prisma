@@ -84,6 +84,7 @@ enum LoanInstallmentType {
   BiYearly
   OneTime
 }
+
 enum LoanPenaltyStatus {
   Active
   Inactive
@@ -95,7 +96,6 @@ enum InvoiceType {
   Shopping
   Services
   Invoice
-
 }
 
 enum LoanScheduleStatus {
@@ -136,7 +136,6 @@ model User {
   approvedById String?
   modifiedById String?
   merchantId   String? // 👈 Foreign key to Merchant
-  
 
   createdBy  User? @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   approvedBy User? @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
@@ -149,24 +148,23 @@ model User {
   // 👇 Define relation back to Merchant
   merchant Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
 
-  
   status       String   @default("active")
   referralCode String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  buyer          Buyer?
+  buyer Buyer?
 
   // Merchants whose terms this user agreed to
   merchantsTermsAgreed Merchant[] @relation("MerchantTermsAgreedBy")
 
-
   // Password reset tokens
   passwordResetTokens PasswordResetToken[]
-  linkedUsers LinkedUser[]
+  linkedUsers         LinkedUser[]
 
   @@map("user")
 }
+
 enum LinkedProvider {
   Google
   Facebook
@@ -184,6 +182,7 @@ enum LinkedProvider {
   StackOverflow
   Reddit
 }
+
 model LinkedUser {
   id             String         @id @default(uuid())
   userId         String
@@ -198,7 +197,6 @@ model LinkedUser {
   @@index([userId])
   @@map("linked_user")
 }
-
 
 model PasswordResetToken {
   id        String   @id @default(uuid())
@@ -217,28 +215,28 @@ model PasswordResetToken {
 }
 
 model Buyer {
-  id        String @id @default(uuid())
+  id       String @id @default(uuid())
   splitrId String @unique @db.VarChar(30)
-  userId    String @unique
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String @unique
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  firstName   String?
-  lastName    String?
-  DOB         String?
-  phoneNumber String?
-  email       String  @unique
-  address     String?
-  gender      String?
-  idType      String?
-  idNumber    String?
-  sinNumber   String?
+  firstName     String?
+  lastName      String?
+  DOB           String?
+  phoneNumber   String?
+  email         String  @unique
+  address       String?
+  gender        String?
+  idType        String?
+  idNumber      String?
+  sinNumber     String?
   sinExpiryDate String?
-  photo       String?
-  state       String?
-  province    String?
-  city        String?
-  houseNo     String?
-  postalCode     String?
+  photo         String?
+  state         String?
+  province      String?
+  city          String?
+  houseNo       String?
+  postalCode    String?
 
   isActive        Boolean @default(false)
   isVerified      Boolean @default(false)
@@ -247,25 +245,25 @@ model Buyer {
 
   status String @default("active")
 
-  IsTermsAndConditionAccepted Boolean   @default(false)
+  IsTermsAndConditionAccepted Boolean @default(false)
 
-  loans               Loan[]
-  eligibilityAndScore EligibilityAndScore[]
-  scoringInputSnapshots ScoringInputSnapshot[]
-  invoices            Invoice[]
-  revenues            Revenue[]
-  monoConnects        MonoConnect[]
-  accountDetails      AccountDetails[]
-  mandates            InvoiceMandate[]
-  directPays          DirectPay[]
-  paystackTransfers   PaystackTransfer[]
- PaystackMerchantTransferRecipient PaystackMerchantTransferRecipient[]
-  personaInquiries    PersonaInquiry[]
-  plaidAccounts       PlaidAccount[]
-  stripeMandates      StripeMandate[]
-  plaidIdentityVerificationId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  loans                             Loan[]
+  eligibilityAndScore               EligibilityAndScore[]
+  scoringInputSnapshots             ScoringInputSnapshot[]
+  invoices                          Invoice[]
+  revenues                          Revenue[]
+  monoConnects                      MonoConnect[]
+  accountDetails                    AccountDetails[]
+  mandates                          InvoiceMandate[]
+  directPays                        DirectPay[]
+  paystackTransfers                 PaystackTransfer[]
+  PaystackMerchantTransferRecipient PaystackMerchantTransferRecipient[]
+  personaInquiries                  PersonaInquiry[]
+  plaidAccounts                     PlaidAccount[]
+  stripeMandates                    StripeMandate[]
+  plaidIdentityVerificationId       String?
+  createdAt                         DateTime                            @default(now())
+  updatedAt                         DateTime                            @updatedAt
 
   @@map("buyer")
 }
@@ -274,7 +272,7 @@ model Buyer {
 
 model Merchant {
   id                          String  @id @default(uuid())
-  splitrId                   String  @unique @db.VarChar(30)
+  splitrId                    String  @unique @db.VarChar(30)
   logoUrl                     String?
   businessName                String
   businessEmail               String  @unique
@@ -290,7 +288,7 @@ model Merchant {
   businessDescription         String? @db.VarChar(30000)
   businessCategory            String?
   businessType                String?
-  businessTypes               Json? @default("[]")
+  businessTypes               Json?   @default("[]")
   businessPhone               String? @unique
   officeWebsite               String? @unique
   IsTermsAndConditionAccepted Boolean @default(false)
@@ -480,39 +478,39 @@ model TimeOutSetting {
 }
 
 model Loan {
-  id                   String            @id @default(uuid())
-  splitrId            String            @unique @db.VarChar(30)
-  buyerId              String
-  buyer                Buyer             @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  invoiceId            String?           @unique
-  invoice              Invoice?          @relation("InvoiceLoan", fields: [invoiceId], references: [id], onDelete: SetNull)
-  loanAmount           Decimal
-  purchaseAmount       Decimal?
-  downPaymentAmount    Decimal?
-  merchantId           String?
-  merchant             Merchant?         @relation(fields: [merchantId], references: [id], onDelete: SetNull)
-  referenceNumber      String?
-  adminCharge          Decimal?
-  insurance            Decimal?
-  monthlyRepayment     Decimal?
-  loanTenure           Int
-  loanInterestRate     Decimal
-  loanStartDate        DateTime
-  loanEndDate          DateTime?
-  loanStatus           LoanStatus
-  loanType             LoanType
-  loanInstallmentType  LoanInstallmentType @default(Monthly)
+  id                  String              @id @default(uuid())
+  splitrId            String              @unique @db.VarChar(30)
+  buyerId             String
+  buyer               Buyer               @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  invoiceId           String?             @unique
+  invoice             Invoice?            @relation("InvoiceLoan", fields: [invoiceId], references: [id], onDelete: SetNull)
+  loanAmount          Decimal
+  purchaseAmount      Decimal?
+  downPaymentAmount   Decimal?
+  merchantId          String?
+  merchant            Merchant?           @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  referenceNumber     String?
+  adminCharge         Decimal?
+  insurance           Decimal?
+  monthlyRepayment    Decimal?
+  loanTenure          Int
+  loanInterestRate    Decimal
+  loanStartDate       DateTime
+  loanEndDate         DateTime?
+  loanStatus          LoanStatus
+  loanType            LoanType
+  loanInstallmentType LoanInstallmentType @default(Monthly)
 
-  returnStatus         LoanReturnStatus? @default(Active)
-  returnAmount         Decimal?
-  returnReason         String?
-  returnNote           String?
-  returnReference      String?
-  returnInitiatedDate  DateTime?
-  returnInitiatedBy    String?
-  returnApprovedBy     String?
-  returnApprovedDate   DateTime?
-  
+  returnStatus        LoanReturnStatus? @default(Active)
+  returnAmount        Decimal?
+  returnReason        String?
+  returnNote          String?
+  returnReference     String?
+  returnInitiatedDate DateTime?
+  returnInitiatedBy   String?
+  returnApprovedBy    String?
+  returnApprovedDate  DateTime?
+
   loanPurpose          String
   loanDocument         String?
   loanDocumentVerified DocumentStatus?   @default(Pending)
@@ -611,7 +609,7 @@ model LoanDebitTrial {
 
 model LoanTransaction {
   id                String            @id @default(uuid())
-  splitrId         String            @unique @db.VarChar(30)
+  splitrId          String            @unique @db.VarChar(30)
   loanId            String
   loan              Loan              @relation(fields: [loanId], references: [id], onDelete: Restrict)
   transactionType   TransactionType
@@ -631,7 +629,7 @@ model LoanTransaction {
 
 model MerchantTransaction {
   id              String                  @id @default(uuid())
-  splitrId       String                  @unique @db.VarChar(30)
+  splitrId        String                  @unique @db.VarChar(30)
   merchantId      String
   merchant        Merchant                @relation(fields: [merchantId], references: [id], onDelete: Restrict)
   invoiceRef      String?
@@ -729,9 +727,9 @@ model EligibilityAndScore {
 /// Map to `ScoringInput`: `monthlyIncomes`, `liquidityBuffer`, and `riskFactor` are stored as JSON
 /// (arrays/objects) to match the TypeScript interfaces exactly.
 model ScoringInputSnapshot {
-  id      String @id @default(uuid())
-  buyerId String?
-  buyer   Buyer? @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  id               String          @id @default(uuid())
+  buyerId          String?
+  buyer            Buyer?          @relation(fields: [buyerId], references: [id], onDelete: SetNull)
   accountDetailsId String?
   accountDetails   AccountDetails? @relation(fields: [accountDetailsId], references: [id], onDelete: SetNull)
 
@@ -754,7 +752,7 @@ model ScoringInputSnapshot {
 
   // MonthlyScores { M1..M6 }
   riskFactor Json
-  riskFlags Json?
+  riskFlags  Json?
 
   overdraftEvents                 Int?
   overdraftDeepestNegativeBalance Decimal? @db.Decimal(15, 2)
@@ -762,10 +760,10 @@ model ScoringInputSnapshot {
   overdraftRecent                 Boolean
 
   existingLoanRepayment Decimal @db.Decimal(15, 2)
-  incomeClassification String?
+  incomeClassification  String?
 
-  cashFlow Json?
-  loanRepayment Json?
+  cashFlow                        Json?
+  loanRepayment                   Json?
   numberOfUniquesNegativeBalances Json?
 
   createdAt DateTime @default(now())
@@ -776,19 +774,19 @@ model ScoringInputSnapshot {
 }
 
 model Invoice {
-  id                   String                @id @default(uuid())
-  splitrId            String                @unique @db.VarChar(30)
-  customerName         String
-  customerEmail        String
-  customerPhoneNumber  String
-  dueDate              DateTime
-  note                 String?
-  amount               Decimal
-  buyerId              String?
-  buyer                Buyer?                @relation(fields: [buyerId], references: [id], onDelete: SetNull)
-  merchantId           String?
-  merchant             Merchant?              @relation(fields: [merchantId], references: [id], onDelete: Restrict)
-     
+  id                  String    @id @default(uuid())
+  splitrId            String    @unique @db.VarChar(30)
+  customerName        String
+  customerEmail       String
+  customerPhoneNumber String
+  dueDate             DateTime
+  note                String?
+  amount              Decimal
+  buyerId             String?
+  buyer               Buyer?    @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  merchantId          String?
+  merchant            Merchant? @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+
   items                Item[]
   status               InvoiceStatus         @default(Pending)
   type                 InvoiceType           @default(Purchase)
@@ -803,40 +801,40 @@ model Invoice {
   updatedAt            DateTime              @updatedAt
   revenues             Revenue[]
 
-  returnStatus         LoanReturnStatus? @default(Active)
-  returnAmount         Decimal?
-  returnReason         String?
-  returnNote           String?
-  returnReference      String?
-  returnInitiatedDate  DateTime?
-  returnInitiatedBy    String?
-  returnApprovedBy     String?
-  returnApprovedDate   DateTime?
+  returnStatus        LoanReturnStatus? @default(Active)
+  returnAmount        Decimal?
+  returnReason        String?
+  returnNote          String?
+  returnReference     String?
+  returnInitiatedDate DateTime?
+  returnInitiatedBy   String?
+  returnApprovedBy    String?
+  returnApprovedDate  DateTime?
 
   @@map("invoice")
 }
 
 model MandateDebit {
-  id              String            @id @default(uuid())
-  invoiceId        String?
-  invoice          Invoice?         @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  loanId           String?
-  loan             Loan?            @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  id        String   @id @default(uuid())
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  loanId    String?
+  loan      Loan?    @relation(fields: [loanId], references: [id], onDelete: SetNull)
 
   // Constrain lengths so the composite unique index fits MySQL's 1000-byte limit under utf8mb4.
-  mandateId        String            @db.VarChar(64)
-  reference        String            @db.VarChar(64)
-  amount           Decimal
-  transactionDate  DateTime
-  status           TransactionStatus @default(Pending)
+  mandateId       String            @db.VarChar(64)
+  reference       String            @db.VarChar(64)
+  amount          Decimal
+  transactionDate DateTime
+  status          TransactionStatus @default(Pending)
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([mandateId, reference])
   @@index([invoiceId])
   @@index([loanId])
   @@index([mandateId])
-  @@unique([mandateId, reference])
   @@map("mandate_debit")
 }
 
@@ -920,7 +918,7 @@ model Tier {
 
 model Revenue {
   id              String        @id @default(uuid())
-  splitrId       String        @unique @db.VarChar(30)
+  splitrId        String        @unique @db.VarChar(30)
   credit          Decimal       @default(0)
   debit           Decimal       @default(0)
   description     String
@@ -978,45 +976,45 @@ model MonoConnect {
 }
 
 model AccountDetails {
-  id                    String   @id @default(uuid())
+  id                    String                 @id @default(uuid())
   accountId             String?
   exchangeMonoCode      String?
   buyerId               String
-  buyer                 Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyer                 Buyer                  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   bankStatement         Json?
   BankName              String?
   AccountName           String?
   AccountNumber         String?
   customerId            String?
   employmentType        String?
-  monthlyIncome         Decimal? @db.Decimal(15, 2)
-  overdraft             Decimal? @db.Decimal(15, 2)
-  existingLoanRepayment Decimal? @db.Decimal(15, 2)
-  creditHistory         String?  @db.Text
+  monthlyIncome         Decimal?               @db.Decimal(15, 2)
+  overdraft             Decimal?               @db.Decimal(15, 2)
+  existingLoanRepayment Decimal?               @db.Decimal(15, 2)
+  creditHistory         String?                @db.Text
   employmentDuration    Int? // in months
-  averageBalance        Decimal? @db.Decimal(15, 2)
-  status                Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  averageBalance        Decimal?               @db.Decimal(15, 2)
+  status                Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
   scoringInputSnapshot  ScoringInputSnapshot[]
 
   @@map("account_details")
 }
 
 model PaystackMerchantTransferRecipient {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   merchantId    String?
   merchant      Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   buyerId       String?
-  buyer         Buyer? @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  buyer         Buyer?    @relation(fields: [buyerId], references: [id], onDelete: SetNull)
   recipientId   String?
-  recipientCode String   @unique
+  recipientCode String    @unique
   bankCode      String
   bankName      String
   accountNumber String
   accountName   String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@map("paystack_merchant_transfer_recipient")
 }
@@ -1053,17 +1051,17 @@ enum PersonaInquiryStatus {
   Pending
   Expired
 }
-model PersonaInquiry {
-  id String @id @default(uuid())
-  inquiryId String @unique
-  inquiryTemplateId String
-  buyerId String
-  buyer Buyer @relation(fields: [buyerId], references: [id])
-  status PersonaInquiryStatus @default(Created)
-  response Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
+model PersonaInquiry {
+  id                String               @id @default(uuid())
+  inquiryId         String               @unique
+  inquiryTemplateId String
+  buyerId           String
+  buyer             Buyer                @relation(fields: [buyerId], references: [id])
+  status            PersonaInquiryStatus @default(Created)
+  response          Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   @@map("persona_inquiry")
 }
@@ -1080,44 +1078,44 @@ enum PaymentMethodType {
 }
 
 model StripeMandate {
-  id              String              @id @default(uuid())
-  customerId      String
-  paymentMethodId String?
+  id                String              @id @default(uuid())
+  customerId        String
+  paymentMethodId   String?
   paymentMethodType String?
-  setupIntentId   String?
-  name            String?
-  email           String?
-  invoiceId       String?
-  invoice         Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  loanId          String?
-  loan            Loan?               @relation(fields: [loanId], references: [id], onDelete: SetNull)
-  buyerId         String?
-  buyer           Buyer?              @relation(fields: [buyerId], references: [id], onDelete: SetNull)
-  signed          Boolean             @default(false)
-  status          StripeMandateStatus @default(Active)
-  metadata        Json?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  setupIntentId     String?
+  name              String?
+  email             String?
+  invoiceId         String?
+  invoice           Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  loanId            String?
+  loan              Loan?               @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  buyerId           String?
+  buyer             Buyer?              @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  signed            Boolean             @default(false)
+  status            StripeMandateStatus @default(Active)
+  metadata          Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   @@index([customerId])
   @@map("stripe_mandate")
 }
 
 model PlaidAccount {
-  id String @id @default(uuid())
-  userId String @unique
-  buyerId String?
-  buyer Buyer? @relation(fields: [buyerId], references: [id])
-  linkToken String?
-  expiration DateTime?
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  buyerId     String?
+  buyer       Buyer?    @relation(fields: [buyerId], references: [id])
+  linkToken   String?
+  expiration  DateTime?
   publicToken String?
   accessToken String?
   plaidUserId String?
-  userToken String?
-  itemId String?
-  requestId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userToken   String?
+  itemId      String?
+  requestId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([userId])
   @@index([buyerId])

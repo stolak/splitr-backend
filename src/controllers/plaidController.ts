@@ -461,3 +461,81 @@ export async function createIdentityVerificationLinkToken(
     return res.status(400).json({ message });
   }
 }
+
+/**
+ * @openapi
+ * /api/v1/plaid/identity-verification/sync:
+ *   post:
+ *     summary: Sync Plaid Identity Verification to buyer
+ *     description: >
+ *       Fetches the buyer's Plaid Identity Verification using plaidIdentityVerificationId
+ *       and updates buyer profile fields. Sets isVerified when kyc_check.status is success.
+ *       Accepts an optional buyerId; otherwise uses the authenticated user's buyer.
+ *     tags: [Plaid]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               buyerId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       200:
+ *         description: Identity verification synced
+ *       401:
+ *         description: Unauthorized
+ *       400:
+ *         description: Validation or Plaid error
+ */
+export async function syncIdentityVerification(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const buyerId =
+      (typeof req.body?.buyerId === "string" && req.body.buyerId) ||
+      (typeof req.query.buyerId === "string" ? req.query.buyerId : undefined);
+
+    const isAdmin =
+      req.user?.userType === "Admin" ||
+      req.user?.role === "Admin" ||
+      req.user?.role === "SuperAdmin";
+
+    const result = await plaidService.syncIdentityVerification({
+      userId,
+      buyerId,
+      isAdmin,
+    });
+
+    return res.status(200).json({
+      updated: result.updated,
+      isVerified: result.isVerified,
+      buyer: result.buyer,
+      verification: {
+        id: result.verification.id,
+        status: result.verification.status,
+        completedAt: result.verification.completed_at,
+        kycCheck: result.verification.kyc_check,
+        steps: result.verification.steps,
+        user: result.verification.user,
+      },
+    });
+  } catch (error: any) {
+    const message = error?.message || "Failed to sync identity verification";
+    const status =
+      message === "Unauthorized to sync this buyer"
+        ? 403
+        : message === "Buyer not found"
+          ? 404
+          : 400;
+    return res.status(status).json({ message });
+  }
+}
