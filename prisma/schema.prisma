@@ -261,6 +261,7 @@ model Buyer {
   personaInquiries                  PersonaInquiry[]
   plaidAccounts                     PlaidAccount[]
   stripeMandates                    StripeMandate[]
+  stripeCards                       StripeCard[]
   plaidIdentityVerificationId       String?
   createdAt                         DateTime                            @default(now())
   updatedAt                         DateTime                            @updatedAt
@@ -1099,6 +1100,23 @@ model StripeMandate {
 
   @@index([customerId])
   @@map("stripe_mandate")
+}
+
+model StripeCard {
+  id                 String   @id @default(uuid())
+  stripeCardholderId String?  @db.VarChar(100)
+  stripeCardId       String?  @db.VarChar(100)
+  allocatedAmount    Int?
+  currency           String?  @db.VarChar(10)
+  used               Boolean  @default(false)
+  buyerId            String?
+  buyer              Buyer?   @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  createdAt          DateTime @default(now())
+
+  @@index([buyerId])
+  @@index([stripeCardId])
+  @@index([stripeCardholderId])
+  @@map("stripe_card")
 }
 
 model PlaidAccount {

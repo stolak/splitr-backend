@@ -112,6 +112,20 @@ export interface GetBalanceInput {
   merchantId?: string;
 }
 
+export interface CreateVirtualCardInput {
+  buyerId: string;
+  amountCents: number;
+  currency?: string;
+  billing?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
+}
+
 export class StripeService {
   /**
    * Create a Stripe customer
@@ -806,6 +820,109 @@ export class StripeService {
       amount: paymentIntent.amount,
       currency: paymentIntent.currency,
       paymentIntent,
+    };
+  }
+
+  /**
+   * Create a Stripe Issuing virtual card for a buyer with an allocated spending limit.
+   */
+  async createVirtualCard(input: CreateVirtualCardInput) {
+    if (!input.buyerId) {
+      throw new Error("buyerId is required");
+    }
+
+    if (!input.amountCents || input.amountCents <= 0) {
+      throw new Error("A positive amountCents is required");
+    }
+
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: input.buyerId },
+    });
+
+    if (!buyer) {
+      throw new Error("Buyer not found");
+    }
+
+    const name =
+      [buyer.firstName, buyer.lastName].filter(Boolean).join(" ").trim() || buyer.email;
+    const email = buyer.email;
+    const currency = (input.currency || STRIPE_DEFAULT_CURRENCY).toLowerCase();
+    const country = (
+      input.billing?.country ||
+      STRIPE_CONNECT_COUNTRY ||
+      "CA"
+    ).toUpperCase();
+
+    const line1 =
+      input.billing?.line1 ||
+      buyer.address ||
+      [buyer.houseNo, buyer.address].filter(Boolean).join(" ").trim();
+    const city = input.billing?.city || buyer.city;
+    const state = input.billing?.state || buyer.province || buyer.state;
+    const postalCode = input.billing?.postalCode || buyer.postalCode;
+
+    if (!line1 || !city || !state || !postalCode) {
+      throw new Error(
+        "Buyer billing address is incomplete. Provide billing.line1, city, state, and postalCode."
+      );
+    }
+
+    const cardholder = await getStripe().issuing.cardholders.create({
+      name,
+      email,
+      type: "individual",
+      billing: {
+        address: {
+          line1,
+          ...(input.billing?.line2 || buyer.houseNo
+            ? { line2: input.billing?.line2 || buyer.houseNo || undefined }
+            : {}),
+          city,
+          state,
+          postal_code: postalCode,
+          country,
+        },
+      },
+      ...(buyer.phoneNumber ? { phone_number: buyer.phoneNumber } : {}),
+    });
+
+    const card = await getStripe().issuing.cards.create({
+      cardholder: cardholder.id,
+      currency,
+      type: "virtual",
+      status: "active",
+      spending_controls: {
+        spending_limits: [
+          {
+            amount: Math.round(input.amountCents),
+            interval: "all_time",
+          },
+        ],
+      },
+    });
+
+    const stripeCard = await prisma.stripeCard.create({
+      data: {
+        stripeCardholderId: cardholder.id,
+        stripeCardId: card.id,
+        allocatedAmount: Math.round(input.amountCents),
+        currency,
+        used: false,
+        buyerId: buyer.id,
+      },
+    });
+
+    return {
+      id: stripeCard.id,
+      stripeCardholderId: cardholder.id,
+      stripeCardId: card.id,
+      allocatedAmount: stripeCard.allocatedAmount,
+      currency: stripeCard.currency,
+      used: stripeCard.used,
+      buyerId: stripeCard.buyerId,
+      createdAt: stripeCard.createdAt,
+      cardholder,
+      card,
     };
   }
 }

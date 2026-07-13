@@ -1330,3 +1330,127 @@ export async function getBalance(req: Request, res: Response) {
     return res.status(400).json({ message });
   }
 }
+
+/**
+ * @openapi
+ * /api/v1/stripe/virtual-cards:
+ *   post:
+ *     summary: Create a Stripe Issuing virtual card
+ *     description: >
+ *       Creates an Issuing cardholder and virtual card for a buyer, with an all-time
+ *       spending limit equal to amountCents. Persists a StripeCard record.
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amountCents
+ *             properties:
+ *               amountCents:
+ *                 type: integer
+ *                 description: Allocated spending limit in cents
+ *                 example: 5000
+ *               currency:
+ *                 type: string
+ *                 example: cad
+ *               buyerId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Defaults to the authenticated buyer's ID
+ *               billing:
+ *                 type: object
+ *                 properties:
+ *                   line1:
+ *                     type: string
+ *                   line2:
+ *                     type: string
+ *                   city:
+ *                     type: string
+ *                   state:
+ *                     type: string
+ *                   postalCode:
+ *                     type: string
+ *                   country:
+ *                     type: string
+ *                     example: CA
+ *     responses:
+ *       201:
+ *         description: Virtual card created
+ *       400:
+ *         description: Validation or Stripe error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+export async function createVirtualCard(req: Request, res: Response) {
+  try {
+    const user = req.user;
+
+    if (!user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const { amountCents, currency, buyerId: requestedBuyerId, billing } = req.body || {};
+
+    if (amountCents === undefined) {
+      return res.status(400).json({ message: "amountCents is required" });
+    }
+
+    const isAdmin =
+      user.userType?.toUpperCase() === "ADMIN" ||
+      user.role === "Admin" ||
+      user.role === "SuperAdmin";
+
+    let buyerId = requestedBuyerId as string | undefined;
+
+    if (!buyerId) {
+      if (user.userType?.toUpperCase() !== "BUYER" && !isAdmin) {
+        return res.status(403).json({
+          message: "Only buyers or admins can create virtual cards",
+        });
+      }
+
+      const buyer = await prisma.buyer.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+      buyerId = buyer?.id;
+    } else if (!isAdmin && user.userType?.toUpperCase() === "BUYER") {
+      const buyer = await prisma.buyer.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+
+      if (!buyer || buyer.id !== buyerId) {
+        return res.status(403).json({
+          message: "buyerId does not match authenticated buyer",
+        });
+      }
+    }
+
+    if (!buyerId) {
+      return res.status(400).json({ message: "buyerId is required" });
+    }
+
+    const result = await stripeService.createVirtualCard({
+      buyerId,
+      amountCents: Number(amountCents),
+      currency,
+      billing,
+    });
+
+    return res.status(201).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to create virtual card";
+    if (message === "Buyer not found") {
+      return res.status(404).json({ message });
+    }
+    return res.status(400).json({ message });
+  }
+}

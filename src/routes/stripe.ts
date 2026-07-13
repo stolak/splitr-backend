@@ -18,6 +18,7 @@ import {
   confirmPaymentIntent,
   listPaymentIntents,
   createSetupIntent,
+  createVirtualCard,
   getMandate,
   getSetupIntent,
   listMandates,
@@ -37,6 +38,7 @@ router.post("/mandates/complete", completeMandate);
 router.get("/mandates", listMandates);
 router.get("/mandates/:mandateId", getMandate);
 router.post("/mandates/charge", chargeMandate);
+router.post("/virtual-cards", authenticateJWT, createVirtualCard);
 router.get("/balance", authenticateJWT, getBalance);
 router.post("/connect/accounts", authenticateJWT, createConnectAccount);
 router.get("/connect/accounts", authenticateJWT, listConnectAccounts);
