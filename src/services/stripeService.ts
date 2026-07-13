@@ -3,7 +3,7 @@ import { DocumentStatus, MerchantStatus, Prisma, StripeMandateStatus } from "@pr
 import prisma from "../utils/prisma";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-const STRIPE_DEFAULT_CURRENCY = process.env.STRIPE_DEFAULT_CURRENCY || "usd";
+const STRIPE_DEFAULT_CURRENCY = process.env.STRIPE_DEFAULT_CURRENCY || "cad";
 const STRIPE_CONNECT_COUNTRY = process.env.STRIPE_CONNECT_COUNTRY || "CA";
 const STRIPE_CONNECT_REFRESH_URL = process.env.FRONTEND_URL + "/merchant/onboarding";
 const STRIPE_CONNECT_RETURN_URL = process.env.FRONTEND_URL + "/merchant/onboarding";
@@ -58,6 +58,18 @@ export interface CreatePaymentIntentInput {
   description?: string;
 }
 
+export interface ConfirmPaymentIntentInput {
+  paymentIntentId: string;
+  paymentMethodId?: string;
+  returnUrl?: string;
+}
+
+export interface ListPaymentIntentsInput {
+  limit?: number;
+  startingAfter?: string;
+  customerId?: string;
+}
+
 export interface CreateConnectAccountInput {
   merchantId: string;
   country?: string;
@@ -85,6 +97,19 @@ export interface ListConnectAccountsInput {
 export interface SyncMerchantConnectAccountInput {
   merchantId: string;
   accountId: string;
+}
+
+export interface CreatePayoutInput {
+  connectedAccountId?: string;
+  merchantId?: string;
+  amount: number;
+  currency?: string;
+  description?: string;
+}
+
+export interface GetBalanceInput {
+  connectedAccountId?: string;
+  merchantId?: string;
 }
 
 export class StripeService {
@@ -354,13 +379,106 @@ export class StripeService {
   }
 
   /**
+   * Create a payout from a Stripe Connect account balance to its external bank account.
+   * Accepts a connected account ID directly, or resolves it from merchantId.
+   */
+  async createPayout(input: CreatePayoutInput) {
+    if (!input.amount || input.amount <= 0) {
+      throw new Error("A positive amount is required");
+    }
+
+    let connectedAccountId = input.connectedAccountId;
+
+    if (!connectedAccountId) {
+      if (!input.merchantId) {
+        throw new Error("connectedAccountId or merchantId is required");
+      }
+
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: input.merchantId },
+        select: { id: true, stripeConnectAccountId: true },
+      });
+
+      if (!merchant) {
+        throw new Error("Merchant not found");
+      }
+
+      if (!merchant.stripeConnectAccountId) {
+        throw new Error("Merchant has no Stripe Connect account");
+      }
+
+      connectedAccountId = merchant.stripeConnectAccountId;
+    }
+
+    const payout = await getStripe().payouts.create(
+      {
+        amount: Math.round(input.amount * 100),
+        currency: input.currency || STRIPE_DEFAULT_CURRENCY,
+        ...(input.description ? { description: input.description } : {}),
+      },
+      {
+        stripeAccount: connectedAccountId,
+      }
+    );
+
+    return {
+      payoutId: payout.id,
+      amount: payout.amount,
+      currency: payout.currency,
+      status: payout.status,
+      arrivalDate: payout.arrival_date,
+      connectedAccountId,
+      payout,
+    };
+  }
+
+  /**
+   * Retrieve Stripe balance for the platform, or for a Connect account when provided.
+   */
+  async getBalance(input: GetBalanceInput = {}) {
+    let connectedAccountId = input.connectedAccountId;
+
+    if (!connectedAccountId && input.merchantId) {
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: input.merchantId },
+        select: { id: true, stripeConnectAccountId: true },
+      });
+
+      if (!merchant) {
+        throw new Error("Merchant not found");
+      }
+
+      if (!merchant.stripeConnectAccountId) {
+        throw new Error("Merchant has no Stripe Connect account");
+      }
+
+      connectedAccountId = merchant.stripeConnectAccountId;
+    }
+
+    const balance = connectedAccountId
+      ? await getStripe().balance.retrieve({}, { stripeAccount: connectedAccountId })
+      : await getStripe().balance.retrieve();
+
+    return {
+      available: balance.available,
+      pending: balance.pending,
+      connectReserved: balance.connect_reserved ?? [],
+      instantAvailable: balance.instant_available ?? [],
+      livemode: balance.livemode,
+      connectedAccountId: connectedAccountId ?? null,
+      balance,
+    };
+  }
+
+  /**
    * Create a one-off payment intent with automatic payment methods enabled
    */
   async createPaymentIntent(input: CreatePaymentIntentInput) {
     if (!input.amount || input.amount <= 0) {
       throw new Error("A positive amount is required");
     }
-
+    console.log(input.amount);
+    console.log(input.currency);
     const paymentIntent = await getStripe().paymentIntents.create({
       amount: input.amount,
       currency: input.currency || STRIPE_DEFAULT_CURRENCY,
@@ -373,6 +491,54 @@ export class StripeService {
     return {
       paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
+    };
+  }
+
+  /**
+   * Confirm an existing PaymentIntent.
+   */
+  async confirmPaymentIntent(input: ConfirmPaymentIntentInput) {
+    if (!input.paymentIntentId) {
+      throw new Error("paymentIntentId is required");
+    }
+
+    const paymentIntent = await getStripe().paymentIntents.confirm(
+      input.paymentIntentId,
+      {
+        ...(input.paymentMethodId ? { payment_method: input.paymentMethodId } : {}),
+        ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
+      }
+    );
+
+    return {
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntent,
+    };
+  }
+
+  /**
+   * List Stripe PaymentIntents.
+   */
+  async listPaymentIntents(input: ListPaymentIntentsInput = {}) {
+    const limit = input.limit ?? 10;
+
+    if (limit < 1 || limit > 100) {
+      throw new Error("limit must be between 1 and 100");
+    }
+
+    const paymentIntents = await getStripe().paymentIntents.list({
+      limit,
+      ...(input.startingAfter ? { starting_after: input.startingAfter } : {}),
+      ...(input.customerId ? { customer: input.customerId } : {}),
+    });
+
+    return {
+      data: paymentIntents.data,
+      hasMore: paymentIntents.has_more,
     };
   }
 

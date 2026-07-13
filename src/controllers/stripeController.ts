@@ -418,6 +418,118 @@ export async function createPaymentIntent(req: Request, res: Response) {
 
 /**
  * @openapi
+ * /api/v1/stripe/confirm-intent:
+ *   post:
+ *     summary: Confirm a payment intent
+ *     description: Confirms an existing Stripe PaymentIntent by ID.
+ *     tags: [Stripe]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - paymentIntentId
+ *             properties:
+ *               paymentIntentId:
+ *                 type: string
+ *                 example: pi_abc123
+ *               paymentMethodId:
+ *                 type: string
+ *                 description: Optional payment method to attach/confirm with
+ *                 example: pm_abc123
+ *               returnUrl:
+ *                 type: string
+ *                 description: Required by some payment methods that need redirect confirmation
+ *     responses:
+ *       200:
+ *         description: Payment intent confirmed
+ *       400:
+ *         description: Validation or Stripe error
+ */
+export async function confirmPaymentIntent(req: Request, res: Response) {
+  try {
+    const { paymentIntentId, paymentMethodId, returnUrl } = req.body || {};
+
+    if (!paymentIntentId) {
+      return res.status(400).json({ message: "paymentIntentId is required" });
+    }
+
+    const result = await stripeService.confirmPaymentIntent({
+      paymentIntentId,
+      paymentMethodId,
+      returnUrl,
+    });
+
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to confirm payment intent";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/payment-intents:
+ *   get:
+ *     summary: List Stripe payment intents
+ *     description: Returns a paginated list of PaymentIntents from Stripe.
+ *     tags: [Stripe]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *           minimum: 1
+ *           maximum: 100
+ *       - in: query
+ *         name: startingAfter
+ *         schema:
+ *           type: string
+ *         description: PaymentIntent ID cursor for pagination
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *         description: Optional Stripe customer ID filter
+ *     responses:
+ *       200:
+ *         description: Payment intents listed
+ *       400:
+ *         description: Validation or Stripe error
+ */
+export async function listPaymentIntents(req: Request, res: Response) {
+  try {
+    const limit =
+      req.query.limit !== undefined ? Number(req.query.limit) : undefined;
+    const startingAfter =
+      typeof req.query.startingAfter === "string"
+        ? req.query.startingAfter
+        : undefined;
+    const customerId =
+      typeof req.query.customerId === "string" ? req.query.customerId : undefined;
+
+    if (limit !== undefined && Number.isNaN(limit)) {
+      return res.status(400).json({ message: "limit must be a number" });
+    }
+
+    const result = await stripeService.listPaymentIntents({
+      limit,
+      startingAfter,
+      customerId,
+    });
+
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to list payment intents";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
  * /api/v1/stripe/mandates/complete:
  *   post:
  *     summary: Complete and store a Stripe mandate
@@ -1024,6 +1136,195 @@ export async function syncMerchantConnectAccount(req: Request, res: Response) {
       return res.status(404).json({ message });
     }
     if (error?.code === "resource_missing" || error?.statusCode === 404) {
+      return res.status(404).json({ message });
+    }
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/payouts:
+ *   post:
+ *     summary: Create a payout from a Stripe Connect account
+ *     description: >
+ *       Pays out funds from a connected account's Stripe balance to its linked bank account.
+ *       Provide connectedAccountId directly, or merchantId (defaults to the authenticated merchant).
+ *       Amount is in the smallest currency unit (e.g. cents).
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: integer
+ *                 description: Amount in smallest currency unit (e.g. cents)
+ *                 example: 1000
+ *               currency:
+ *                 type: string
+ *                 example: usd
+ *               connectedAccountId:
+ *                 type: string
+ *                 description: Stripe Connect account ID (acct_...)
+ *                 example: acct_1Tqr1K213KwDOd5a
+ *               merchantId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Used to resolve stripeConnectAccountId when connectedAccountId is omitted
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Payout created
+ *       400:
+ *         description: Validation or Stripe error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+export async function createPayout(req: Request, res: Response) {
+  try {
+    const {
+      amount,
+      currency,
+      description,
+      connectedAccountId,
+      merchantId: requestedMerchantId,
+    } = req.body || {};
+
+    if (amount === undefined) {
+      return res.status(400).json({ message: "amount is required" });
+    }
+
+    let merchantId: string | undefined;
+
+    if (!connectedAccountId) {
+      const resolved = resolveMerchantId(req, requestedMerchantId);
+
+      if ("error" in resolved && resolved.error) {
+        return res.status(resolved.error.status).json({ message: resolved.error.message });
+      }
+
+      merchantId = resolved.merchantId;
+    } else if (!req.user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const result = await stripeService.createPayout({
+      amount: Number(amount),
+      currency,
+      description,
+      connectedAccountId,
+      merchantId,
+    });
+
+    return res.status(201).json({
+      payoutId: result.payoutId,
+      amount: result.amount,
+      currency: result.currency,
+      status: result.status,
+      arrivalDate: result.arrivalDate,
+      connectedAccountId: result.connectedAccountId,
+      payout: result.payout,
+    });
+  } catch (error: any) {
+    const message = error?.message || "Failed to create payout";
+    if (message === "Merchant not found") {
+      return res.status(404).json({ message });
+    }
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/balance:
+ *   get:
+ *     summary: Retrieve Stripe balance
+ *     description: >
+ *       Returns available and pending balance. Without query params, returns the platform balance.
+ *       Pass connectedAccountId or merchantId to retrieve a Connect account balance.
+ *       Authenticated merchants default to their own Connect account balance.
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: connectedAccountId
+ *         schema:
+ *           type: string
+ *         description: Stripe Connect account ID (acct_...)
+ *       - in: query
+ *         name: merchantId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Resolves stripeConnectAccountId from the merchant when connectedAccountId is omitted
+ *     responses:
+ *       200:
+ *         description: Balance retrieved
+ *       400:
+ *         description: Validation or Stripe error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+export async function getBalance(req: Request, res: Response) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const connectedAccountId =
+      typeof req.query.connectedAccountId === "string"
+        ? req.query.connectedAccountId
+        : undefined;
+    const requestedMerchantId =
+      typeof req.query.merchantId === "string" ? req.query.merchantId : undefined;
+
+    let merchantId: string | undefined;
+
+    if (!connectedAccountId && requestedMerchantId) {
+      const resolved = resolveMerchantId(req, requestedMerchantId);
+
+      if ("error" in resolved && resolved.error) {
+        return res.status(resolved.error.status).json({ message: resolved.error.message });
+      }
+
+      merchantId = resolved.merchantId;
+    } else if (!connectedAccountId && req.user.userType?.toUpperCase() === "MERCHANT") {
+      const resolved = resolveMerchantId(req);
+
+      if (!("error" in resolved && resolved.error)) {
+        merchantId = resolved.merchantId;
+      }
+    }
+
+    const result = await stripeService.getBalance({
+      connectedAccountId,
+      merchantId,
+    });
+
+    return res.status(200).json({
+      available: result.available,
+      pending: result.pending,
+      connectReserved: result.connectReserved,
+      instantAvailable: result.instantAvailable,
+      livemode: result.livemode,
+      connectedAccountId: result.connectedAccountId,
+    });
+  } catch (error: any) {
+    const message = error?.message || "Failed to retrieve balance";
+    if (message === "Merchant not found") {
       return res.status(404).json({ message });
     }
     return res.status(400).json({ message });
