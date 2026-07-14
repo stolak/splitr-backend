@@ -8,6 +8,7 @@ import {
   createCustomer,
   createMerchantConnectOnboarding,
   createPayout,
+  createTransfer,
   getBalance,
   getConnectAccount,
   listConnectAccounts,
@@ -47,5 +48,6 @@ router.post("/connect/sync-merchant", authenticateJWT, syncMerchantConnectAccoun
 router.post("/connect/account-links", authenticateJWT, createConnectAccountLink);
 router.post("/connect/onboarding", authenticateJWT, createMerchantConnectOnboarding);
 router.post("/connect/payouts", authenticateJWT, createPayout);
+router.post("/connect/transfers", authenticateJWT, createTransfer);
 
 export default router;

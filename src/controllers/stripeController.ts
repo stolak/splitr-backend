@@ -1233,10 +1233,115 @@ export async function createPayout(req: Request, res: Response) {
       status: result.status,
       arrivalDate: result.arrivalDate,
       connectedAccountId: result.connectedAccountId,
+      availableBalance: result.availableBalance,
       payout: result.payout,
     });
   } catch (error: any) {
     const message = error?.message || "Failed to create payout";
+    if (message === "Merchant not found") {
+      return res.status(404).json({ message });
+    }
+    if (message.startsWith("Insufficient available balance")) {
+      return res.status(400).json({ message });
+    }
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/stripe/connect/transfers:
+ *   post:
+ *     summary: Transfer funds to a Stripe Connect account
+ *     description: >
+ *       Moves funds from the platform Stripe balance to a connected account.
+ *       Provide connectedAccountId or merchantId. Amount is in cents.
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: integer
+ *                 description: Amount in smallest currency unit (e.g. cents)
+ *                 example: 10000
+ *               currency:
+ *                 type: string
+ *                 example: cad
+ *               connectedAccountId:
+ *                 type: string
+ *                 example: acct_1Tqr1K213KwDOd5a
+ *               merchantId:
+ *                 type: string
+ *                 format: uuid
+ *               description:
+ *                 type: string
+ *                 example: Settlement for Order #123
+ *     responses:
+ *       201:
+ *         description: Transfer created
+ *       400:
+ *         description: Validation or Stripe error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+export async function createTransfer(req: Request, res: Response) {
+  try {
+    const {
+      amount,
+      currency,
+      description,
+      connectedAccountId,
+      merchantId: requestedMerchantId,
+    } = req.body || {};
+
+    if (amount === undefined) {
+      return res.status(400).json({ message: "amount is required" });
+    }
+
+    let merchantId: string | undefined;
+
+    if (!connectedAccountId) {
+      const resolved = resolveMerchantId(req, requestedMerchantId);
+
+      if ("error" in resolved && resolved.error) {
+        return res.status(resolved.error.status).json({ message: resolved.error.message });
+      }
+
+      merchantId = resolved.merchantId;
+    } else if (!req.user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const result = await stripeService.createTransfer({
+      amount: Number(amount),
+      currency,
+      description,
+      connectedAccountId,
+      merchantId,
+    });
+
+    return res.status(201).json({
+      transferId: result.transferId,
+      amount: result.amount,
+      currency: result.currency,
+      destination: result.destination,
+      description: result.description,
+      created: result.created,
+      availableBalance: result.availableBalance,
+      transfer: result.transfer,
+    });
+  } catch (error: any) {
+    const message = error?.message || "Failed to create transfer";
     if (message === "Merchant not found") {
       return res.status(404).json({ message });
     }

@@ -107,6 +107,14 @@ export interface CreatePayoutInput {
   description?: string;
 }
 
+export interface CreateTransferInput {
+  connectedAccountId?: string;
+  merchantId?: string;
+  amount: number;
+  currency?: string;
+  description?: string;
+}
+
 export interface GetBalanceInput {
   connectedAccountId?: string;
   merchantId?: string;
@@ -424,10 +432,30 @@ export class StripeService {
       connectedAccountId = merchant.stripeConnectAccountId;
     }
 
+    const currency = (input.currency || STRIPE_DEFAULT_CURRENCY).toLowerCase();
+    const amountCents = Math.round(input.amount * 100);
+    const platformBalanceResult = await this.getBalance({});
+
+    const availableForCurrencyOnPlatform = platformBalanceResult.available
+      .filter((entry) => entry.currency.toLowerCase() === currency)
+      .reduce((sum, entry) => sum + entry.amount, 0);
+
+    if (availableForCurrencyOnPlatform < amountCents) {
+      throw new Error(
+        `Insufficient available balance. Requested ${amountCents} ${currency} cents, available ${availableForCurrencyOnPlatform} ${currency} cents.`
+      );
+    }
+    await getStripe().transfers.create({
+      amount: amountCents,
+      currency,
+      destination: connectedAccountId,
+      ...(input.description ? { description: input.description } : {}),
+    });
+
     const payout = await getStripe().payouts.create(
       {
-        amount: Math.round(input.amount * 100),
-        currency: input.currency || STRIPE_DEFAULT_CURRENCY,
+        amount: amountCents,
+        currency,
         ...(input.description ? { description: input.description } : {}),
       },
       {
@@ -442,7 +470,72 @@ export class StripeService {
       status: payout.status,
       arrivalDate: payout.arrival_date,
       connectedAccountId,
+      availableBalance: availableForCurrencyOnPlatform,
       payout,
+    };
+  }
+
+  /**
+   * Transfer funds from the platform balance to a Connect account.
+   * Amount is in the smallest currency unit (e.g. cents).
+   */
+  async createTransfer(input: CreateTransferInput) {
+    if (!input.amount || input.amount <= 0) {
+      throw new Error("A positive amount is required");
+    }
+
+    let connectedAccountId = input.connectedAccountId;
+
+    if (!connectedAccountId) {
+      if (!input.merchantId) {
+        throw new Error("connectedAccountId or merchantId is required");
+      }
+
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: input.merchantId },
+        select: { id: true, stripeConnectAccountId: true },
+      });
+
+      if (!merchant) {
+        throw new Error("Merchant not found");
+      }
+
+      if (!merchant.stripeConnectAccountId) {
+        throw new Error("Merchant has no Stripe Connect account");
+      }
+
+      connectedAccountId = merchant.stripeConnectAccountId;
+    }
+
+    const currency = (input.currency || STRIPE_DEFAULT_CURRENCY).toLowerCase();
+    const amountCents = Math.round(input.amount);
+    const platformBalanceResult = await this.getBalance({});
+    const availableForCurrencyOnPlatform = platformBalanceResult.available
+      .filter((entry) => entry.currency.toLowerCase() === currency)
+      .reduce((sum, entry) => sum + entry.amount, 0);
+
+    if (availableForCurrencyOnPlatform < amountCents) {
+      throw new Error(
+        `Insufficient available balance. Requested ${amountCents} ${currency} cents, available ${availableForCurrencyOnPlatform} ${currency} cents.`
+      );
+    }
+
+    const transfer = await getStripe().transfers.create({
+      amount: amountCents,
+      currency,
+      destination: connectedAccountId,
+      ...(input.description ? { description: input.description } : {}),
+    });
+
+    return {
+      transferId: transfer.id,
+      amount: transfer.amount,
+      currency: transfer.currency,
+      destination: transfer.destination,
+      description: transfer.description,
+      created: transfer.created,
+      availableBalance: availableForCurrencyOnPlatform,
+      transfer,
     };
   }
 
@@ -491,8 +584,6 @@ export class StripeService {
     if (!input.amount || input.amount <= 0) {
       throw new Error("A positive amount is required");
     }
-    console.log(input.amount);
-    console.log(input.currency);
     const paymentIntent = await getStripe().paymentIntents.create({
       amount: input.amount,
       currency: input.currency || STRIPE_DEFAULT_CURRENCY,
@@ -516,13 +607,10 @@ export class StripeService {
       throw new Error("paymentIntentId is required");
     }
 
-    const paymentIntent = await getStripe().paymentIntents.confirm(
-      input.paymentIntentId,
-      {
-        ...(input.paymentMethodId ? { payment_method: input.paymentMethodId } : {}),
-        ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
-      }
-    );
+    const paymentIntent = await getStripe().paymentIntents.confirm(input.paymentIntentId, {
+      ...(input.paymentMethodId ? { payment_method: input.paymentMethodId } : {}),
+      ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
+    });
 
     return {
       paymentIntentId: paymentIntent.id,
@@ -843,15 +931,10 @@ export class StripeService {
       throw new Error("Buyer not found");
     }
 
-    const name =
-      [buyer.firstName, buyer.lastName].filter(Boolean).join(" ").trim() || buyer.email;
+    const name = [buyer.firstName, buyer.lastName].filter(Boolean).join(" ").trim() || buyer.email;
     const email = buyer.email;
     const currency = (input.currency || STRIPE_DEFAULT_CURRENCY).toLowerCase();
-    const country = (
-      input.billing?.country ||
-      STRIPE_CONNECT_COUNTRY ||
-      "CA"
-    ).toUpperCase();
+    const country = (input.billing?.country || STRIPE_CONNECT_COUNTRY || "CA").toUpperCase();
 
     const line1 =
       input.billing?.line1 ||
