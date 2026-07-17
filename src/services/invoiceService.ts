@@ -11,6 +11,8 @@ import {
   LoanReturnStatus,
   PaystackTransferStatus,
   LoanInstallmentType,
+  TransactionType,
+  RevenueStatus,
 } from "@prisma/client";
 import { loanService } from "./loanService";
 import { LoanSettingService } from "./loanSettingService";
@@ -26,7 +28,7 @@ import { buyerService } from "./buyerService";
 import { paystackMerchantTransferRecipientService } from "./paystackMerchantTransferRecipientService";
 import { paystackTransferService } from "./paystackTransferService";
 import { paystackService } from "./paystackService";
-
+export const FIRST_INSTALLMENT_NOW = process.env.FIRST_INSTALLMENT_NOW === "true";
 const loanSettingService = new LoanSettingService();
 const merchantTransactionService = new MerchantTransactionService();
 const revenueService = new RevenueService();
@@ -164,7 +166,10 @@ export class InvoiceService {
       if (!input.items || input.items.length === 0) {
         throw new Error("Invoice must have at least one item");
       }
-
+      const amount =
+        input.items.length > 0
+          ? input.items.reduce((acc: number, item: CreateItemInput) => acc + item.amount, 0)
+          : input.amount;
       // Create invoice with items
       const invoice = await prisma.invoice.create({
         data: {
@@ -174,7 +179,7 @@ export class InvoiceService {
           customerPhoneNumber: input.customerPhoneNumber,
           dueDate: new Date(input.dueDate),
           note: input.note,
-          amount: input.amount,
+          amount: amount,
           buyerId: input.buyerId,
           merchantId: input.merchantId,
           status: input.status || InvoiceStatus.Pending,
@@ -1997,10 +2002,36 @@ export class InvoiceService {
     if (!loanResult.success) {
       throw new Error(loanResult.error || "Failed to create loan");
     }
+    // if FIRST_INSTALLMENT_NOW is true, Make the first installment payment now
+    //TODO: Implement this
+    // if (FIRST_INSTALLMENT_NOW) {
+    //   await this.makeFirstInstallmentPayment(loanResult.data?.id as string);
+    // }
 
+    // credit merchant wallet with the invoice amount
+    // TODO: Implement this
+    await merchantTransactionService.createMerchantTransaction({
+      merchantId: invoice.merchantId ?? "",
+      invoiceRef: invoice.id,
+      credit: Number(invoice.amount),
+      debit: 0,
+      transactionType: MerchantTransactionType.Credit,
+      description: "Loan invoice created and paid",
+      status: TransactionStatus.Completed,
+      transactionDate: new Date(),
+    });
+    await revenueService.createRevenue({
+      merchantId: invoice.merchantId ?? "",
+      credit: Number(invoice.amount),
+      debit: 0,
+      type: RevenueType.Settlement,
+      description: "Loan invoice created and paid",
+      referenceIds: [invoice.id],
+      transactionDate: new Date(),
+    });
     return {
       success: true,
-      message: "Invoice updated successfully",
+      message: "Loan invoice created successfully",
       data: {
         invoice: updatedInvoice,
         loan: loanResult.data,
