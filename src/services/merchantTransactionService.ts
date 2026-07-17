@@ -1537,7 +1537,7 @@ export class MerchantTransactionService {
         throw new Error("startDate and endDate must be valid dates");
       }
 
-      if (startDate >= endDate) {
+      if (startDate > endDate) {
         throw new Error("startDate must be before endDate");
       }
 
