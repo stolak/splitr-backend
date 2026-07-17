@@ -278,6 +278,32 @@ export class MerchantTransactionController {
   }
 
   /**
+   * Get merchant transaction stats
+   */
+  async getMerchantTransactionStats(req: Request, res: Response) {
+    try {
+      const result = await merchantTransactionService.getMerchantTransactionStats(
+        req.params.merchantId
+      );
+
+      if (result.success) {
+        return res.status(200).json(result);
+      }
+
+      if (result.error === "Merchant not found") {
+        return res.status(404).json(result);
+      }
+
+      return res.status(400).json(result);
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+
+  /**
    * Manual settlement for merchant
    */
   async manualSettlement(req: Request, res: Response) {

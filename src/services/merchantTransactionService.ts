@@ -1,6 +1,7 @@
 import {
   TransactionStatus,
   MerchantTransactionType,
+  DiscountStatus,
   RevenueType,
   PaystackTransferStatus,
   MerchantStatus,
@@ -51,9 +52,7 @@ export class MerchantTransactionService {
     try {
       // Validate credit and debit
       if (input.credit > 0 && input.debit > 0) {
-        throw new Error(
-          "Transaction cannot have both credit and debit amounts"
-        );
+        throw new Error("Transaction cannot have both credit and debit amounts");
       }
 
       if (input.credit === 0 && input.debit === 0) {
@@ -358,10 +357,7 @@ export class MerchantTransactionService {
   /**
    * Update merchant transaction
    */
-  async updateMerchantTransaction(
-    transactionId: string,
-    input: UpdateMerchantTransactionInput
-  ) {
+  async updateMerchantTransaction(transactionId: string, input: UpdateMerchantTransactionInput) {
     try {
       // Validate credit and debit if both are provided
       if (
@@ -370,9 +366,7 @@ export class MerchantTransactionService {
         input.credit > 0 &&
         input.debit > 0
       ) {
-        throw new Error(
-          "Transaction cannot have both credit and debit amounts"
-        );
+        throw new Error("Transaction cannot have both credit and debit amounts");
       }
 
       const transaction = await prisma.merchantTransaction.update({
@@ -467,14 +461,8 @@ export class MerchantTransactionService {
         },
       });
 
-      const totalCredit = transactions.reduce(
-        (sum, t) => sum + Number(t.credit),
-        0
-      );
-      const totalDebit = transactions.reduce(
-        (sum, t) => sum + Number(t.debit),
-        0
-      );
+      const totalCredit = transactions.reduce((sum, t) => sum + Number(t.credit), 0);
+      const totalDebit = transactions.reduce((sum, t) => sum + Number(t.debit), 0);
       const balance = totalCredit - totalDebit;
 
       // Group by transaction type
@@ -510,9 +498,7 @@ export class MerchantTransactionService {
         balanceByType[type].transactionCount += 1;
       });
 
-      const result = Object.values(balanceByType).filter(
-        (item) => item.transactionCount > 0
-      );
+      const result = Object.values(balanceByType).filter((item) => item.transactionCount > 0);
 
       return {
         success: true,
@@ -569,10 +555,7 @@ export class MerchantTransactionService {
       });
 
       // Group transactions by merchant
-      const transactionsByMerchant: Record<
-        string,
-        typeof allTransactions
-      > = {};
+      const transactionsByMerchant: Record<string, typeof allTransactions> = {};
 
       allTransactions.forEach((transaction) => {
         const merchantId = transaction.merchantId;
@@ -586,14 +569,8 @@ export class MerchantTransactionService {
       const merchantsWithBalances = merchants.map((merchant) => {
         const transactions = transactionsByMerchant[merchant.id] || [];
 
-        const totalCredit = transactions.reduce(
-          (sum, t) => sum + Number(t.credit),
-          0
-        );
-        const totalDebit = transactions.reduce(
-          (sum, t) => sum + Number(t.debit),
-          0
-        );
+        const totalCredit = transactions.reduce((sum, t) => sum + Number(t.credit), 0);
+        const totalDebit = transactions.reduce((sum, t) => sum + Number(t.debit), 0);
         const balance = totalCredit - totalDebit;
 
         // Group by transaction type
@@ -716,10 +693,7 @@ export class MerchantTransactionService {
         data: {
           creditByMerchant: Object.values(creditByMerchant),
           totalMerchants: Object.keys(creditByMerchant).length,
-          totalCredit: transactions.reduce(
-            (sum, t) => sum + Number(t.credit),
-            0
-          ),
+          totalCredit: transactions.reduce((sum, t) => sum + Number(t.credit), 0),
           totalTransactions: transactions.length,
         },
       };
@@ -751,10 +725,7 @@ export class MerchantTransactionService {
         },
       });
 
-      const totalCredit = transactions.reduce(
-        (sum, t) => sum + Number(t.credit),
-        0
-      );
+      const totalCredit = transactions.reduce((sum, t) => sum + Number(t.credit), 0);
 
       return {
         success: true,
@@ -827,10 +798,7 @@ export class MerchantTransactionService {
       });
 
       // Calculate total credit that was settled
-      const totalSettledCredit = updatedTransactions.reduce(
-        (sum, t) => sum + Number(t.credit),
-        0
-      );
+      const totalSettledCredit = updatedTransactions.reduce((sum, t) => sum + Number(t.credit), 0);
 
       return {
         success: true,
@@ -884,14 +852,8 @@ export class MerchantTransactionService {
       });
 
       // Calculate total unsettled revenue as difference between credit and debit
-      const totalCredit = transactions.reduce(
-        (sum, t) => sum + Number(t.credit),
-        0
-      );
-      const totalDebit = transactions.reduce(
-        (sum, t) => sum + Number(t.debit),
-        0
-      );
+      const totalCredit = transactions.reduce((sum, t) => sum + Number(t.credit), 0);
+      const totalDebit = transactions.reduce((sum, t) => sum + Number(t.debit), 0);
       const totalUnsettledRevenue = totalCredit - totalDebit;
 
       // Group by merchant if no merchantId is provided
@@ -932,9 +894,7 @@ export class MerchantTransactionService {
           totalDebit,
           transactionCount: transactions.length,
           transactions: merchantId ? transactions : undefined,
-          revenueByMerchant: !merchantId
-            ? Object.values(revenueByMerchant)
-            : undefined,
+          revenueByMerchant: !merchantId ? Object.values(revenueByMerchant) : undefined,
         },
       };
     } catch (error: any) {
@@ -955,16 +915,24 @@ export class MerchantTransactionService {
         throw new Error("Merchant charge not found");
       }
       // verify account number id inside merchant account details
-      const merchantBankAccount = merchant.banks
+      const merchantBankAccount = merchant.banks;
       if (!merchantBankAccount.some((bank) => bank.id === input.accountNumberId)) {
         throw new Error("Merchant bank account not found");
       }
-      const accountNumber = merchantBankAccount.find((bank) => bank.id === input.accountNumberId)?.accountNumber;
-      const bankCode = merchantBankAccount.find((bank) => bank.id === input.accountNumberId)?.bank.bankCode;
+      const accountNumber = merchantBankAccount.find(
+        (bank) => bank.id === input.accountNumberId
+      )?.accountNumber;
+      const bankCode = merchantBankAccount.find((bank) => bank.id === input.accountNumberId)?.bank
+        .bankCode;
       if (!accountNumber || !bankCode) {
         throw new Error("Account number or bank code not found");
       }
-      const paystackTransferRecipient = await paystackMerchantTransferRecipientService.getOrCreatePaystackMerchantTransferRecipient(input.merchantId, accountNumber, bankCode);
+      const paystackTransferRecipient =
+        await paystackMerchantTransferRecipientService.getOrCreatePaystackMerchantTransferRecipient(
+          input.merchantId,
+          accountNumber,
+          bankCode
+        );
       if (!paystackTransferRecipient.success) {
         throw new Error("Paystack transfer recipient not found");
       }
@@ -1053,7 +1021,7 @@ export class MerchantTransactionService {
       // initiate transfer to paystack
       const paystackTransferResult = await paystackService.initiateTransfer({
         source: "balance",
-        amount: balance*100,
+        amount: balance * 100,
         recipient: paystackTransferRecipient.data?.recipientCode || "RCP_39c267e3a0kpohn",
         reference: groupReference,
       });
@@ -1061,14 +1029,13 @@ export class MerchantTransactionService {
       // verify transfer status
       const paystackTransferStatus = await paystackService.verifyTransfer(groupReference);
       if (paystackTransferStatus.status && paystackTransferStatus.data.status) {
-          // update merchant transaction status to completed
-          await prisma.merchantTransaction.updateMany({
-            where: { groupReference: groupReference },
-            data: {
-              status: TransactionStatus.Completed,
-            },
-          });
-        
+        // update merchant transaction status to completed
+        await prisma.merchantTransaction.updateMany({
+          where: { groupReference: groupReference },
+          data: {
+            status: TransactionStatus.Completed,
+          },
+        });
       }
       return { success: true, data: { message: "Manual settlement initiated successfully" } };
     } catch (error: any) {
@@ -1108,63 +1075,70 @@ export class MerchantTransactionService {
   }
 
   async automaticSettlement() {
-
-
     //get all with unsettled credit
-    
-  
+
     const merchants = await this.getUnsettledCreditByMerchant();
     if (!merchants.success) {
       throw new Error("Failed to get merchants with balances");
-
     }
-    
+
     const merchantsWithBalances = merchants.data?.creditByMerchant || [];
     for (const merchant of merchantsWithBalances) {
       // get each merchant unsettled credit
       const unsettledCredit = await this.getUnsettledCreditByMerchantId(merchant.merchantId);
       if (!unsettledCredit.success) {
         // throw new Error("Failed to get unsettled credit");
-        console.error(`Failed to get unsettled credit for merchant ${merchant.merchantId}: ${unsettledCredit.error}`);
+        console.error(
+          `Failed to get unsettled credit for merchant ${merchant.merchantId}: ${unsettledCredit.error}`
+        );
         continue;
       }
-    //check if the merchant have valid bank account
-    const merchantWithBanks = await this.getMerchantWithBanks(merchant.merchantId);
-    if (!merchantWithBanks) {
-      console.error(`Merchant not found for merchant ${merchant.merchantId} ${merchant.businessName}. Skipping this merchant.`);
-      continue;
-    }
-    if (!merchantWithBanks.banks.length) {
-      console.error(`Merchant ${merchant.merchantId} ${merchant.businessName} has no valid bank account. Skipping this merchant.`);
-      continue;
-    }
-    // check paystack transfer recipient
-    const paystackTransferRecipient = await paystackMerchantTransferRecipientService.getOrCreatePaystackMerchantTransferRecipient(
-      merchant.merchantId,
-      merchantWithBanks.banks[0].accountNumber,
-      merchantWithBanks.banks[0].bank.bankCode
-    );
+      //check if the merchant have valid bank account
+      const merchantWithBanks = await this.getMerchantWithBanks(merchant.merchantId);
+      if (!merchantWithBanks) {
+        console.error(
+          `Merchant not found for merchant ${merchant.merchantId} ${merchant.businessName}. Skipping this merchant.`
+        );
+        continue;
+      }
+      if (!merchantWithBanks.banks.length) {
+        console.error(
+          `Merchant ${merchant.merchantId} ${merchant.businessName} has no valid bank account. Skipping this merchant.`
+        );
+        continue;
+      }
+      // check paystack transfer recipient
+      const paystackTransferRecipient =
+        await paystackMerchantTransferRecipientService.getOrCreatePaystackMerchantTransferRecipient(
+          merchant.merchantId,
+          merchantWithBanks.banks[0].accountNumber,
+          merchantWithBanks.banks[0].bank.bankCode
+        );
 
-    if (!paystackTransferRecipient.success || !paystackTransferRecipient.data?.recipientCode) {
-      console.error(`Paystack transfer recipient not found for merchant ${merchant.merchantId} ${merchant.businessName} Skipping this merchant.`);
-      continue;
-    }
+      if (!paystackTransferRecipient.success || !paystackTransferRecipient.data?.recipientCode) {
+        console.error(
+          `Paystack transfer recipient not found for merchant ${merchant.merchantId} ${merchant.businessName} Skipping this merchant.`
+        );
+        continue;
+      }
       // get discount for the merchant
       const unsettledCreditAmount = Number(unsettledCredit.data?.totalCredit || 0);
-      const discount = await tierService.calculateDiscount(unsettledCreditAmount );
+      const discount = await tierService.calculateDiscount(unsettledCreditAmount);
       let discountAmount = 0;
       if (discount.success) {
         discountAmount = discount.data?.discountAmount || 0;
-      }else{
-        discountAmount = 0
-        console.error(`Failed to get discount for merchant ${merchant.merchantId}: ${discount.error}`);
+      } else {
+        discountAmount = 0;
+        console.error(
+          `Failed to get discount for merchant ${merchant.merchantId}: ${discount.error}`
+        );
       }
-      
+
       if (discountAmount > 0) {
         // create a manual settlement for the merchant
         await this.createMerchantTransaction({
           merchantId: merchant.merchantId,
-          credit: discountAmount ,
+          credit: discountAmount,
           debit: 0,
           transactionType: MerchantTransactionType.Other,
           transactionDate: new Date(),
@@ -1174,18 +1148,21 @@ export class MerchantTransactionService {
       }
       // update merchant merchant trasaction to isSettled = true
       await prisma.merchantTransaction.updateMany({
-        where: { merchantId: merchant.merchantId, transactionType: MerchantTransactionType.Credit, isSettled: false },
+        where: {
+          merchantId: merchant.merchantId,
+          transactionType: MerchantTransactionType.Credit,
+          isSettled: false,
+        },
         data: { isSettled: true, status: TransactionStatus.Completed },
       });
     }
 
- 
     const merchants22 = await this.getAllMerchantsWithBalances();
     if (!merchants22.success) {
       throw new Error("Failed to get merchants with balances");
     }
     const merchantsWithBalances2 = merchants22.data?.merchants || [];
-    
+
     // Collect all internal settlements
     const settlements: Array<{
       merchantId: string;
@@ -1200,14 +1177,16 @@ export class MerchantTransactionService {
       }
 
       // call internal settlement
-      const internalSettlement = await this.internalSettlement({ 
-        merchantId: merchant.merchantId, 
-        amount: Number(merchant.balance) 
+      const internalSettlement = await this.internalSettlement({
+        merchantId: merchant.merchantId,
+        amount: Number(merchant.balance),
       });
       if (!internalSettlement.success) {
-        throw new Error(`Failed to internal settlement for merchant ${merchant.merchantId}: ${internalSettlement.error}`);
+        throw new Error(
+          `Failed to internal settlement for merchant ${merchant.merchantId}: ${internalSettlement.error}`
+        );
       }
-      
+
       // Collect successful settlement data
       if (internalSettlement.data) {
         settlements.push({
@@ -1230,17 +1209,22 @@ export class MerchantTransactionService {
       // Get recipient code for each merchant
       const merchant = await this.getMerchantWithBanks(settlement.merchantId);
       if (!merchant) {
-        console.error(`Merchant not found for merchant ${settlement.merchantId}. Skipping this merchant.`);
+        console.error(
+          `Merchant not found for merchant ${settlement.merchantId}. Skipping this merchant.`
+        );
         continue; // Skip this merchant and continue with the next one
       }
-      const paystackTransferRecipient = await paystackMerchantTransferRecipientService.getOrCreatePaystackMerchantTransferRecipient(
-        settlement.merchantId,
-        merchant.banks[0].accountNumber,
-        merchant.banks[0].bank.bankCode
-      );
-      
+      const paystackTransferRecipient =
+        await paystackMerchantTransferRecipientService.getOrCreatePaystackMerchantTransferRecipient(
+          settlement.merchantId,
+          merchant.banks[0].accountNumber,
+          merchant.banks[0].bank.bankCode
+        );
+
       if (!paystackTransferRecipient.success || !paystackTransferRecipient.data?.recipientCode) {
-        console.error(`Paystack transfer recipient not found for merchant ${settlement.merchantId}. Skipping this merchant.`);
+        console.error(
+          `Paystack transfer recipient not found for merchant ${settlement.merchantId}. Skipping this merchant.`
+        );
         continue; // Skip this merchant and continue with the next one
       }
 
@@ -1270,12 +1254,9 @@ export class MerchantTransactionService {
               const paystackTransferStatus = await paystackService.verifyTransfer(
                 transferResult.reference
               );
-              
+
               // If transfer is successful, update merchant transactions to completed
-              if (
-                paystackTransferStatus.status &&
-                paystackTransferStatus.data.status
-              ) {
+              if (paystackTransferStatus.status && paystackTransferStatus.data.status) {
                 await prisma.merchantTransaction.updateMany({
                   where: { groupReference: transferResult.reference },
                   data: {
@@ -1285,10 +1266,7 @@ export class MerchantTransactionService {
               }
             } catch (error: any) {
               // Log error but continue with other transfers
-              console.error(
-                `Error verifying transfer ${transferResult.reference}:`,
-                error.message
-              );
+              console.error(`Error verifying transfer ${transferResult.reference}:`, error.message);
             }
           })
         ).catch((error) => {
@@ -1298,17 +1276,20 @@ export class MerchantTransactionService {
         // Note: We don't await the Promise.allSettled, so it runs in the background
       }
 
-      return { 
-        success: true, 
-        data: { 
+      return {
+        success: true,
+        data: {
           message: "Automatic settlement completed successfully",
           settlementsProcessed: settlements.length,
           bulkTransferResult: bulkTransferResult,
-        } 
+        },
       };
     }
 
-    return { success: true, data: { message: "Automatic settlement completed successfully - no transfers to process" } };
+    return {
+      success: true,
+      data: { message: "Automatic settlement completed successfully - no transfers to process" },
+    };
   }
 
   async internalSettlement(input: ManualSettlementInput) {
@@ -1328,8 +1309,8 @@ export class MerchantTransactionService {
                   id: true,
                   bankName: true,
                   bankCode: true,
+                },
               },
-            },
             },
           },
         },
@@ -1354,7 +1335,6 @@ export class MerchantTransactionService {
       //   throw new Error("Account number or bank code not found");
       // }
 
-
       // calculate merchant charge amount
 
       // get merchant balance
@@ -1367,7 +1347,7 @@ export class MerchantTransactionService {
       }
       const marchantFee = input.amount * merchantCharge * 0.01;
       const balance = input.amount - this.bankCharges - marchantFee;
-      
+
       const groupReference = randomUUID();
       await prisma.merchantTransaction.create({
         data: {
@@ -1419,19 +1399,106 @@ export class MerchantTransactionService {
         parentTable: "merchantTransaction",
         merchantId: input.merchantId,
       });
-      
-      return { 
-        success: true, 
-        data: { 
+
+      return {
+        success: true,
+        data: {
           merchantId: input.merchantId,
-          balance, 
-          marchantFee, 
-          bankCharges: this.bankCharges, 
-          groupReference 
-        } 
+          balance,
+          marchantFee,
+          bankCharges: this.bankCharges,
+          groupReference,
+        },
       };
     } catch (error: any) {
       console.error("Error in internal settlement", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get merchant transaction stats for dashboard summaries.
+   */
+  async getMerchantTransactionStats(merchantId: string) {
+    try {
+      if (!merchantId) {
+        throw new Error("merchantId is required");
+      }
+
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { id: true, splitrId: true, businessName: true, merchantCharge: true },
+      });
+
+      if (!merchant) {
+        throw new Error("Merchant not found");
+      }
+
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+      const invoiceCreditWhere = {
+        merchantId,
+        transactionType: MerchantTransactionType.InvoiceCredit,
+      };
+
+      const [
+        unsettledInvoiceAgg,
+        unsettledInvoiceForDiscountAgg,
+        totalInvoiceThisMonthAgg,
+        balanceAgg,
+      ] = await Promise.all([
+        prisma.merchantTransaction.aggregate({
+          where: { ...invoiceCreditWhere, isSettled: false },
+          _sum: { credit: true },
+        }),
+        prisma.merchantTransaction.aggregate({
+          where: {
+            ...invoiceCreditWhere,
+            discountStatus: DiscountStatus.Open,
+          },
+          _sum: { credit: true },
+        }),
+        prisma.merchantTransaction.aggregate({
+          where: {
+            ...invoiceCreditWhere,
+            transactionDate: {
+              gte: startOfMonth,
+              lt: startOfNextMonth,
+            },
+          },
+          _sum: { credit: true },
+        }),
+        prisma.merchantTransaction.aggregate({
+          where: { merchantId },
+          _sum: { credit: true, debit: true },
+        }),
+      ]);
+
+      const totalCredit = Number(balanceAgg._sum.credit ?? 0);
+      const totalDebit = Number(balanceAgg._sum.debit ?? 0);
+
+      return {
+        success: true,
+        data: {
+          merchantId,
+          splitrId: merchant.splitrId,
+          businessName: merchant.businessName,
+          unsettledInvoice: Number(unsettledInvoiceAgg._sum.credit ?? 0),
+          unsettledInvoiceForDiscount: Number(unsettledInvoiceForDiscountAgg._sum.credit ?? 0),
+          totalInvoiceThisMonth: Number(totalInvoiceThisMonthAgg._sum.credit ?? 0),
+          currentBalance: totalCredit - totalDebit,
+          totalCredit,
+          totalDebit,
+          month: {
+            year: now.getFullYear(),
+            month: now.getMonth() + 1,
+          },
+          feeRate: Number(merchant.merchantCharge ?? 0),
+        },
+      };
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }

@@ -507,6 +507,38 @@ router.get(
 
 /**
  * @swagger
+ * /api/v1/merchant-transactions/stats/{merchantId}:
+ *   get:
+ *     summary: Get merchant transaction stats
+ *     description: >
+ *       Returns unsettled invoice credit, open discount invoice credit,
+ *       current month invoice credit total, and overall balance (credit - debit).
+ *     tags: [Merchant Transactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Merchant transaction stats
+ *       404:
+ *         description: Merchant not found
+ */
+router.get(
+  "/stats/:merchantId",
+  authenticateJWT,
+  merchantTransactionController.getMerchantTransactionStats.bind(
+    merchantTransactionController
+  )
+);
+
+/**
+ * @swagger
  * /api/v1/merchant-transactions/{id}:
  *   put:
  *     summary: Update merchant transaction

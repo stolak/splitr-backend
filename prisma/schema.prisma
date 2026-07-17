@@ -642,6 +642,7 @@ model MerchantTransaction {
   description     String
   status          TransactionStatus       @default(Pending)
   isSettled       Boolean                 @default(false)
+  discountStatus  DiscountStatus          @default(Closed)
   groupReference  String?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
@@ -696,7 +697,14 @@ enum MerchantTransactionType {
   ManualSettlement
   MerchantCharge
   PayoutCharge
+  DiscountCredit
+  InvoiceCredit
   Other
+}
+
+enum DiscountStatus {
+  Closed
+  Open
 }
 
 model EligibilityAndScore {
