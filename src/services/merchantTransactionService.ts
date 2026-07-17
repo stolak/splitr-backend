@@ -13,6 +13,7 @@ import { paystackTransferService } from "./paystackTransferService";
 import { paystackMerchantTransferRecipientService } from "./paystackMerchantTransferRecipientService";
 import { paystackService } from "./paystackService";
 import { tierService } from "./tierService";
+import { stripeService } from "./stripeService";
 const revenueService = new RevenueService();
 // ==================== INTERFACES ====================
 
@@ -905,7 +906,10 @@ export class MerchantTransactionService {
   async manualSettlement(input: ManualSettlementInput) {
     try {
       // Verify merchant exists
-      const merchant = await this.getMerchantWithBanks(input.merchantId);
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: input.merchantId },
+        select: { id: true, stripeConnectAccountId: true, merchantCharge: true },
+      });
       if (!merchant) {
         throw new Error("Merchant not found");
       }
@@ -914,28 +918,17 @@ export class MerchantTransactionService {
       if (!merchantCharge) {
         throw new Error("Merchant charge not found");
       }
+
+      // verify if merchant is already onboarded
+      if (!merchant.stripeConnectAccountId) {
+        throw new Error("Merchant is not onboarded");
+      }
       // verify account number id inside merchant account details
-      const merchantBankAccount = merchant.banks;
-      if (!merchantBankAccount.some((bank) => bank.id === input.accountNumberId)) {
-        throw new Error("Merchant bank account not found");
+      const accountNumber = await stripeService.getConnectAccount(merchant.stripeConnectAccountId);
+      if (!accountNumber.account.default_currency) {
+        throw new Error("Account number not found");
       }
-      const accountNumber = merchantBankAccount.find(
-        (bank) => bank.id === input.accountNumberId
-      )?.accountNumber;
-      const bankCode = merchantBankAccount.find((bank) => bank.id === input.accountNumberId)?.bank
-        .bankCode;
-      if (!accountNumber || !bankCode) {
-        throw new Error("Account number or bank code not found");
-      }
-      const paystackTransferRecipient =
-        await paystackMerchantTransferRecipientService.getOrCreatePaystackMerchantTransferRecipient(
-          input.merchantId,
-          accountNumber,
-          bankCode
-        );
-      if (!paystackTransferRecipient.success) {
-        throw new Error("Paystack transfer recipient not found");
-      }
+
       // throw new Error("we are testing the paystack transfer recipient");
       // calculate merchant charge amount
 
@@ -1006,34 +999,25 @@ export class MerchantTransactionService {
         parentTable: "merchantTransaction",
         merchantId: input.merchantId,
       });
-      // get paystack transfer recipient
-      //  create paystack transfer
-      const paystackTransfer = await paystackTransferService.createPaystackTransfer({
-        referenceId: groupReference,
-        merchantId: input.merchantId,
+      // initiate transfer on stripe
+      const stripePayout = await stripeService.createPayout({
         amount: balance,
-        recipientCode: paystackTransferRecipient.data?.recipientCode || "RCP_39c267e3a0kpohn",
-        status: PaystackTransferStatus.Pending,
+        currency: "cad",
+        description: `Manual settlement of ${input.amount}`,
+        merchantId: input.merchantId,
       });
-      if (!paystackTransfer.success) {
-        throw new Error("Paystack transfer not created");
+      if (!stripePayout.payoutId) {
+        throw new Error("Stripe payout not created");
       }
-      // initiate transfer to paystack
-      const paystackTransferResult = await paystackService.initiateTransfer({
-        source: "balance",
-        amount: balance * 100,
-        recipient: paystackTransferRecipient.data?.recipientCode || "RCP_39c267e3a0kpohn",
-        reference: groupReference,
-      });
-
       // verify transfer status
-      const paystackTransferStatus = await paystackService.verifyTransfer(groupReference);
-      if (paystackTransferStatus.status && paystackTransferStatus.data.status) {
+
+      if (stripePayout.payout.id !== null) {
         // update merchant transaction status to completed
         await prisma.merchantTransaction.updateMany({
           where: { groupReference: groupReference },
           data: {
             status: TransactionStatus.Completed,
+            isSettled: true,
           },
         });
       }
