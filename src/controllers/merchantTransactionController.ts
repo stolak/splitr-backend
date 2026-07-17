@@ -304,6 +304,43 @@ export class MerchantTransactionController {
   }
 
   /**
+   * Get settlement transaction summaries grouped by groupReference.
+   */
+  async getSettlementTransactionSummary(req: Request, res: Response) {
+    try {
+      const startDate =
+        typeof req.query.startDate === "string"
+          ? new Date(req.query.startDate)
+          : undefined;
+      const endDate =
+        typeof req.query.endDate === "string"
+          ? new Date(req.query.endDate)
+          : undefined;
+
+      const result =
+        await merchantTransactionService.getSettlementTransactionSummary(
+          req.params.merchantId,
+          { startDate, endDate }
+        );
+
+      if (result.success) {
+        return res.status(200).json(result);
+      }
+
+      if (result.error === "Merchant not found") {
+        return res.status(404).json(result);
+      }
+
+      return res.status(400).json(result);
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+
+  /**
    * Manual settlement for merchant
    */
   async manualSettlement(req: Request, res: Response) {

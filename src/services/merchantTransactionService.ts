@@ -1502,6 +1502,139 @@ export class MerchantTransactionService {
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * Summarise settlement debits by group reference for a merchant.
+   */
+  async getSettlementTransactionSummary(
+    merchantId: string,
+    options: { startDate?: Date; endDate?: Date } = {}
+  ) {
+    try {
+      if (!merchantId) {
+        throw new Error("merchantId is required");
+      }
+
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { id: true, splitrId: true, businessName: true },
+      });
+
+      if (!merchant) {
+        throw new Error("Merchant not found");
+      }
+
+      const now = new Date();
+      const defaultStartDate = new Date(now);
+      defaultStartDate.setMonth(defaultStartDate.getMonth() - 1);
+      const defaultEndDate = new Date(now);
+      defaultEndDate.setDate(defaultEndDate.getDate() + 1);
+
+      const startDate = options.startDate ?? defaultStartDate;
+      const endDate = options.endDate ?? defaultEndDate;
+
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        throw new Error("startDate and endDate must be valid dates");
+      }
+
+      if (startDate >= endDate) {
+        throw new Error("startDate must be before endDate");
+      }
+
+      const groupedTransactions = await prisma.merchantTransaction.groupBy({
+        by: ["groupReference", "transactionType"],
+        where: {
+          merchantId,
+          groupReference: { not: null },
+          transactionDate: {
+            gte: startDate,
+            lt: endDate,
+          },
+        },
+        _sum: { debit: true },
+        _count: { _all: true },
+        _min: { transactionDate: true },
+        _max: { transactionDate: true },
+      });
+
+      const summaries = new Map<
+        string,
+        {
+          groupReference: string;
+          payoutCharge: number;
+          merchantCharge: number;
+          totalPayoutSettlement: number;
+          netPayout: number;
+          transactionCount: number;
+          firstTransactionDate: Date | null;
+          lastTransactionDate: Date | null;
+        }
+      >();
+
+      for (const transaction of groupedTransactions) {
+        if (!transaction.groupReference) continue;
+
+        const summary = summaries.get(transaction.groupReference) ?? {
+          groupReference: transaction.groupReference,
+          payoutCharge: 0,
+          merchantCharge: 0,
+          totalPayoutSettlement: 0,
+          netPayout: 0,
+          transactionCount: 0,
+          firstTransactionDate: null,
+          lastTransactionDate: null,
+        };
+        const debit = Number(transaction._sum.debit ?? 0);
+
+        summary.totalPayoutSettlement += debit;
+        summary.transactionCount += transaction._count._all;
+
+        if (transaction.transactionType === MerchantTransactionType.PayoutCharge) {
+          summary.payoutCharge += debit;
+        }
+        if (transaction.transactionType === MerchantTransactionType.MerchantCharge) {
+          summary.merchantCharge += debit;
+        }
+
+        const firstDate = transaction._min.transactionDate;
+        const lastDate = transaction._max.transactionDate;
+        if (
+          firstDate &&
+          (!summary.firstTransactionDate || firstDate < summary.firstTransactionDate)
+        ) {
+          summary.firstTransactionDate = firstDate;
+        }
+        if (lastDate && (!summary.lastTransactionDate || lastDate > summary.lastTransactionDate)) {
+          summary.lastTransactionDate = lastDate;
+        }
+
+        summaries.set(transaction.groupReference, summary);
+      }
+
+      const settlements = Array.from(summaries.values())
+        .map((summary) => ({
+          ...summary,
+          netPayout:
+            summary.totalPayoutSettlement - (summary.payoutCharge + summary.merchantCharge),
+          totalFees: summary.payoutCharge + summary.merchantCharge,
+        }))
+        .sort(
+          (a, b) =>
+            (b.lastTransactionDate?.getTime() ?? 0) - (a.lastTransactionDate?.getTime() ?? 0)
+        );
+
+      return {
+        success: true,
+        data: {
+          merchant,
+          dateRange: { startDate, endDate },
+          settlements,
+        },
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export const merchantTransactionService = new MerchantTransactionService();

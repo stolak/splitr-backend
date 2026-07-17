@@ -539,6 +539,51 @@ router.get(
 
 /**
  * @swagger
+ * /api/v1/merchant-transactions/settlement-summary/{merchantId}:
+ *   get:
+ *     summary: Summarise settlement transactions by group reference
+ *     description: >
+ *       Groups merchant transactions by groupReference and returns payout charges,
+ *       merchant charges, total settlement debit, and net payout. If omitted,
+ *       startDate defaults to one month ago and endDate defaults to one day ahead.
+ *     tags: [Merchant Transactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *     responses:
+ *       200:
+ *         description: Settlement summaries
+ *       400:
+ *         description: Invalid date range
+ *       404:
+ *         description: Merchant not found
+ */
+router.get(
+  "/settlement-summary/:merchantId",
+  authenticateJWT,
+  merchantTransactionController.getSettlementTransactionSummary.bind(
+    merchantTransactionController
+  )
+);
+
+/**
+ * @swagger
  * /api/v1/merchant-transactions/{id}:
  *   put:
  *     summary: Update merchant transaction
