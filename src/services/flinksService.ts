@@ -23,6 +23,32 @@ export class FlinksService {
   }
 
   /**
+   * Get income attributes for a Flinks login/account pair.
+   */
+  async getIncomeAttributes({
+    loginId,
+    attributeId,
+  }: {
+    loginId: string;
+    attributeId: string;
+  }) {
+    if (!loginId) throw new Error("loginId is required");
+    if (!attributeId) throw new Error("attributeId is required");
+
+    try {
+      const data = await flinksRequest<Record<string, unknown>>({
+        method: "GET",
+        path: `/insight/login/${loginId}/attributes/${attributeId}/GetIncomeAttributes`,
+        useXApiKey: true,
+      });
+
+      return data;
+    } catch (error) {
+      throw new Error(getFlinksErrorMessage(error));
+    }
+  }
+
+  /**
    * Get detailed accounts information including transactions and KYC for a Flinks request.
    */
   async getAccountsDetail({

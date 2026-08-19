@@ -30,6 +30,54 @@ export async function generateAuthorizeToken(req: Request, res: Response) {
 
 /**
  * @openapi
+ * /api/v1/flinks/income-attributes/{loginId}/{attributeId}:
+ *   get:
+ *     summary: Get Flinks income attributes
+ *     description: >
+ *       Calls Flinks insight/login/{loginId}/attributes/{attributeId}/GetIncomeAttributes
+ *       to retrieve income attributes and transaction detail for a login.
+ *     tags: [Flinks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: loginId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: attributeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Income attributes retrieved
+ *       400:
+ *         description: Validation or Flinks error
+ *       401:
+ *         description: Unauthorized
+ */
+export async function getIncomeAttributes(req: Request, res: Response) {
+  try {
+    const { loginId, attributeId } = req.params;
+
+    if (!loginId || !attributeId) {
+      return res
+        .status(400)
+        .json({ message: "loginId and attributeId are required" });
+    }
+
+    const result = await flinksService.getIncomeAttributes({ loginId, attributeId });
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to get Flinks income attributes";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
  * /api/v1/flinks/accounts-detail:
  *   post:
  *     summary: Get Flinks accounts detail
