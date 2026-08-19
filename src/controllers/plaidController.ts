@@ -208,7 +208,7 @@ export async function getBankIncome(req: Request, res: Response) {
 
     const { count } = req.body || {};
 
-    const result = await plaidService.getBankIncomeRest(
+    const result = await plaidService.getBankIncome(
       userId,
       count !== undefined ? Number(count) : 1
     );
@@ -251,8 +251,7 @@ export async function createIdentityVerification(req: Request, res: Response) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { isShareable, gaveConsent, isIdempotent, templateId, user } =
-      req.body || {};
+    const { isShareable, gaveConsent, isIdempotent, templateId, user } = req.body || {};
 
     const result = await plaidService.createIdentityVerification(userId, {
       isShareable,
@@ -342,10 +341,8 @@ export async function listIdentityVerifications(req: Request, res: Response) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const templateId =
-      typeof req.query.templateId === "string" ? req.query.templateId : undefined;
-    const cursor =
-      typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+    const templateId = typeof req.query.templateId === "string" ? req.query.templateId : undefined;
+    const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
 
     const result = await plaidService.listIdentityVerifications(userId, {
       templateId,
@@ -436,10 +433,7 @@ export async function retryIdentityVerification(req: Request, res: Response) {
  *       400:
  *         description: Validation or Plaid error
  */
-export async function createIdentityVerificationLinkToken(
-  req: Request,
-  res: Response
-) {
+export async function createIdentityVerificationLinkToken(req: Request, res: Response) {
   try {
     const userId = req.user?.id;
 
@@ -449,15 +443,50 @@ export async function createIdentityVerificationLinkToken(
 
     const { templateId, gaveConsent } = req.body || {};
 
-    const result = await plaidService.createIdentityVerificationLinkToken(
-      userId,
-      { templateId, gaveConsent }
-    );
+    const result = await plaidService.createIdentityVerificationLinkToken(userId, {
+      templateId,
+      gaveConsent,
+    });
 
     return res.status(201).json(result);
   } catch (error: any) {
-    const message =
-      error?.message || "Failed to create identity verification link token";
+    const message = error?.message || "Failed to create identity verification link token";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/plaid/cra/income-insights:
+ *   get:
+ *     summary: Get CRA Check Report income insights
+ *     description: >
+ *       Retrieves Consumer Report income insights for the authenticated user
+ *       via Plaid's /cra/check_report/income_insights/get endpoint.
+ *     tags: [Plaid]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Income insights retrieved
+ *       401:
+ *         description: Unauthorized
+ *       400:
+ *         description: Validation or Plaid error
+ */
+export async function getCraIncomeInsights(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const result = await plaidService.getCraCheckReportIncomeInsights(userId);
+
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to get CRA income insights";
     return res.status(400).json({ message });
   }
 }

@@ -44,6 +44,7 @@ export class PlaidService {
     const userResponse = await getPlaidClient().userCreate({
       client_user_id: userId,
     });
+    console.log(userResponse.data);
     return prisma.plaidAccount.upsert({
       where: { userId },
       update: {
@@ -160,14 +161,19 @@ export class PlaidService {
       throw new Error("Plaid user not found. Create a link token first.");
     }
 
-    if (!plaidAccount.itemId) {
-      throw new Error("Bank account not linked yet. Exchange the public token after Plaid Link.");
-    }
-
+    // if (!plaidAccount.itemId) {
+    //   throw new Error("Bank account not linked yet. Exchange the public token after Plaid Link.");
+    // }
+    console.log(plaidAccount.userToken);
+    console.log(plaidAccount);
     try {
       const response = await getPlaidClient().creditBankIncomeGet({
-        // ...(plaidAccount.plaidUserId ? { user_id: plaidAccount.plaidUserId } : {}),
-        ...(plaidAccount.userToken ? { user_token: plaidAccount.userToken } : {}),
+        ...(plaidAccount.plaidUserId ? { user_id: plaidAccount.plaidUserId } : {}),
+        // ...(plaidAccount.userToken ? { user_token: plaidAccount.userToken } : {}),
+
+        // ...(plaidAccount.userToken
+        //   ? { user_token: plaidAccount.userToken }
+        //   : { user_token: "user-sandbox-b0e2c4ee-a763-4df5-bfe9-46a46bce993d" }),
         options: { count },
       });
 
@@ -182,7 +188,7 @@ export class PlaidService {
     }
     const response = await plaidPost<CreditBankIncomeGetResponse>("/credit/bank_income/get", {
       user_id: userId,
-      user_token: "user-sandbox-b0e2c4ee-a763-4df5-bfe9-46a46bce993d",
+      // user_token: "user-sandbox-b0e2c4ee-a763-4df5-bfe9-46a46bce993d",
       options: {
         count: 1,
       },
@@ -452,6 +458,37 @@ export class PlaidService {
         plaidUserId: plaidAccount.plaidUserId,
         templateId,
       };
+    } catch (error) {
+      throw new Error(getPlaidErrorMessage(error));
+    }
+  }
+
+  async getCraCheckReportIncomeInsights(userId: string) {
+    if (!userId) {
+      throw new Error("userId is required");
+    }
+
+    const plaidAccount = await prisma.plaidAccount.findUnique({
+      where: { userId },
+    });
+
+    if (!plaidAccount) {
+      throw new Error(
+        "Plaid account not found. Create a link token and complete Plaid Link first."
+      );
+    }
+
+    if (!plaidAccount.plaidUserId && !plaidAccount.userToken) {
+      throw new Error("Plaid user not found. Create a link token first.");
+    }
+
+    try {
+      const response = await getPlaidClient().craCheckReportIncomeInsightsGet({
+        ...(plaidAccount.plaidUserId ? { user_id: plaidAccount.plaidUserId } : {}),
+        ...(plaidAccount.userToken ? { user_token: plaidAccount.userToken } : {}),
+      });
+
+      return response.data;
     } catch (error) {
       throw new Error(getPlaidErrorMessage(error));
     }
