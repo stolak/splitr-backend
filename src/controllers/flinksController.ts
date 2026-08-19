@@ -30,6 +30,145 @@ export async function generateAuthorizeToken(req: Request, res: Response) {
 
 /**
  * @openapi
+ * /api/v1/flinks/accounts-detail:
+ *   post:
+ *     summary: Get Flinks accounts detail
+ *     description: >
+ *       Calls Flinks BankingServices/GetAccountsDetail using a RequestId from a prior
+ *       Authorize call. Returns transactions, KYC, identity, and banking statement data.
+ *     tags: [Flinks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [requestId]
+ *             properties:
+ *               requestId:
+ *                 type: string
+ *               withAccountIdentity:
+ *                 type: boolean
+ *                 default: true
+ *               withKYC:
+ *                 type: boolean
+ *                 default: true
+ *               withTransactions:
+ *                 type: boolean
+ *                 default: true
+ *               daysOfTransactions:
+ *                 type: string
+ *                 default: Days90
+ *               withDetailsAndBankingStatements:
+ *                 type: boolean
+ *                 default: false
+ *               numberOfBankingStatements:
+ *                 type: string
+ *                 default: MostRecent
+ *     responses:
+ *       200:
+ *         description: Accounts detail retrieved
+ *       400:
+ *         description: Validation or Flinks error
+ *       401:
+ *         description: Unauthorized
+ */
+export async function getAccountsDetail(req: Request, res: Response) {
+  try {
+    const {
+      requestId,
+      withAccountIdentity,
+      withKYC,
+      withTransactions,
+      daysOfTransactions,
+      withDetailsAndBankingStatements,
+      numberOfBankingStatements,
+    } = req.body as {
+      requestId: string;
+      withAccountIdentity?: boolean;
+      withKYC?: boolean;
+      withTransactions?: boolean;
+      daysOfTransactions?: string;
+      withDetailsAndBankingStatements?: boolean;
+      numberOfBankingStatements?: string;
+    };
+
+    if (!requestId) {
+      return res.status(400).json({ message: "requestId is required" });
+    }
+
+    const result = await flinksService.getAccountsDetail({
+      requestId,
+      withAccountIdentity,
+      withKYC,
+      withTransactions,
+      daysOfTransactions,
+      withDetailsAndBankingStatements,
+      numberOfBankingStatements,
+    });
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to get Flinks accounts detail";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
+ * /api/v1/flinks/accounts-summary:
+ *   post:
+ *     summary: Get Flinks accounts summary
+ *     description: >
+ *       Calls Flinks BankingServices/GetAccountsSummary using a RequestId obtained
+ *       from a prior Authorize call. Returns account balances and holder details.
+ *     tags: [Flinks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [requestId]
+ *             properties:
+ *               requestId:
+ *                 type: string
+ *                 description: The RequestId returned from the Authorize endpoint
+ *               withBalance:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       200:
+ *         description: Accounts summary retrieved
+ *       400:
+ *         description: Validation or Flinks error
+ *       401:
+ *         description: Unauthorized
+ */
+export async function getAccountsSummary(req: Request, res: Response) {
+  try {
+    const { requestId, withBalance } = req.body as {
+      requestId: string;
+      withBalance?: boolean;
+    };
+
+    if (!requestId) {
+      return res.status(400).json({ message: "requestId is required" });
+    }
+
+    const result = await flinksService.getAccountsSummary({ requestId, withBalance });
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const message = error?.message || "Failed to get Flinks accounts summary";
+    return res.status(400).json({ message });
+  }
+}
+
+/**
+ * @openapi
  * /api/v1/flinks/authorize:
  *   post:
  *     summary: Authorize a Flinks login

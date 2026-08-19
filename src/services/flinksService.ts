@@ -23,6 +23,86 @@ export class FlinksService {
   }
 
   /**
+   * Get detailed accounts information including transactions and KYC for a Flinks request.
+   */
+  async getAccountsDetail({
+    requestId,
+    withAccountIdentity = true,
+    withKYC = true,
+    withTransactions = true,
+    daysOfTransactions = "Days90",
+    withDetailsAndBankingStatements = false,
+    numberOfBankingStatements = "MostRecent",
+  }: {
+    requestId: string;
+    withAccountIdentity?: boolean;
+    withKYC?: boolean;
+    withTransactions?: boolean;
+    daysOfTransactions?: string;
+    withDetailsAndBankingStatements?: boolean;
+    numberOfBankingStatements?: string;
+  }) {
+    if (!requestId) {
+      throw new Error("requestId is required");
+    }
+
+    try {
+      const data = await flinksRequest<Record<string, unknown>>({
+        method: "POST",
+        path: "/BankingServices/GetAccountsDetail",
+        useXApiKey: true,
+        body: {
+          RequestId: requestId,
+          WithAccountIdentity: withAccountIdentity,
+          WithKYC: withKYC,
+          WithTransactions: withTransactions,
+          DaysOfTransactions: daysOfTransactions,
+          WithDetailsAndBankingStatements: withDetailsAndBankingStatements,
+          NumberOfBankingStatements: numberOfBankingStatements,
+        },
+      });
+
+      return data;
+    } catch (error) {
+      throw new Error(getFlinksErrorMessage(error));
+    }
+  }
+
+  /**
+   * Get accounts summary for a previously authorized Flinks request.
+   */
+  async getAccountsSummary({
+    requestId,
+    withBalance = true,
+    withAccountIdentity = true,
+  }: {
+    requestId: string;
+    withBalance?: boolean;
+    withAccountIdentity?: boolean;
+  }) {
+    if (!requestId) {
+      throw new Error("requestId is required");
+    }
+
+    try {
+      const data = await flinksRequest<Record<string, unknown>>({
+        method: "POST",
+        path: "/BankingServices/GetAccountsSummary",
+        useXApiKey: true,
+        body: {
+          RequestId: requestId,
+          WithBalance: withBalance,
+          WithAccountIdentity: withAccountIdentity,
+        },
+      });
+
+      return data;
+    } catch (error) {
+      throw new Error(getFlinksErrorMessage(error));
+    }
+  }
+
+  /**
    * Authorize a Flinks login and retrieve linked account links.
    */
   async authorize({ loginId, mostRecentCached = true }: AuthorizeInput) {

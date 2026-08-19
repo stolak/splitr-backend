@@ -1,6 +1,7 @@
 const FLINKS_BASE_URL = process.env.FLINKS_BASE_URL?.replace(/\/$/, "");
 const FLINKS_AUTH_KEY = process.env.FLINKS_AUTH_KEY;
 const FLINKS_CUSTOMER_ID = process.env.FLINKS_CUSTOMER_ID;
+const FLINKS_X_API_KEY = process.env.FLINKS_X_API_KEY;
 
 export function getFlinksConfig() {
   if (!FLINKS_BASE_URL) {
@@ -17,6 +18,7 @@ export function getFlinksConfig() {
     baseUrl: FLINKS_BASE_URL,
     authKey: FLINKS_AUTH_KEY,
     customerId: FLINKS_CUSTOMER_ID,
+    xApiKey: FLINKS_X_API_KEY,
   };
 }
 
@@ -31,7 +33,12 @@ type FlinksRequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: Record<string, unknown>;
+  /** Override the flinks-auth-key from env */
   authKey?: string;
+  /** When true, uses x-api-key header instead of flinks-auth-key (e.g. BankingServices data endpoints) */
+  useXApiKey?: boolean;
+  /** Override the x-api-key from env */
+  xApiKey?: string;
 };
 
 export async function flinksRequest<T>({
@@ -39,16 +46,27 @@ export async function flinksRequest<T>({
   path,
   body,
   authKey: overrideAuthKey,
+  useXApiKey = false,
+  xApiKey: overrideXApiKey,
 }: FlinksRequestOptions): Promise<T> {
-  const { baseUrl, authKey: configAuthKey, customerId } = getFlinksConfig();
-  const authKey = overrideAuthKey ?? configAuthKey;
+  const {
+    baseUrl,
+    authKey: configAuthKey,
+    customerId,
+    xApiKey: configXApiKey,
+  } = getFlinksConfig();
+
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${baseUrl}/${customerId}${normalizedPath}`;
+
+  const authHeaders: Record<string, string> = useXApiKey
+    ? { "x-api-key": overrideXApiKey ?? configXApiKey ?? "" }
+    : { "flinks-auth-key": overrideAuthKey ?? configAuthKey };
 
   const response = await fetch(url, {
     method,
     headers: {
-      "flinks-auth-key": authKey,
+      ...authHeaders,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
