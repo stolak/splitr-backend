@@ -31,14 +31,17 @@ type FlinksRequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: Record<string, unknown>;
+  authKey?: string;
 };
 
 export async function flinksRequest<T>({
   method = "POST",
   path,
   body,
+  authKey: overrideAuthKey,
 }: FlinksRequestOptions): Promise<T> {
-  const { baseUrl, authKey, customerId } = getFlinksConfig();
+  const { baseUrl, authKey: configAuthKey, customerId } = getFlinksConfig();
+  const authKey = overrideAuthKey ?? configAuthKey;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${baseUrl}/${customerId}${normalizedPath}`;
 
