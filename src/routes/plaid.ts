@@ -6,6 +6,7 @@ import {
   createLinkToken,
   exchangePublicToken,
   getBankIncome,
+  getCraIncomeInsights,
   getIdentityVerification,
   listIdentityVerifications,
   retryIdentityVerification,
@@ -17,6 +18,7 @@ const router = Router();
 router.post("/link-token", authenticateJWT, createLinkToken);
 router.post("/exchange-public-token", authenticateJWT, exchangePublicToken);
 router.post("/bank-income", authenticateJWT, getBankIncome);
+router.get("/cra/income-insights", authenticateJWT, getCraIncomeInsights);
 
 router.post(
   "/identity-verification/link-token",

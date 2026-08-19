@@ -43,6 +43,7 @@ import personaInquiryRoutes from "./personaInquiry";
 import stripeRoutes from "./stripe";
 import plaidRoutes from "./plaid";
 import plaidAccountRoutes from "./plaidAccount";
+import flinksRoutes from "./flinks";
 import { Router } from "express";
 
 const router = Router();
@@ -91,6 +92,7 @@ router.use("/persona", personaInquiryRoutes);
 router.use("/stripe", stripeRoutes);
 router.use("/plaid", plaidRoutes);
 router.use("/plaid-accounts", plaidAccountRoutes);
+router.use("/flinks", flinksRoutes);
 
 /**
  * @swagger
