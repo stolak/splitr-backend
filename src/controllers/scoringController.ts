@@ -1,6 +1,142 @@
 import { Request, Response } from 'express';
-import { scoreService, ScoringInput, SelfAssessmentScoringInput } from '../services/scoringService';
+import {
+  scoreService,
+  ScoringInput,
+  SelfAssessmentScoringInput,
+  OpenBankingInput,
+  CreditBureauInput,
+  MerchantRiskInput,
+  FinalCustomerScoreInput,
+  CustomerLenderType,
+} from '../services/scoringService';
 
+/**
+ * @swagger
+ * /api/v1/scoring/final/calculate:
+ *   post:
+ *     summary: Calculate final customer score
+ *     description: >
+ *       Combines open banking, credit bureau, merchant risk, and BRI scores
+ *       using first-time lender or returning customer weights. BRI currently
+ *       uses a default value until a formula is defined.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/FinalCustomerScoreInput'
+ *     responses:
+ *       200:
+ *         description: Final customer score calculated successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
+ * /api/v1/scoring/merchant-risk/calculate:
+ *   post:
+ *     summary: Calculate merchant risk score
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/MerchantRiskInput'
+ *     responses:
+ *       200:
+ *         description: Merchant risk score calculated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Merchant risk score calculated successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/MerchantRiskScoreResult'
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
+ * /api/v1/scoring/credit-bureau/calculate:
+ *   post:
+ *     summary: Calculate credit bureau score
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreditBureauInput'
+ *     responses:
+ *       200:
+ *         description: Credit bureau score calculated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Credit bureau score calculated successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/CreditBureauScoreResult'
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
+ * /api/v1/scoring/open-banking/calculate:
+ *   post:
+ *     summary: Calculate open banking score
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/OpenBankingInput'
+ *     responses:
+ *       200:
+ *         description: Open banking score calculated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Open banking score calculated successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/OpenBankingScoreResult'
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
 /**
  * @swagger
  * /api/v1/scoring/calculate:
@@ -149,6 +285,182 @@ import { scoreService, ScoringInput, SelfAssessmentScoringInput } from '../servi
  *           type: number
  *           description: Estimated monthly income used for DTI calculation
  *           example: 180000
+ *     OpenBankingInput:
+ *       type: object
+ *       required:
+ *         - monthlyIncome
+ *         - incomeStabilityVariance
+ *         - netCashFlowPercentage
+ *         - liquidityMonths
+ *         - nsfEvents
+ *         - overdraftFrequency
+ *         - loanBurdenPercentage
+ *       properties:
+ *         monthlyIncome:
+ *           type: number
+ *           example: 6500
+ *         incomeStabilityVariance:
+ *           type: number
+ *           example: 12
+ *         netCashFlowPercentage:
+ *           type: number
+ *           example: 28
+ *         liquidityMonths:
+ *           type: number
+ *           example: 3
+ *         nsfEvents:
+ *           type: number
+ *           example: 0
+ *         overdraftFrequency:
+ *           type: number
+ *           example: 1
+ *         loanBurdenPercentage:
+ *           type: number
+ *           example: 15
+ *     OpenBankingScoreComponent:
+ *       type: object
+ *       properties:
+ *         variable:
+ *           type: string
+ *           example: Monthly Income
+ *         rawScore:
+ *           type: number
+ *           example: 8
+ *         weight:
+ *           type: number
+ *           example: 15
+ *         weightedScore:
+ *           type: number
+ *           example: 1.2
+ *     OpenBankingScoreResult:
+ *       type: object
+ *       properties:
+ *         totalScore:
+ *           type: number
+ *           example: 7.85
+ *         components:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/OpenBankingScoreComponent'
+ *     CreditBureauInput:
+ *       type: object
+ *       required:
+ *         - creditScore
+ *         - utilizationPercentage
+ *         - delinquencies24Months
+ *         - collections
+ *         - hardInquiries12Months
+ *         - bankruptcy
+ *       properties:
+ *         creditScore:
+ *           type: number
+ *           example: 720
+ *         utilizationPercentage:
+ *           type: number
+ *           example: 35
+ *         delinquencies24Months:
+ *           type: number
+ *           example: 1
+ *         collections:
+ *           type: string
+ *           enum: [NONE, PAID, ACTIVE]
+ *           example: NONE
+ *         hardInquiries12Months:
+ *           type: number
+ *           example: 3
+ *         bankruptcy:
+ *           type: string
+ *           enum: [NONE, DISCHARGED_OVER_5_YEARS, ACTIVE_OR_RECENT]
+ *           example: NONE
+ *     CreditBureauComponent:
+ *       type: object
+ *       properties:
+ *         variable:
+ *           type: string
+ *           example: Credit Score
+ *         rawScore:
+ *           type: number
+ *           example: 8
+ *         weight:
+ *           type: number
+ *           example: 35
+ *         weightedScore:
+ *           type: number
+ *           example: 2.8
+ *     CreditBureauScoreResult:
+ *       type: object
+ *       properties:
+ *         rawWeightedScore:
+ *           type: number
+ *           example: 8.35
+ *         score:
+ *           type: number
+ *           example: 83.5
+ *         components:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/CreditBureauComponent'
+ *     MerchantRiskInput:
+ *       type: object
+ *       required:
+ *         - merchantCategory
+ *         - merchantCategoryScore
+ *         - purchaseUtilizationPercentage
+ *       properties:
+ *         merchantCategory:
+ *           type: string
+ *           example: HEALTHCARE
+ *         merchantCategoryScore:
+ *           type: number
+ *           minimum: 0
+ *           maximum: 10
+ *           example: 10
+ *         purchaseUtilizationPercentage:
+ *           type: number
+ *           example: 35
+ *     MerchantRiskComponent:
+ *       type: object
+ *       properties:
+ *         variable:
+ *           type: string
+ *           example: Merchant Category Risk
+ *         rawScore:
+ *           type: number
+ *           example: 10
+ *         weight:
+ *           type: number
+ *           example: 60
+ *         weightedScore:
+ *           type: number
+ *           example: 6
+ *     MerchantRiskScoreResult:
+ *       type: object
+ *       properties:
+ *         score:
+ *           type: number
+ *           example: 9.2
+ *         components:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/MerchantRiskComponent'
+ *     FinalCustomerScoreInput:
+ *       type: object
+ *       required:
+ *         - customerType
+ *         - openBanking
+ *         - creditBureau
+ *         - merchantRisk
+ *       properties:
+ *         customerType:
+ *           type: string
+ *           enum: [FIRST_TIME_LENDER, RETURNING_CUSTOMER]
+ *           example: FIRST_TIME_LENDER
+ *         openBanking:
+ *           $ref: '#/components/schemas/OpenBankingInput'
+ *         creditBureau:
+ *           $ref: '#/components/schemas/CreditBureauInput'
+ *         merchantRisk:
+ *           $ref: '#/components/schemas/MerchantRiskInput'
  *     WeightedScore:
  *       type: object
  *       required:
@@ -487,6 +799,236 @@ import { scoreService, ScoringInput, SelfAssessmentScoringInput } from '../servi
  *           example: 20000
  */
 export class ScoringController {
+  async calculateOpenBankingScore(req: Request, res: Response) {
+    try {
+      const input: OpenBankingInput = req.body;
+
+      if (!input || typeof input !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'Request body is required',
+        });
+      }
+
+      const requiredFields: (keyof OpenBankingInput)[] = [
+        'monthlyIncome',
+        'incomeStabilityVariance',
+        'netCashFlowPercentage',
+        'liquidityMonths',
+        'nsfEvents',
+        'overdraftFrequency',
+        'loanBurdenPercentage',
+      ];
+
+      for (const field of requiredFields) {
+        if (typeof input[field] !== 'number') {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+      }
+
+      const result = scoreService.calculateOpenBankingScore(input);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Open banking score calculated successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating open banking score:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to calculate open banking score',
+      });
+    }
+  }
+
+  async calculateCreditBureauScore(req: Request, res: Response) {
+    try {
+      const input: CreditBureauInput = req.body;
+
+      if (!input || typeof input !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'Request body is required',
+        });
+      }
+
+      const numberFields: (keyof CreditBureauInput)[] = [
+        'creditScore',
+        'utilizationPercentage',
+        'delinquencies24Months',
+        'hardInquiries12Months',
+      ];
+
+      for (const field of numberFields) {
+        if (typeof input[field] !== 'number') {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+      }
+
+      const validCollections = ['NONE', 'PAID', 'ACTIVE'];
+      if (!validCollections.includes(input.collections)) {
+        return res.status(400).json({
+          success: false,
+          message: 'collections must be one of NONE, PAID, ACTIVE',
+        });
+      }
+
+      const validBankruptcy = ['NONE', 'DISCHARGED_OVER_5_YEARS', 'ACTIVE_OR_RECENT'];
+      if (!validBankruptcy.includes(input.bankruptcy)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'bankruptcy must be one of NONE, DISCHARGED_OVER_5_YEARS, ACTIVE_OR_RECENT',
+        });
+      }
+
+      const result = scoreService.calculateCreditBureauScore(input);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Credit bureau score calculated successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating credit bureau score:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to calculate credit bureau score',
+      });
+    }
+  }
+
+  async calculateMerchantRiskScore(req: Request, res: Response) {
+    try {
+      const input: MerchantRiskInput = req.body;
+
+      if (!input || typeof input !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'Request body is required',
+        });
+      }
+
+      if (typeof input.merchantCategory !== 'string' || !input.merchantCategory.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'merchantCategory is required and must be a non-empty string',
+        });
+      }
+
+      if (typeof input.merchantCategoryScore !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'merchantCategoryScore is required and must be a number',
+        });
+      }
+
+      if (typeof input.purchaseUtilizationPercentage !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'purchaseUtilizationPercentage is required and must be a number',
+        });
+      }
+
+      const result = scoreService.calculateMerchantRiskScore(input);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Merchant risk score calculated successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating merchant risk score:', error);
+      const message = error.message || 'Failed to calculate merchant risk score';
+      const status =
+        typeof message === 'string' &&
+        (message.includes('must be') ||
+          message.includes('required') ||
+          message.includes('cannot be'))
+          ? 400
+          : 500;
+      return res.status(status).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  async calculateFinalCustomerScore(req: Request, res: Response) {
+    try {
+      const body = req.body as FinalCustomerScoreInput;
+
+      if (!body || typeof body !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'Request body is required',
+        });
+      }
+
+      const validTypes: CustomerLenderType[] = [
+        'FIRST_TIME_LENDER',
+        'RETURNING_CUSTOMER',
+      ];
+      if (!validTypes.includes(body.customerType)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'customerType must be FIRST_TIME_LENDER or RETURNING_CUSTOMER',
+        });
+      }
+
+      if (!body.openBanking || typeof body.openBanking !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'openBanking is required',
+        });
+      }
+
+      if (!body.creditBureau || typeof body.creditBureau !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'creditBureau is required',
+        });
+      }
+
+      if (!body.merchantRisk || typeof body.merchantRisk !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'merchantRisk is required',
+        });
+      }
+
+      const result = scoreService.calculateFinalCustomerScore(body);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Final customer score calculated successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating final customer score:', error);
+      const message = error.message || 'Failed to calculate final customer score';
+      const status =
+        typeof message === 'string' &&
+        (message.includes('must be') ||
+          message.includes('required') ||
+          message.includes('cannot be'))
+          ? 400
+          : 500;
+      return res.status(status).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
   async determineEligibility(req: Request, res: Response) {
     try {
       const { totalScore, existingLoanRepayment, estimatedMonthlyIncome } = req.body ?? {};

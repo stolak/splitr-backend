@@ -193,6 +193,125 @@ export interface EligibilityDeterminationResult {
   riskLevel: EligibilityRiskLevel;
   dtiRatio: number;
 }
+export interface OpenBankingInput {
+  monthlyIncome: number;
+  incomeStabilityVariance: number;
+  netCashFlowPercentage: number;
+  liquidityMonths: number;
+  nsfEvents: number;
+  overdraftFrequency: number;
+  loanBurdenPercentage: number;
+}
+
+export interface OpenBankingScoreResult {
+  totalScore: number;
+  components: {
+    variable: string;
+    rawScore: number;
+    weight: number;
+    weightedScore: number;
+  }[];
+}
+
+export interface CreditBureauInput {
+  creditScore: number;
+  utilizationPercentage: number;
+  delinquencies24Months: number;
+  collections: "NONE" | "PAID" | "ACTIVE";
+  hardInquiries12Months: number;
+  bankruptcy: "NONE" | "DISCHARGED_OVER_5_YEARS" | "ACTIVE_OR_RECENT";
+}
+
+export interface CreditBureauComponent {
+  variable: string;
+  rawScore: number;
+  weight: number;
+  weightedScore: number;
+}
+
+export interface CreditBureauScoreResult {
+  rawWeightedScore: number;
+  score: number;
+  components: CreditBureauComponent[];
+}
+
+export interface MerchantRiskInput {
+  merchantCategory: string;
+  merchantCategoryScore: number;
+  purchaseUtilizationPercentage: number;
+}
+
+export interface MerchantRiskComponent {
+  variable: string;
+  rawScore: number;
+  weight: number;
+  weightedScore: number;
+}
+
+export interface MerchantRiskScoreResult {
+  score: number;
+  components: MerchantRiskComponent[];
+}
+
+export type CustomerLenderType = "FIRST_TIME_LENDER" | "RETURNING_CUSTOMER";
+
+export interface FinalCustomerScoreInput {
+  customerType: CustomerLenderType;
+  openBanking: OpenBankingInput;
+  creditBureau: CreditBureauInput;
+  merchantRisk: MerchantRiskInput;
+}
+
+export interface FinalCustomerScoreComponent {
+  variable: string;
+  score: number;
+  weight: number;
+  weightedScore: number;
+  isDefault?: boolean;
+}
+
+export interface FinalCustomerScoreResult {
+  customerType: CustomerLenderType;
+  finalScore: number;
+  components: FinalCustomerScoreComponent[];
+  breakdown: {
+    openBanking: OpenBankingScoreResult;
+    creditBureau: CreditBureauScoreResult;
+    merchantRisk: MerchantRiskScoreResult;
+    bri: {
+      score: number;
+      isDefault: true;
+      note: string;
+    };
+  };
+}
+
+/** Default BRI score on a 0–100 scale until a formula is defined. */
+export const DEFAULT_BRI_SCORE = 50;
+
+const FINAL_SCORE_WEIGHTS: Record<
+  CustomerLenderType,
+  {
+    openBanking: number;
+    creditBureau: number;
+    merchantRisk: number;
+    bri: number;
+  }
+> = {
+  FIRST_TIME_LENDER: {
+    openBanking: 45,
+    creditBureau: 40,
+    merchantRisk: 10,
+    bri: 5,
+  },
+  RETURNING_CUSTOMER: {
+    openBanking: 40,
+    creditBureau: 30,
+    merchantRisk: 10,
+    bri: 20,
+  },
+};
+
 export class ScoringService {
   // scoring score max 100 points
   async scoring(input: ScoringInput) {
@@ -263,6 +382,389 @@ export class ScoringService {
       details: {
         incomeRecurrent: incomeRecurrentResult,
         liquidityBuffer: liquidityBufferResult,
+      },
+    };
+  }
+
+  calculateOpenBankingScore(input: OpenBankingInput): OpenBankingScoreResult {
+    const monthlyIncomeScore =
+      input.monthlyIncome > 8000
+        ? 10
+        : input.monthlyIncome >= 6000
+          ? 8
+          : input.monthlyIncome >= 4000
+            ? 6
+            : input.monthlyIncome >= 2500
+              ? 4
+              : 2;
+
+    const incomeStabilityScore =
+      input.incomeStabilityVariance < 10
+        ? 10
+        : input.incomeStabilityVariance <= 20
+          ? 8
+          : input.incomeStabilityVariance <= 30
+            ? 5
+            : 2;
+
+    const cashFlowScore =
+      input.netCashFlowPercentage > 40
+        ? 10
+        : input.netCashFlowPercentage >= 25
+          ? 8
+          : input.netCashFlowPercentage >= 10
+            ? 5
+            : input.netCashFlowPercentage >= 0
+              ? 2
+              : 0;
+
+    const liquidityScore =
+      input.liquidityMonths > 6
+        ? 10
+        : input.liquidityMonths >= 4
+          ? 8
+          : input.liquidityMonths >= 2
+            ? 5
+            : input.liquidityMonths >= 1
+              ? 2
+              : 0;
+
+    const nsfScore =
+      input.nsfEvents === 0
+        ? 10
+        : input.nsfEvents === 1
+          ? 7
+          : input.nsfEvents === 2
+            ? 4
+            : 0;
+
+    const overdraftScore =
+      input.overdraftFrequency === 0
+        ? 10
+        : input.overdraftFrequency <= 2
+          ? 7
+          : input.overdraftFrequency <= 4
+            ? 4
+            : 0;
+
+    const loanBurdenScore =
+      input.loanBurdenPercentage < 10
+        ? 10
+        : input.loanBurdenPercentage <= 20
+          ? 8
+          : input.loanBurdenPercentage <= 35
+            ? 5
+            : 0;
+
+    const components = [
+      {
+        variable: "Monthly Income",
+        rawScore: monthlyIncomeScore,
+        weight: 15,
+        weightedScore: monthlyIncomeScore * 0.15,
+      },
+      {
+        variable: "Income Stability",
+        rawScore: incomeStabilityScore,
+        weight: 20,
+        weightedScore: incomeStabilityScore * 0.2,
+      },
+      {
+        variable: "Net Cash Flow",
+        rawScore: cashFlowScore,
+        weight: 25,
+        weightedScore: cashFlowScore * 0.25,
+      },
+      {
+        variable: "Liquidity Buffer",
+        rawScore: liquidityScore,
+        weight: 7.5,
+        weightedScore: liquidityScore * 0.075,
+      },
+      {
+        variable: "NSF Events",
+        rawScore: nsfScore,
+        weight: 10,
+        weightedScore: nsfScore * 0.1,
+      },
+      {
+        variable: "Overdraft Frequency",
+        rawScore: overdraftScore,
+        weight: 7.5,
+        weightedScore: overdraftScore * 0.075,
+      },
+      {
+        variable: "Existing Loan Burden",
+        rawScore: loanBurdenScore,
+        weight: 15,
+        weightedScore: loanBurdenScore * 0.15,
+      },
+    ];
+
+    const totalScore = components.reduce(
+      (total, component) => total + component.weightedScore,
+      0,
+    );
+
+    return {
+      totalScore,
+      components,
+    };
+  }
+
+  calculateCreditBureauScore(input: CreditBureauInput): CreditBureauScoreResult {
+    const creditScore =
+      input.creditScore >= 800
+        ? 10
+        : input.creditScore >= 750
+          ? 9
+          : input.creditScore >= 700
+            ? 8
+            : input.creditScore >= 650
+              ? 6
+              : input.creditScore >= 600
+                ? 4
+                : input.creditScore >= 550
+                  ? 2
+                  : 0;
+
+    const utilizationScore =
+      input.utilizationPercentage <= 30
+        ? 10
+        : input.utilizationPercentage <= 50
+          ? 8
+          : input.utilizationPercentage <= 70
+            ? 5
+            : input.utilizationPercentage <= 90
+              ? 2
+              : 0;
+
+    const delinquencyScore =
+      input.delinquencies24Months === 0
+        ? 10
+        : input.delinquencies24Months === 1
+          ? 8
+          : input.delinquencies24Months === 2
+            ? 5
+            : input.delinquencies24Months === 3
+              ? 2
+              : 0;
+
+    const collectionsScore =
+      input.collections === "NONE" ? 10 : input.collections === "PAID" ? 5 : 0;
+
+    const inquiriesScore =
+      input.hardInquiries12Months <= 2
+        ? 10
+        : input.hardInquiries12Months <= 5
+          ? 7
+          : input.hardInquiries12Months <= 8
+            ? 4
+            : 0;
+
+    const bankruptcyScore =
+      input.bankruptcy === "NONE"
+        ? 10
+        : input.bankruptcy === "DISCHARGED_OVER_5_YEARS"
+          ? 5
+          : 0;
+
+    const components: CreditBureauComponent[] = [
+      {
+        variable: "Credit Score",
+        rawScore: creditScore,
+        weight: 35,
+        weightedScore: creditScore * 0.35,
+      },
+      {
+        variable: "Utilization",
+        rawScore: utilizationScore,
+        weight: 15,
+        weightedScore: utilizationScore * 0.15,
+      },
+      {
+        variable: "Delinquencies",
+        rawScore: delinquencyScore,
+        weight: 15,
+        weightedScore: delinquencyScore * 0.15,
+      },
+      {
+        variable: "Collections",
+        rawScore: collectionsScore,
+        weight: 25,
+        weightedScore: collectionsScore * 0.25,
+      },
+      {
+        variable: "Inquiries",
+        rawScore: inquiriesScore,
+        weight: 5,
+        weightedScore: inquiriesScore * 0.05,
+      },
+      {
+        variable: "Bankruptcy",
+        rawScore: bankruptcyScore,
+        weight: 5,
+        weightedScore: bankruptcyScore * 0.05,
+      },
+    ];
+
+    const rawWeightedScore = components.reduce(
+      (total, component) => total + component.weightedScore,
+      0,
+    );
+
+    const score = rawWeightedScore * 10;
+
+    return {
+      rawWeightedScore,
+      score,
+      components,
+    };
+  }
+
+  private validateScore(score: number, fieldName: string): void {
+    if (!Number.isFinite(score)) {
+      throw new Error(`${fieldName} must be a valid number`);
+    }
+
+    if (score < 0 || score > 10) {
+      throw new Error(`${fieldName} must be between 0 and 10`);
+    }
+  }
+
+  private getPurchaseUtilizationScore(utilization: number): number {
+    if (!Number.isFinite(utilization)) {
+      throw new Error("Purchase utilization must be a valid number");
+    }
+
+    if (utilization < 0) {
+      throw new Error("Purchase utilization cannot be negative");
+    }
+
+    if (utilization < 20) {
+      return 10;
+    }
+
+    if (utilization <= 40) {
+      return 8;
+    }
+
+    if (utilization <= 60) {
+      return 5;
+    }
+
+    if (utilization <= 80) {
+      return 3;
+    }
+
+    return 0;
+  }
+
+  calculateMerchantRiskScore(input: MerchantRiskInput): MerchantRiskScoreResult {
+    if (!input.merchantCategory?.trim()) {
+      throw new Error("Merchant category is required");
+    }
+
+    this.validateScore(input.merchantCategoryScore, "Merchant category score");
+
+    const utilizationScore = this.getPurchaseUtilizationScore(
+      input.purchaseUtilizationPercentage,
+    );
+
+    const categoryWeightedScore = input.merchantCategoryScore * 0.6;
+    const utilizationWeightedScore = utilizationScore * 0.4;
+    const score = categoryWeightedScore + utilizationWeightedScore;
+
+    const components: MerchantRiskComponent[] = [
+      {
+        variable: "Merchant Category Risk",
+        rawScore: input.merchantCategoryScore,
+        weight: 60,
+        weightedScore: categoryWeightedScore,
+      },
+      {
+        variable: "Purchase Utilization",
+        rawScore: utilizationScore,
+        weight: 40,
+        weightedScore: utilizationWeightedScore,
+      },
+    ];
+
+    return {
+      score,
+      components,
+    };
+  }
+
+  calculateFinalCustomerScore(
+    input: FinalCustomerScoreInput,
+  ): FinalCustomerScoreResult {
+    if (
+      input.customerType !== "FIRST_TIME_LENDER" &&
+      input.customerType !== "RETURNING_CUSTOMER"
+    ) {
+      throw new Error(
+        "customerType must be FIRST_TIME_LENDER or RETURNING_CUSTOMER",
+      );
+    }
+
+    const weights = FINAL_SCORE_WEIGHTS[input.customerType];
+    const openBanking = this.calculateOpenBankingScore(input.openBanking);
+    const creditBureau = this.calculateCreditBureauScore(input.creditBureau);
+    const merchantRisk = this.calculateMerchantRiskScore(input.merchantRisk);
+
+    // Normalize all pillars to a 0–100 scale before applying portfolio weights.
+    const openBankingNormalized = openBanking.totalScore * 10;
+    const creditBureauNormalized = creditBureau.score;
+    const merchantRiskNormalized = merchantRisk.score * 10;
+    const briNormalized = DEFAULT_BRI_SCORE;
+
+    const components: FinalCustomerScoreComponent[] = [
+      {
+        variable: "Open Banking Score",
+        score: openBankingNormalized,
+        weight: weights.openBanking,
+        weightedScore: openBankingNormalized * (weights.openBanking / 100),
+      },
+      {
+        variable: "Credit Bureau Score",
+        score: creditBureauNormalized,
+        weight: weights.creditBureau,
+        weightedScore: creditBureauNormalized * (weights.creditBureau / 100),
+      },
+      {
+        variable: "Merchant Risk Score",
+        score: merchantRiskNormalized,
+        weight: weights.merchantRisk,
+        weightedScore: merchantRiskNormalized * (weights.merchantRisk / 100),
+      },
+      {
+        variable: "Behavioral Repayment Intelligence (BRI)",
+        score: briNormalized,
+        weight: weights.bri,
+        weightedScore: briNormalized * (weights.bri / 100),
+        isDefault: true,
+      },
+    ];
+
+    const finalScore = components.reduce(
+      (total, component) => total + component.weightedScore,
+      0,
+    );
+
+    return {
+      customerType: input.customerType,
+      finalScore,
+      components,
+      breakdown: {
+        openBanking,
+        creditBureau,
+        merchantRisk,
+        bri: {
+          score: DEFAULT_BRI_SCORE,
+          isDefault: true,
+          note: "BRI formula is not defined yet; using default score",
+        },
       },
     };
   }
