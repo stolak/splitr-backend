@@ -1,4 +1,4 @@
-import prisma from '../utils/prisma';
+import prisma from "../utils/prisma";
 
 export interface IncomeRecurrentInput {
   incomeMonths: number;
@@ -186,7 +186,7 @@ export interface SelfAssessmentScoringInput {
   existingLoanRepayment: number;
 }
 
-export type EligibilityRiskLevel = 'high' | 'medium' | 'low';
+export type EligibilityRiskLevel = "high" | "medium" | "low";
 
 export interface EligibilityDeterminationResult {
   eligible: boolean;
@@ -324,8 +324,8 @@ export class ScoringService {
         input.cashFlow ?? {
           inFlow: { M1: 0, M2: 0, M3: 0, M4: 0, M5: 0, M6: 0 },
           outflow: { M1: 0, M2: 0, M3: 0, M4: 0, M5: 0, M6: 0 },
-        },
-      ),
+        }
+      )
     );
 
     const liquidityBufferResult = await this.liquidityBuffer(input.liquidityBuffer);
@@ -337,8 +337,8 @@ export class ScoringService {
           input.overdraftEvents ?? 0,
           input.overdraftDeepestNegativeBalance ?? 0,
           input.overdraftNegativeDays ?? 0,
-          input.overdraftRecent ?? false,
-        ),
+          input.overdraftRecent ?? false
+        )
       ) || 0;
     const creditBehaviorScore = 10; // Number(await this.creditBehaviorScore(input.creditHistory)) || 0;
     const riskFactorScore = Number(this.riskFactorScore(input.riskFactor)) || 0;
@@ -364,7 +364,7 @@ export class ScoringService {
     const eligible = this.determineEligibility(
       finalScore,
       input.existingLoanRepayment,
-      input.incomeStability.averageIncome,
+      input.incomeStability.averageIncome
     );
     return {
       finalScore,
@@ -430,13 +430,7 @@ export class ScoringService {
               : 0;
 
     const nsfScore =
-      input.nsfEvents === 0
-        ? 10
-        : input.nsfEvents === 1
-          ? 7
-          : input.nsfEvents === 2
-            ? 4
-            : 0;
+      input.nsfEvents === 0 ? 10 : input.nsfEvents === 1 ? 7 : input.nsfEvents === 2 ? 4 : 0;
 
     const overdraftScore =
       input.overdraftFrequency === 0
@@ -501,10 +495,7 @@ export class ScoringService {
       },
     ];
 
-    const totalScore = components.reduce(
-      (total, component) => total + component.weightedScore,
-      0,
-    );
+    const totalScore = components.reduce((total, component) => total + component.weightedScore, 0);
 
     return {
       totalScore,
@@ -563,11 +554,7 @@ export class ScoringService {
             : 0;
 
     const bankruptcyScore =
-      input.bankruptcy === "NONE"
-        ? 10
-        : input.bankruptcy === "DISCHARGED_OVER_5_YEARS"
-          ? 5
-          : 0;
+      input.bankruptcy === "NONE" ? 10 : input.bankruptcy === "DISCHARGED_OVER_5_YEARS" ? 5 : 0;
 
     const components: CreditBureauComponent[] = [
       {
@@ -610,7 +597,7 @@ export class ScoringService {
 
     const rawWeightedScore = components.reduce(
       (total, component) => total + component.weightedScore,
-      0,
+      0
     );
 
     const score = rawWeightedScore * 10;
@@ -667,9 +654,7 @@ export class ScoringService {
 
     this.validateScore(input.merchantCategoryScore, "Merchant category score");
 
-    const utilizationScore = this.getPurchaseUtilizationScore(
-      input.purchaseUtilizationPercentage,
-    );
+    const utilizationScore = this.getPurchaseUtilizationScore(input.purchaseUtilizationPercentage);
 
     const categoryWeightedScore = input.merchantCategoryScore * 0.6;
     const utilizationWeightedScore = utilizationScore * 0.4;
@@ -696,16 +681,9 @@ export class ScoringService {
     };
   }
 
-  calculateFinalCustomerScore(
-    input: FinalCustomerScoreInput,
-  ): FinalCustomerScoreResult {
-    if (
-      input.customerType !== "FIRST_TIME_LENDER" &&
-      input.customerType !== "RETURNING_CUSTOMER"
-    ) {
-      throw new Error(
-        "customerType must be FIRST_TIME_LENDER or RETURNING_CUSTOMER",
-      );
+  calculateFinalCustomerScore(input: FinalCustomerScoreInput): FinalCustomerScoreResult {
+    if (input.customerType !== "FIRST_TIME_LENDER" && input.customerType !== "RETURNING_CUSTOMER") {
+      throw new Error("customerType must be FIRST_TIME_LENDER or RETURNING_CUSTOMER");
     }
 
     const weights = FINAL_SCORE_WEIGHTS[input.customerType];
@@ -717,7 +695,7 @@ export class ScoringService {
     const openBankingNormalized = openBanking.totalScore * 10;
     const creditBureauNormalized = creditBureau.score;
     const merchantRiskNormalized = merchantRisk.score * 10;
-    const briNormalized = DEFAULT_BRI_SCORE;
+    const briNormalized = input.customerType === "FIRST_TIME_LENDER" ? 0 : DEFAULT_BRI_SCORE;
 
     const components: FinalCustomerScoreComponent[] = [
       {
@@ -747,10 +725,7 @@ export class ScoringService {
       },
     ];
 
-    const finalScore = components.reduce(
-      (total, component) => total + component.weightedScore,
-      0,
-    );
+    const finalScore = components.reduce((total, component) => total + component.weightedScore, 0);
 
     return {
       customerType: input.customerType,
@@ -761,7 +736,7 @@ export class ScoringService {
         creditBureau,
         merchantRisk,
         bri: {
-          score: DEFAULT_BRI_SCORE,
+          score: input.customerType === "FIRST_TIME_LENDER" ? 0 : DEFAULT_BRI_SCORE,
           isDefault: true,
           note: "BRI formula is not defined yet; using default score",
         },
@@ -772,14 +747,14 @@ export class ScoringService {
   determineEligibility(
     totalScore: number,
     existingLoanRepayment: number,
-    estimatedMonthlyIncome: number,
+    estimatedMonthlyIncome: number
   ): EligibilityDeterminationResult {
     const safeTotalScore = Number(totalScore) || 0;
     const safeExistingLoanRepayment = Number(existingLoanRepayment) || 0;
     const safeIncome = Number(estimatedMonthlyIncome) || 0;
 
     const dtiRatio = Math.round(
-      safeIncome > 0 ? (safeExistingLoanRepayment / safeIncome) * 100 : 0,
+      safeIncome > 0 ? (safeExistingLoanRepayment / safeIncome) * 100 : 0
     );
     // console.log('--------------------------------');
     // console.log('dtiRatio', dtiRatio);
@@ -788,9 +763,9 @@ export class ScoringService {
     // console.log('safeExistingLoanRepayment', safeExistingLoanRepayment);
     const eligible = safeTotalScore >= 50 && dtiRatio <= 35 && safeIncome >= 30000;
 
-    let riskLevel: EligibilityRiskLevel = 'low';
-    if (safeTotalScore < 50) riskLevel = 'high';
-    else if (safeTotalScore < 70) riskLevel = 'medium';
+    let riskLevel: EligibilityRiskLevel = "low";
+    if (safeTotalScore < 50) riskLevel = "high";
+    else if (safeTotalScore < 70) riskLevel = "medium";
     // console.log({ eligible, riskLevel, dtiRatio });
     // console.log('--------------------------------');
     return { eligible, riskLevel, dtiRatio };
@@ -849,7 +824,7 @@ export class ScoringService {
     events: number,
     deepest: number,
     days: number,
-    recent: boolean,
+    recent: boolean
   ): number {
     const safeEvents = Number(events) || 0;
     const safeDeepest = Number(deepest) || 0;
@@ -873,20 +848,20 @@ export class ScoringService {
       Number(
         this.incomeStabilitySelfAssessment(
           input.incomeRecurrent?.incomeMonths,
-          input.incomeRecurrent?.dominantSourceCount,
-        ),
+          input.incomeRecurrent?.dominantSourceCount
+        )
       ) || 0;
     const netCashFlowScore =
       Number(
-        this.netCashFlowSelfAssessment(input.incomeRecurrent?.incomeMonths, input.overdraftCount),
+        this.netCashFlowSelfAssessment(input.incomeRecurrent?.incomeMonths, input.overdraftCount)
       ) || 0;
 
     const liquidityBufferScore =
       Number(
         this.liquidityBufferSelfAssessment(
           input.incomeRecurrent?.incomeMonths,
-          input.overdraftCount,
-        ),
+          input.overdraftCount
+        )
       ) || 0;
 
     const overdraftScore =
@@ -895,8 +870,8 @@ export class ScoringService {
           input.overdraftEvents,
           input.overdraftDeepestNegativeBalance,
           input.overdraftNegativeDays,
-          input.overdraftRecent,
-        ),
+          input.overdraftRecent
+        )
       ) || 0;
     const creditBehaviorScore = Number(await this.creditBehaviorScore(input.creditHistory)) || 0;
     const riskFactorScore = Number(this.riskFactorScoreSelfAssessment(input.totalFlags)) || 0;
@@ -913,7 +888,7 @@ export class ScoringService {
     const eligibility = this.determineEligibility(
       finalScore,
       input.existingLoanRepayment,
-      input.estimatedMonthlyIncome,
+      input.estimatedMonthlyIncome
     );
 
     return {
@@ -1023,12 +998,12 @@ export class ScoringService {
     // count of pre income balance that is >0 for the month
     const preIncomeBalanceCount = months.reduce(
       (acc, m) => (m.preIncomeBalance > 0 ? acc + 1 : acc),
-      0,
+      0
     );
     //  count of month end balance that is >0 for the month
     const monthEndBalanceCount = months.reduce(
       (acc, m) => (m.monthEndBalance > 0 ? acc + 1 : acc),
-      0,
+      0
     );
 
     input.recurringIncomeExists =
@@ -1046,12 +1021,12 @@ export class ScoringService {
         ? (input.estimatedMonthlyIncome ?? 0)
         : (input.averageMonthlyInflow ?? 0);
 
-    const safeDenom = typeof denom === 'number' && denom > 0 ? denom : 0;
+    const safeDenom = typeof denom === "number" && denom > 0 ? denom : 0;
 
     const monthlyRatios = months.map((m) => {
       if (safeDenom === 0) return 0;
       const numerator = input.recurringIncomeExists ? m.preIncomeBalance : m.monthEndBalance;
-      if (typeof numerator !== 'number' || !Number.isFinite(numerator)) return 0;
+      if (typeof numerator !== "number" || !Number.isFinite(numerator)) return 0;
       return numerator / safeDenom;
     });
 
@@ -1179,7 +1154,7 @@ export class ScoringService {
   async standardDeviation(data: number[]): Promise<number> {
     const n = data.length;
     if (n === 0) return 0;
-    const positiveData = data.filter((x) => typeof x === 'number' && x > 0);
+    const positiveData = data.filter((x) => typeof x === "number" && x > 0);
     if (positiveData.length < 4) return 0;
 
     const mean = data.reduce((sum, val) => sum + val, 0) / n;
