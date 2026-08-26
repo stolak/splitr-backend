@@ -296,6 +296,144 @@ export interface FinalCustomerScoreResult {
   };
 }
 
+export type RiskTier = "A+" | "A" | "B" | "C" | "D";
+
+export interface RiskAdjustmentTier {
+  minScore: number;
+  maxScore: number;
+  riskTier: RiskTier;
+  multiplier: number;
+  treatment: string;
+}
+
+export interface BehaviouralAdjustmentTier {
+  minScore: number;
+  maxScore: number;
+  behaviourTier: RiskTier;
+  multiplier: number;
+  treatment: string;
+}
+
+export interface SpendingPowerConfig {
+  affordability: {
+    allocationPercentage: number;
+  };
+  riskAdjustment: {
+    tiers: RiskAdjustmentTier[];
+  };
+  behaviouralAdjustment: {
+    tiers: BehaviouralAdjustmentTier[];
+  };
+  maximumExposure: number;
+}
+
+export interface SpendingPowerInput {
+  disposableIncome: number;
+  riskScore: number;
+  behaviourScore: number;
+}
+
+export interface SpendingPowerResult {
+  affordableMonthlyRepaymentCapacity: number;
+  riskScore: number;
+  riskTier: RiskTier;
+  riskMultiplier: number;
+  riskAdjustedCapacity: number;
+  behaviourScore: number;
+  behaviourTier: RiskTier;
+  behaviourMultiplier: number;
+  behaviourAdjustedCapacity: number;
+  maximumExposure: number;
+  totalSpendingPower: number;
+}
+
+export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
+  affordability: {
+    allocationPercentage: 0.25,
+  },
+  riskAdjustment: {
+    tiers: [
+      {
+        minScore: 90,
+        maxScore: 100,
+        riskTier: "A+",
+        multiplier: 1.5,
+        treatment: "Highest permitted positive adjustment, still subject to Maximum Exposure.",
+      },
+      {
+        minScore: 80,
+        maxScore: 89,
+        riskTier: "A",
+        multiplier: 1.25,
+        treatment: "Positive adjustment, subject to caps.",
+      },
+      {
+        minScore: 70,
+        maxScore: 79,
+        riskTier: "B",
+        multiplier: 1.0,
+        treatment: "Neutral adjustment.",
+      },
+      {
+        minScore: 60,
+        maxScore: 69,
+        riskTier: "C",
+        multiplier: 0.75,
+        treatment: "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
+      },
+      {
+        minScore: 0,
+        maxScore: 59,
+        riskTier: "D",
+        multiplier: 0.0,
+        treatment:
+          "Decline for financing unless a separate approved policy explicitly permits otherwise.",
+      },
+    ],
+  },
+  behaviouralAdjustment: {
+    tiers: [
+      {
+        minScore: 90,
+        maxScore: 100,
+        behaviourTier: "A+",
+        multiplier: 1.5,
+        treatment: "Highest permitted positive adjustment, still subject to Maximum Exposure.",
+      },
+      {
+        minScore: 80,
+        maxScore: 89,
+        behaviourTier: "A",
+        multiplier: 1.25,
+        treatment: "Positive adjustment, subject to caps.",
+      },
+      {
+        minScore: 70,
+        maxScore: 79,
+        behaviourTier: "B",
+        multiplier: 1.0,
+        treatment: "Neutral adjustment.",
+      },
+      {
+        minScore: 60,
+        maxScore: 69,
+        behaviourTier: "C",
+        multiplier: 0.75,
+        treatment: "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
+      },
+      {
+        minScore: 0,
+        maxScore: 59,
+        behaviourTier: "D",
+        multiplier: 0.0,
+        treatment:
+          "Decline for financing unless a separate approved policy explicitly permits otherwise.",
+      },
+    ],
+  },
+  maximumExposure: 500000,
+};
+
 const FINAL_SCORE_WEIGHTS: Record<
   CustomerLenderType,
   {
@@ -728,7 +866,7 @@ export class ScoringService {
   calculateBehaviouralRepaymentScore(
     isExistingCustomer: boolean,
     onTimePaymentRatio: number,
-    achSuccessRate: number,
+    achSuccessRate: number
   ): BehaviouralRepaymentScoreResult {
     if (!isExistingCustomer) {
       return {
@@ -756,8 +894,7 @@ export class ScoringService {
 
     const onTimePaymentScore = this.getOnTimePaymentScore(onTimePaymentRatio);
     const achSuccessScore = this.getAchSuccessScore(achSuccessRate);
-    const behaviouralScore =
-      onTimePaymentScore * 0.6 + achSuccessScore * 0.4;
+    const behaviouralScore = onTimePaymentScore * 0.6 + achSuccessScore * 0.4;
 
     return {
       onTimePaymentScore,
@@ -789,7 +926,7 @@ export class ScoringService {
     const bri = this.calculateBehaviouralRepaymentScore(
       isExistingCustomer,
       input.onTimePaymentRatio ?? 0,
-      input.achSuccessRate ?? 0,
+      input.achSuccessRate ?? 0
     );
 
     // Normalize all pillars to a 0–100 scale before applying portfolio weights.
@@ -845,6 +982,81 @@ export class ScoringService {
             : {}),
         },
       },
+    };
+  }
+
+  private getRiskAdjustment(score: number, config: SpendingPowerConfig): RiskAdjustmentTier {
+    const tier = config.riskAdjustment.tiers.find(
+      (item) => score >= item.minScore && score <= item.maxScore
+    );
+
+    if (!tier) {
+      throw new Error(`No risk adjustment configuration found for score: ${score}`);
+    }
+
+    return tier;
+  }
+
+  private getBehaviouralAdjustment(
+    score: number,
+    config: SpendingPowerConfig
+  ): BehaviouralAdjustmentTier {
+    const tier = config.behaviouralAdjustment.tiers.find(
+      (item) => score >= item.minScore && score <= item.maxScore
+    );
+
+    if (!tier) {
+      throw new Error(`No behavioural adjustment configuration found for score: ${score}`);
+    }
+
+    return tier;
+  }
+
+  calculateSpendingPower(
+    input: SpendingPowerInput,
+    config: SpendingPowerConfig = DEFAULT_SPENDING_POWER_CONFIG
+  ): SpendingPowerResult {
+    if (!Number.isFinite(input.disposableIncome)) {
+      throw new Error("disposableIncome must be a valid number");
+    }
+
+    if (!Number.isFinite(input.riskScore)) {
+      throw new Error("riskScore must be a valid number");
+    }
+
+    if (!Number.isFinite(input.behaviourScore)) {
+      throw new Error("behaviourScore must be a valid number");
+    }
+
+    if (input.disposableIncome < 0) {
+      throw new Error("disposableIncome cannot be negative");
+    }
+
+    const affordableMonthlyRepaymentCapacity = Math.max(
+      0,
+      input.disposableIncome * config.affordability.allocationPercentage
+    );
+
+    const riskAdjustment = this.getRiskAdjustment(input.riskScore, config);
+    const riskAdjustedCapacity = affordableMonthlyRepaymentCapacity * riskAdjustment.multiplier;
+
+    const behaviouralAdjustment = this.getBehaviouralAdjustment(input.behaviourScore, config);
+    const behaviourAdjustedCapacity = riskAdjustedCapacity * behaviouralAdjustment.multiplier;
+
+    const totalSpendingPower = Math.min(behaviourAdjustedCapacity, config.maximumExposure);
+
+    return {
+      affordableMonthlyRepaymentCapacity,
+      riskScore: input.riskScore,
+      riskTier: riskAdjustment.riskTier,
+      riskMultiplier: riskAdjustment.multiplier,
+      riskAdjustedCapacity,
+      behaviourScore: input.behaviourScore,
+      behaviourTier: behaviouralAdjustment.behaviourTier,
+      behaviourMultiplier: behaviouralAdjustment.multiplier,
+      behaviourAdjustedCapacity,
+      maximumExposure: config.maximumExposure,
+      totalSpendingPower,
     };
   }
 

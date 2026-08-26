@@ -981,6 +981,150 @@ async function main() {
 
     console.log("✅ Eligibility and score records seeded successfully");
 
+    // Seed Spending Power Config
+    console.log("\n💳 Seeding spending power config...");
+
+    await prisma.spendingPowerConfig.upsert({
+      where: { id: "default" },
+      update: {
+        allocationPercentage: 0.3,
+        maximumExposure: 500000,
+      },
+      create: {
+        id: "default",
+        allocationPercentage: 0.3,
+        maximumExposure: 500000,
+      },
+    });
+
+    const riskTiers = [
+      {
+        id: "spending-power-risk-a-plus",
+        minScore: 90,
+        maxScore: 100,
+        riskTier: "A+",
+        multiplier: 1.5,
+        treatment:
+          "Highest permitted positive adjustment, still subject to Maximum Exposure.",
+      },
+      {
+        id: "spending-power-risk-a",
+        minScore: 80,
+        maxScore: 89,
+        riskTier: "A",
+        multiplier: 1.25,
+        treatment: "Positive adjustment, subject to caps.",
+      },
+      {
+        id: "spending-power-risk-b",
+        minScore: 70,
+        maxScore: 79,
+        riskTier: "B",
+        multiplier: 1.0,
+        treatment: "Neutral adjustment.",
+      },
+      {
+        id: "spending-power-risk-c",
+        minScore: 60,
+        maxScore: 69,
+        riskTier: "C",
+        multiplier: 0.75,
+        treatment:
+          "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
+      },
+      {
+        id: "spending-power-risk-d",
+        minScore: 0,
+        maxScore: 59,
+        riskTier: "D",
+        multiplier: 0.0,
+        treatment:
+          "Decline for financing unless a separate approved policy explicitly permits otherwise.",
+      },
+    ];
+
+    for (const tier of riskTiers) {
+      await prisma.spendingPowerRiskTier.upsert({
+        where: { id: tier.id },
+        update: {
+          minScore: tier.minScore,
+          maxScore: tier.maxScore,
+          riskTier: tier.riskTier,
+          multiplier: tier.multiplier,
+          treatment: tier.treatment,
+        },
+        create: {
+          ...tier,
+          configId: "default",
+        },
+      });
+    }
+
+    const behaviourTiers = [
+      {
+        id: "spending-power-behaviour-a-plus",
+        minScore: 90,
+        maxScore: 100,
+        behaviourTier: "A+",
+        multiplier: 1.5,
+        treatment:
+          "Highest permitted positive adjustment, still subject to Maximum Exposure.",
+      },
+      {
+        id: "spending-power-behaviour-a",
+        minScore: 80,
+        maxScore: 89,
+        behaviourTier: "A",
+        multiplier: 1.25,
+        treatment: "Positive adjustment, subject to caps.",
+      },
+      {
+        id: "spending-power-behaviour-b",
+        minScore: 70,
+        maxScore: 79,
+        behaviourTier: "B",
+        multiplier: 1.0,
+        treatment: "Neutral adjustment.",
+      },
+      {
+        id: "spending-power-behaviour-c",
+        minScore: 60,
+        maxScore: 69,
+        behaviourTier: "C",
+        multiplier: 0.75,
+        treatment:
+          "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
+      },
+      {
+        id: "spending-power-behaviour-d",
+        minScore: 0,
+        maxScore: 59,
+        behaviourTier: "D",
+        multiplier: 0.0,
+        treatment:
+          "Decline for financing unless a separate approved policy explicitly permits otherwise.",
+      },
+    ];
+
+    for (const tier of behaviourTiers) {
+      await prisma.spendingPowerBehaviourTier.upsert({
+        where: { id: tier.id },
+        update: {
+          minScore: tier.minScore,
+          maxScore: tier.maxScore,
+          behaviourTier: tier.behaviourTier,
+          multiplier: tier.multiplier,
+          treatment: tier.treatment,
+        },
+        create: {
+          ...tier,
+          configId: "default",
+        },
+      });
+    }
+
+    console.log("✅ Spending power config seeded successfully");
+
     console.log("\n🎉 Database seeding completed successfully!");
     console.log("\n📋 Sample Data Created:");
     console.log("👥 Users:");
@@ -1046,6 +1190,11 @@ async function main() {
     console.log(
       `  - ${buyer3.firstName} ${buyer3.lastName}: Score 45.0 (Declined) - Below threshold`
     );
+    console.log("\n💳 Spending Power Config:");
+    console.log("  - Allocation percentage: 30%");
+    console.log("  - Maximum exposure: ₦500,000");
+    console.log("  - Risk tiers: A+, A, B, C, D");
+    console.log("  - Behaviour tiers: A+, A, B, C, D");
   } catch (error) {
     console.error("❌ Error during seeding:", error);
     throw error;

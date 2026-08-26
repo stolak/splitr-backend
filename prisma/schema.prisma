@@ -1147,3 +1147,47 @@ model PlaidAccount {
   @@index([buyerId])
   @@map("plaid_account")
 }
+
+model SpendingPowerConfig {
+  id                   String                       @id @default("default")
+  allocationPercentage Decimal                      @db.Decimal(5, 4)
+  maximumExposure      Decimal                      @db.Decimal(15, 2)
+  riskTiers            SpendingPowerRiskTier[]
+  behaviourTiers       SpendingPowerBehaviourTier[]
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+
+  @@map("spending_power_config")
+}
+
+model SpendingPowerRiskTier {
+  id         String              @id @default(uuid())
+  configId   String
+  config     SpendingPowerConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  minScore   Int
+  maxScore   Int
+  riskTier   String              @db.VarChar(10)
+  multiplier Decimal             @db.Decimal(5, 2)
+  treatment  String              @db.Text
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([configId])
+  @@map("spending_power_risk_tier")
+}
+
+model SpendingPowerBehaviourTier {
+  id            String              @id @default(uuid())
+  configId      String
+  config        SpendingPowerConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  minScore      Int
+  maxScore      Int
+  behaviourTier String              @db.VarChar(10)
+  multiplier    Decimal             @db.Decimal(5, 2)
+  treatment     String              @db.Text
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([configId])
+  @@map("spending_power_behaviour_tier")
+}

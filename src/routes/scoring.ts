@@ -9,6 +9,7 @@ router.post("/open-banking/calculate", scoringController.calculateOpenBankingSco
 router.post("/credit-bureau/calculate", scoringController.calculateCreditBureauScore);
 router.post("/merchant-risk/calculate", scoringController.calculateMerchantRiskScore);
 router.post("/bri/calculate", scoringController.calculateBehaviouralRepaymentScore);
+router.post("/spending-power/calculate", scoringController.calculateSpendingPower);
 router.post("/final/calculate", scoringController.calculateFinalCustomerScore);
 router.post("/eligibility/determine", scoringController.determineEligibility);
 

@@ -8,8 +8,52 @@ import {
   MerchantRiskInput,
   FinalCustomerScoreInput,
   CustomerLenderType,
+  SpendingPowerInput,
+  SpendingPowerConfig,
+  DEFAULT_SPENDING_POWER_CONFIG,
 } from '../services/scoringService';
 
+/**
+ * @swagger
+ * /api/v1/scoring/spending-power/calculate:
+ *   post:
+ *     summary: Calculate spending power
+ *     description: >
+ *       Computes affordable repayment capacity, applies risk and behavioural
+ *       multipliers from configurable tiers, then caps at maximum exposure.
+ *       Uses the default spending-power config unless an override is provided.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - disposableIncome
+ *               - riskScore
+ *               - behaviourScore
+ *             properties:
+ *               disposableIncome:
+ *                 type: number
+ *                 example: 4000
+ *               riskScore:
+ *                 type: number
+ *                 example: 82
+ *               behaviourScore:
+ *                 type: number
+ *                 example: 75
+ *               config:
+ *                 $ref: '#/components/schemas/SpendingPowerConfig'
+ *     responses:
+ *       200:
+ *         description: Spending power calculated successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
 /**
  * @swagger
  * /api/v1/scoring/bri/calculate:
@@ -509,6 +553,32 @@ import {
  *           type: number
  *           description: Required for RETURNING_CUSTOMER
  *           example: 100
+ *     SpendingPowerConfig:
+ *       type: object
+ *       properties:
+ *         affordability:
+ *           type: object
+ *           properties:
+ *             allocationPercentage:
+ *               type: number
+ *               example: 0.3
+ *         riskAdjustment:
+ *           type: object
+ *           properties:
+ *             tiers:
+ *               type: array
+ *               items:
+ *                 type: object
+ *         behaviouralAdjustment:
+ *           type: object
+ *           properties:
+ *             tiers:
+ *               type: array
+ *               items:
+ *                 type: object
+ *         maximumExposure:
+ *           type: number
+ *           example: 500000
  *     WeightedScore:
  *       type: object
  *       required:
@@ -1055,6 +1125,73 @@ export class ScoringController {
         (message.includes('must be') ||
           message.includes('required') ||
           message.includes('cannot be'))
+          ? 400
+          : 500;
+      return res.status(status).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  async calculateSpendingPower(req: Request, res: Response) {
+    try {
+      const {
+        disposableIncome,
+        riskScore,
+        behaviourScore,
+        config,
+      } = req.body ?? {};
+
+      if (typeof disposableIncome !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'disposableIncome is required and must be a number',
+        });
+      }
+
+      if (typeof riskScore !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'riskScore is required and must be a number',
+        });
+      }
+
+      if (typeof behaviourScore !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'behaviourScore is required and must be a number',
+        });
+      }
+
+      const input: SpendingPowerInput = {
+        disposableIncome,
+        riskScore,
+        behaviourScore,
+      };
+
+      const spendingConfig: SpendingPowerConfig =
+        config && typeof config === 'object'
+          ? config
+          : DEFAULT_SPENDING_POWER_CONFIG;
+
+      const result = scoreService.calculateSpendingPower(input, spendingConfig);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Spending power calculated successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating spending power:', error);
+      const message = error.message || 'Failed to calculate spending power';
+      const status =
+        typeof message === 'string' &&
+        (message.includes('must be') ||
+          message.includes('required') ||
+          message.includes('cannot be') ||
+          message.includes('No risk') ||
+          message.includes('No behavioural'))
           ? 400
           : 500;
       return res.status(status).json({
