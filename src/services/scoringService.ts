@@ -260,6 +260,10 @@ export interface FinalCustomerScoreInput {
   openBanking: OpenBankingInput;
   creditBureau: CreditBureauInput;
   merchantRisk: MerchantRiskInput;
+  /** Required for RETURNING_CUSTOMER — percentage (0–100+) of on-time payments */
+  onTimePaymentRatio?: number;
+  /** Required for RETURNING_CUSTOMER — percentage (0–100+) ACH success rate */
+  achSuccessRate?: number;
 }
 
 export interface FinalCustomerScoreComponent {
@@ -270,6 +274,12 @@ export interface FinalCustomerScoreComponent {
   isDefault?: boolean;
 }
 
+export interface BehaviouralRepaymentScoreResult {
+  onTimePaymentScore: number;
+  achSuccessScore: number;
+  behaviouralScore: number;
+}
+
 export interface FinalCustomerScoreResult {
   customerType: CustomerLenderType;
   finalScore: number;
@@ -278,16 +288,13 @@ export interface FinalCustomerScoreResult {
     openBanking: OpenBankingScoreResult;
     creditBureau: CreditBureauScoreResult;
     merchantRisk: MerchantRiskScoreResult;
-    bri: {
-      score: number;
-      isDefault: true;
-      note: string;
+    bri: BehaviouralRepaymentScoreResult & {
+      normalizedScore: number;
+      isDefault: boolean;
+      note?: string;
     };
   };
 }
-
-/** Default BRI score on a 0–100 scale until a formula is defined. */
-export const DEFAULT_BRI_SCORE = 50;
 
 const FINAL_SCORE_WEIGHTS: Record<
   CustomerLenderType,
@@ -681,21 +688,115 @@ export class ScoringService {
     };
   }
 
+  private getOnTimePaymentScore(ratio: number): number {
+    if (ratio >= 100) {
+      return 10;
+    }
+
+    if (ratio >= 95) {
+      return 8;
+    }
+
+    if (ratio >= 90) {
+      return 5;
+    }
+
+    return 0;
+  }
+
+  private getAchSuccessScore(rate: number): number {
+    if (rate >= 100) {
+      return 10;
+    }
+
+    if (rate >= 95) {
+      return 8;
+    }
+
+    if (rate >= 90) {
+      return 5;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Behavioural Repayment Intelligence (BRI).
+   * First-time customers receive a neutral score of 0.
+   * Existing customers: (On-Time Payment × 60%) + (ACH Success × 40%).
+   */
+  calculateBehaviouralRepaymentScore(
+    isExistingCustomer: boolean,
+    onTimePaymentRatio: number,
+    achSuccessRate: number,
+  ): BehaviouralRepaymentScoreResult {
+    if (!isExistingCustomer) {
+      return {
+        onTimePaymentScore: 0,
+        achSuccessScore: 0,
+        behaviouralScore: 0,
+      };
+    }
+
+    if (!Number.isFinite(onTimePaymentRatio)) {
+      throw new Error("onTimePaymentRatio must be a valid number");
+    }
+
+    if (!Number.isFinite(achSuccessRate)) {
+      throw new Error("achSuccessRate must be a valid number");
+    }
+
+    if (onTimePaymentRatio < 0) {
+      throw new Error("onTimePaymentRatio cannot be negative");
+    }
+
+    if (achSuccessRate < 0) {
+      throw new Error("achSuccessRate cannot be negative");
+    }
+
+    const onTimePaymentScore = this.getOnTimePaymentScore(onTimePaymentRatio);
+    const achSuccessScore = this.getAchSuccessScore(achSuccessRate);
+    const behaviouralScore =
+      onTimePaymentScore * 0.6 + achSuccessScore * 0.4;
+
+    return {
+      onTimePaymentScore,
+      achSuccessScore,
+      behaviouralScore: Number(behaviouralScore.toFixed(2)),
+    };
+  }
+
   calculateFinalCustomerScore(input: FinalCustomerScoreInput): FinalCustomerScoreResult {
     if (input.customerType !== "FIRST_TIME_LENDER" && input.customerType !== "RETURNING_CUSTOMER") {
       throw new Error("customerType must be FIRST_TIME_LENDER or RETURNING_CUSTOMER");
+    }
+
+    const isExistingCustomer = input.customerType === "RETURNING_CUSTOMER";
+
+    if (isExistingCustomer) {
+      if (typeof input.onTimePaymentRatio !== "number") {
+        throw new Error("onTimePaymentRatio is required for RETURNING_CUSTOMER");
+      }
+      if (typeof input.achSuccessRate !== "number") {
+        throw new Error("achSuccessRate is required for RETURNING_CUSTOMER");
+      }
     }
 
     const weights = FINAL_SCORE_WEIGHTS[input.customerType];
     const openBanking = this.calculateOpenBankingScore(input.openBanking);
     const creditBureau = this.calculateCreditBureauScore(input.creditBureau);
     const merchantRisk = this.calculateMerchantRiskScore(input.merchantRisk);
+    const bri = this.calculateBehaviouralRepaymentScore(
+      isExistingCustomer,
+      input.onTimePaymentRatio ?? 0,
+      input.achSuccessRate ?? 0,
+    );
 
     // Normalize all pillars to a 0–100 scale before applying portfolio weights.
     const openBankingNormalized = openBanking.totalScore * 10;
     const creditBureauNormalized = creditBureau.score;
     const merchantRiskNormalized = merchantRisk.score * 10;
-    const briNormalized = input.customerType === "FIRST_TIME_LENDER" ? 0 : DEFAULT_BRI_SCORE;
+    const briNormalized = bri.behaviouralScore * 10;
 
     const components: FinalCustomerScoreComponent[] = [
       {
@@ -721,7 +822,7 @@ export class ScoringService {
         score: briNormalized,
         weight: weights.bri,
         weightedScore: briNormalized * (weights.bri / 100),
-        isDefault: true,
+        isDefault: !isExistingCustomer,
       },
     ];
 
@@ -736,9 +837,12 @@ export class ScoringService {
         creditBureau,
         merchantRisk,
         bri: {
-          score: input.customerType === "FIRST_TIME_LENDER" ? 0 : DEFAULT_BRI_SCORE,
-          isDefault: true,
-          note: "BRI formula is not defined yet; using default score",
+          ...bri,
+          normalizedScore: briNormalized,
+          isDefault: !isExistingCustomer,
+          ...(!isExistingCustomer
+            ? { note: "First-time lenders receive a neutral BRI score of 0" }
+            : {}),
         },
       },
     };

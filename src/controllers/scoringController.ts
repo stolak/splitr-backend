@@ -12,6 +12,46 @@ import {
 
 /**
  * @swagger
+ * /api/v1/scoring/bri/calculate:
+ *   post:
+ *     summary: Calculate Behavioural Repayment Intelligence (BRI) score
+ *     description: >
+ *       First-time customers receive a neutral score of 0.
+ *       Existing customers use (On-Time Payment × 60%) + (ACH Success × 40%).
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - isExistingCustomer
+ *               - onTimePaymentRatio
+ *               - achSuccessRate
+ *             properties:
+ *               isExistingCustomer:
+ *                 type: boolean
+ *                 example: true
+ *               onTimePaymentRatio:
+ *                 type: number
+ *                 description: Percentage of on-time payments (0–100+)
+ *                 example: 97
+ *               achSuccessRate:
+ *                 type: number
+ *                 description: ACH success rate percentage (0–100+)
+ *                 example: 100
+ *     responses:
+ *       200:
+ *         description: BRI score calculated successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
  * /api/v1/scoring/final/calculate:
  *   post:
  *     summary: Calculate final customer score
@@ -461,6 +501,14 @@ import {
  *           $ref: '#/components/schemas/CreditBureauInput'
  *         merchantRisk:
  *           $ref: '#/components/schemas/MerchantRiskInput'
+ *         onTimePaymentRatio:
+ *           type: number
+ *           description: Required for RETURNING_CUSTOMER
+ *           example: 97
+ *         achSuccessRate:
+ *           type: number
+ *           description: Required for RETURNING_CUSTOMER
+ *           example: 100
  *     WeightedScore:
  *       type: object
  *       required:
@@ -961,6 +1009,61 @@ export class ScoringController {
     }
   }
 
+  async calculateBehaviouralRepaymentScore(req: Request, res: Response) {
+    try {
+      const { isExistingCustomer, onTimePaymentRatio, achSuccessRate } =
+        req.body ?? {};
+
+      if (typeof isExistingCustomer !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'isExistingCustomer is required and must be a boolean',
+        });
+      }
+
+      if (typeof onTimePaymentRatio !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'onTimePaymentRatio is required and must be a number',
+        });
+      }
+
+      if (typeof achSuccessRate !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'achSuccessRate is required and must be a number',
+        });
+      }
+
+      const result = scoreService.calculateBehaviouralRepaymentScore(
+        isExistingCustomer,
+        onTimePaymentRatio,
+        achSuccessRate,
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Behavioural repayment score calculated successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating behavioural repayment score:', error);
+      const message =
+        error.message || 'Failed to calculate behavioural repayment score';
+      const status =
+        typeof message === 'string' &&
+        (message.includes('must be') ||
+          message.includes('required') ||
+          message.includes('cannot be'))
+          ? 400
+          : 500;
+      return res.status(status).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
   async calculateFinalCustomerScore(req: Request, res: Response) {
     try {
       const body = req.body as FinalCustomerScoreInput;
@@ -1003,6 +1106,21 @@ export class ScoringController {
           success: false,
           message: 'merchantRisk is required',
         });
+      }
+
+      if (body.customerType === 'RETURNING_CUSTOMER') {
+        if (typeof body.onTimePaymentRatio !== 'number') {
+          return res.status(400).json({
+            success: false,
+            message: 'onTimePaymentRatio is required for RETURNING_CUSTOMER',
+          });
+        }
+        if (typeof body.achSuccessRate !== 'number') {
+          return res.status(400).json({
+            success: false,
+            message: 'achSuccessRate is required for RETURNING_CUSTOMER',
+          });
+        }
       }
 
       const result = scoreService.calculateFinalCustomerScore(body);
