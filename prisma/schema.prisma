@@ -262,6 +262,8 @@ model Buyer {
   plaidAccounts                     PlaidAccount[]
   stripeMandates                    StripeMandate[]
   stripeCards                       StripeCard[]
+  incomeInsights                    IncomeInsight[]
+  creditBureaus                     CreditBureau[]
   plaidIdentityVerificationId       String?
   createdAt                         DateTime                            @default(now())
   updatedAt                         DateTime                            @updatedAt
@@ -1190,4 +1192,55 @@ model SpendingPowerBehaviourTier {
 
   @@index([configId])
   @@map("spending_power_behaviour_tier")
+}
+
+/// Persisted open-banking / income insight metrics for a buyer (maps to OpenBankingInput).
+model IncomeInsight {
+  id                      String   @id @default(uuid())
+  buyerId                 String
+  buyer                   Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  monthlyIncome           Decimal? @db.Decimal(15, 2)
+  incomeStabilityVariance Decimal? @db.Decimal(10, 2)
+  netCashFlowPercentage   Decimal? @db.Decimal(10, 2)
+  liquidityMonths         Decimal? @db.Decimal(10, 2)
+  nsfEvents               Int?     @default(0)
+  overdraftFrequency      Int?     @default(0)
+  loanBurdenPercentage    Decimal? @db.Decimal(10, 2)
+  rawInsight              Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([buyerId])
+  @@map("income_insight")
+}
+
+enum CreditBureauCollectionsStatus {
+  NONE
+  PAID
+  ACTIVE
+}
+
+enum CreditBureauBankruptcyStatus {
+  NONE
+  DISCHARGED_OVER_5_YEARS
+  ACTIVE_OR_RECENT
+}
+
+/// Persisted credit bureau metrics for a buyer (maps to CreditBureauInput).
+model CreditBureau {
+  id                    String                        @id @default(uuid())
+  buyerId               String
+  buyer                 Buyer                         @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  creditScore           Int?
+  utilizationPercentage Decimal?                      @db.Decimal(10, 2)
+  delinquencies24Months Int?                          @default(0)
+  collections           CreditBureauCollectionsStatus @default(NONE)
+  hardInquiries12Months Int                           @default(0)
+  bankruptcy            CreditBureauBankruptcyStatus  @default(NONE)
+  rawCreditBureau       Json?
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  @@index([buyerId])
+  @@map("credit_bureau")
 }

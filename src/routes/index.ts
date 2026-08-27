@@ -44,6 +44,9 @@ import stripeRoutes from "./stripe";
 import plaidRoutes from "./plaid";
 import plaidAccountRoutes from "./plaidAccount";
 import flinksRoutes from "./flinks";
+import spendingPowerConfigRoutes from "./spendingPowerConfig";
+import incomeInsightRoutes from "./incomeInsight";
+import creditBureauRoutes from "./creditBureau";
 import { Router } from "express";
 
 const router = Router();
@@ -93,6 +96,9 @@ router.use("/stripe", stripeRoutes);
 router.use("/plaid", plaidRoutes);
 router.use("/plaid-accounts", plaidAccountRoutes);
 router.use("/flinks", flinksRoutes);
+router.use("/spending-power-config", spendingPowerConfigRoutes);
+router.use("/income-insights", incomeInsightRoutes);
+router.use("/credit-bureaus", creditBureauRoutes);
 
 /**
  * @swagger

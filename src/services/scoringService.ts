@@ -347,6 +347,21 @@ export interface SpendingPowerResult {
   totalSpendingPower: number;
 }
 
+export type RepaymentInstallmentCount = 4 | 6;
+
+export interface RepaymentPlan {
+  installmentNumber: number;
+  amount: number;
+  dueWeek: number;
+}
+
+export interface RepaymentOptions {
+  loanAmount: number;
+  monthlySpendingPower: number;
+  numberOfInstallments: RepaymentInstallmentCount;
+  firstInstallment?: number;
+}
+
 export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
   affordability: {
     allocationPercentage: 0.25,
@@ -1012,10 +1027,71 @@ export class ScoringService {
     return tier;
   }
 
-  calculateSpendingPower(
+  /**
+   * Load spending power config from DB (SpendingPowerConfig + related tiers).
+   * Falls back to DEFAULT_SPENDING_POWER_CONFIG when no row exists.
+   */
+  async fetchSpendingPowerConfigFromDb(
+    configId: string = "default"
+  ): Promise<SpendingPowerConfig> {
+    const record = await prisma.spendingPowerConfig.findUnique({
+      where: { id: configId },
+      include: {
+        riskTiers: { orderBy: { minScore: "desc" } },
+        behaviourTiers: { orderBy: { minScore: "desc" } },
+      },
+    });
+
+    if (!record) {
+      return DEFAULT_SPENDING_POWER_CONFIG;
+    }
+
+    return {
+      affordability: {
+        allocationPercentage: Number(record.allocationPercentage),
+      },
+      riskAdjustment: {
+        tiers: record.riskTiers.map((tier) => ({
+          minScore: tier.minScore,
+          maxScore: tier.maxScore,
+          riskTier: tier.riskTier as RiskTier,
+          multiplier: Number(tier.multiplier),
+          treatment: tier.treatment,
+        })),
+      },
+      behaviouralAdjustment: {
+        tiers: record.behaviourTiers.map((tier) => ({
+          minScore: tier.minScore,
+          maxScore: tier.maxScore,
+          behaviourTier: tier.behaviourTier as RiskTier,
+          multiplier: Number(tier.multiplier),
+          treatment: tier.treatment,
+        })),
+      },
+      maximumExposure: Number(record.maximumExposure),
+    };
+  }
+
+  async resolveSpendingPowerConfig(
+    useDatabase: boolean = false,
+    config?: SpendingPowerConfig
+  ): Promise<SpendingPowerConfig> {
+    if (config) {
+      return config;
+    }
+
+    if (useDatabase) {
+      return this.fetchSpendingPowerConfigFromDb();
+    }
+
+    return DEFAULT_SPENDING_POWER_CONFIG;
+  }
+
+  async calculateSpendingPower(
     input: SpendingPowerInput,
-    config: SpendingPowerConfig = DEFAULT_SPENDING_POWER_CONFIG
-  ): SpendingPowerResult {
+    useDatabase: boolean = false,
+    config?: SpendingPowerConfig
+  ): Promise<SpendingPowerResult> {
     if (!Number.isFinite(input.disposableIncome)) {
       throw new Error("disposableIncome must be a valid number");
     }
@@ -1032,18 +1108,26 @@ export class ScoringService {
       throw new Error("disposableIncome cannot be negative");
     }
 
+    const resolvedConfig = await this.resolveSpendingPowerConfig(useDatabase, config);
+
     const affordableMonthlyRepaymentCapacity = Math.max(
       0,
-      input.disposableIncome * config.affordability.allocationPercentage
+      input.disposableIncome * resolvedConfig.affordability.allocationPercentage
     );
 
-    const riskAdjustment = this.getRiskAdjustment(input.riskScore, config);
+    const riskAdjustment = this.getRiskAdjustment(input.riskScore, resolvedConfig);
     const riskAdjustedCapacity = affordableMonthlyRepaymentCapacity * riskAdjustment.multiplier;
 
-    const behaviouralAdjustment = this.getBehaviouralAdjustment(input.behaviourScore, config);
+    const behaviouralAdjustment = this.getBehaviouralAdjustment(
+      input.behaviourScore,
+      resolvedConfig
+    );
     const behaviourAdjustedCapacity = riskAdjustedCapacity * behaviouralAdjustment.multiplier;
 
-    const totalSpendingPower = Math.min(behaviourAdjustedCapacity, config.maximumExposure);
+    const totalSpendingPower = Math.min(
+      behaviourAdjustedCapacity,
+      resolvedConfig.maximumExposure
+    );
 
     return {
       affordableMonthlyRepaymentCapacity,
@@ -1055,7 +1139,7 @@ export class ScoringService {
       behaviourTier: behaviouralAdjustment.behaviourTier,
       behaviourMultiplier: behaviouralAdjustment.multiplier,
       behaviourAdjustedCapacity,
-      maximumExposure: config.maximumExposure,
+      maximumExposure: resolvedConfig.maximumExposure,
       totalSpendingPower,
     };
   }
@@ -1503,6 +1587,90 @@ export class ScoringService {
       monthlyNetCashFlow,
       positiveCount,
     };
+  }
+
+  private createRepaymentPlan(
+    firstInstallment: number,
+    subsequentInstallment: number,
+    numberOfInstallments: RepaymentInstallmentCount
+  ): RepaymentPlan[] {
+    return Array.from({ length: numberOfInstallments }, (_, index) => ({
+      installmentNumber: index + 1,
+      amount: index === 0 ? firstInstallment : subsequentInstallment,
+      dueWeek: (index + 1) * 2,
+    }));
+  }
+
+  calculateRepaymentPlan({
+    loanAmount,
+    monthlySpendingPower,
+    numberOfInstallments,
+    firstInstallment,
+  }: RepaymentOptions): RepaymentPlan[] {
+    if (!Number.isFinite(loanAmount) || loanAmount <= 0) {
+      throw new Error("Loan amount must be greater than zero.");
+    }
+
+    if (!Number.isFinite(monthlySpendingPower) || monthlySpendingPower <= 0) {
+      throw new Error("Monthly spending power must be greater than zero.");
+    }
+
+    if (![4, 6].includes(numberOfInstallments)) {
+      throw new Error("Number of installments must be either 4 or 6.");
+    }
+
+    if (firstInstallment !== undefined) {
+      if (!Number.isFinite(firstInstallment) || firstInstallment <= 0) {
+        throw new Error("First installment must be greater than zero.");
+      }
+
+      if (firstInstallment >= loanAmount) {
+        throw new Error("First installment must be less than the loan amount.");
+      }
+    }
+
+    const maxSubsequentInstallment = monthlySpendingPower / 2;
+    const normalInstallment = loanAmount / numberOfInstallments;
+    const normalMonthlyRepayment = normalInstallment * 2;
+
+    if (firstInstallment !== undefined) {
+      const remainingBalance = loanAmount - firstInstallment;
+      const subsequentInstallment =
+        remainingBalance / (numberOfInstallments - 1);
+
+      if (subsequentInstallment * 2 > monthlySpendingPower) {
+        throw new Error(
+          `First installment of ${firstInstallment} is not allowed. ` +
+            `The resulting subsequent bi-weekly repayment ` +
+            `of ${subsequentInstallment.toFixed(2)} ` +
+            `would exceed the monthly spending power rule.`
+        );
+      }
+
+      return this.createRepaymentPlan(
+        firstInstallment,
+        subsequentInstallment,
+        numberOfInstallments
+      );
+    }
+
+    if (normalMonthlyRepayment <= monthlySpendingPower) {
+      return this.createRepaymentPlan(
+        normalInstallment,
+        normalInstallment,
+        numberOfInstallments
+      );
+    }
+
+    const subsequentInstallment = maxSubsequentInstallment;
+    const calculatedFirstInstallment =
+      loanAmount - subsequentInstallment * (numberOfInstallments - 1);
+
+    return this.createRepaymentPlan(
+      calculatedFirstInstallment,
+      subsequentInstallment,
+      numberOfInstallments
+    );
   }
 }
 

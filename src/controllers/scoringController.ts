@@ -10,9 +10,52 @@ import {
   CustomerLenderType,
   SpendingPowerInput,
   SpendingPowerConfig,
-  DEFAULT_SPENDING_POWER_CONFIG,
+  RepaymentOptions,
+  RepaymentInstallmentCount,
 } from '../services/scoringService';
 
+/**
+ * @swagger
+ * /api/v1/scoring/repayment-plan/calculate:
+ *   post:
+ *     summary: Calculate bi-weekly repayment plan
+ *     description: >
+ *       Builds a 4- or 6-installment bi-weekly repayment schedule from loan amount
+ *       and monthly spending power. Optionally accepts an intended first installment.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - loanAmount
+ *               - monthlySpendingPower
+ *               - numberOfInstallments
+ *             properties:
+ *               loanAmount:
+ *                 type: number
+ *                 example: 1200
+ *               monthlySpendingPower:
+ *                 type: number
+ *                 example: 400
+ *               numberOfInstallments:
+ *                 type: integer
+ *                 enum: [4, 6]
+ *                 example: 4
+ *               firstInstallment:
+ *                 type: number
+ *                 example: 450
+ *     responses:
+ *       200:
+ *         description: Repayment plan calculated successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
 /**
  * @swagger
  * /api/v1/scoring/spending-power/calculate:
@@ -21,7 +64,8 @@ import {
  *     description: >
  *       Computes affordable repayment capacity, applies risk and behavioural
  *       multipliers from configurable tiers, then caps at maximum exposure.
- *       Uses the default spending-power config unless an override is provided.
+ *       Uses DEFAULT_SPENDING_POWER_CONFIG unless useDatabase is true
+ *       (loads from SpendingPowerConfig) or an inline config override is provided.
  *     tags: [Scoring]
  *     security: []
  *     requestBody:
@@ -44,6 +88,10 @@ import {
  *               behaviourScore:
  *                 type: number
  *                 example: 75
+ *               useDatabase:
+ *                 type: boolean
+ *                 description: When true, load spending power config from the database
+ *                 example: false
  *               config:
  *                 $ref: '#/components/schemas/SpendingPowerConfig'
  *     responses:
@@ -1140,6 +1188,7 @@ export class ScoringController {
         disposableIncome,
         riskScore,
         behaviourScore,
+        useDatabase = false,
         config,
       } = req.body ?? {};
 
@@ -1170,12 +1219,14 @@ export class ScoringController {
         behaviourScore,
       };
 
-      const spendingConfig: SpendingPowerConfig =
-        config && typeof config === 'object'
-          ? config
-          : DEFAULT_SPENDING_POWER_CONFIG;
+      const spendingConfig: SpendingPowerConfig | undefined =
+        config && typeof config === 'object' ? config : undefined;
 
-      const result = scoreService.calculateSpendingPower(input, spendingConfig);
+      const result = await scoreService.calculateSpendingPower(
+        input,
+        Boolean(useDatabase),
+        spendingConfig
+      );
 
       return res.status(200).json({
         success: true,
@@ -1192,6 +1243,82 @@ export class ScoringController {
           message.includes('cannot be') ||
           message.includes('No risk') ||
           message.includes('No behavioural'))
+          ? 400
+          : 500;
+      return res.status(status).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  async calculateRepaymentPlan(req: Request, res: Response) {
+    try {
+      const {
+        loanAmount,
+        monthlySpendingPower,
+        numberOfInstallments,
+        firstInstallment,
+      } = req.body ?? {};
+
+      if (typeof loanAmount !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'loanAmount is required and must be a number',
+        });
+      }
+
+      if (typeof monthlySpendingPower !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'monthlySpendingPower is required and must be a number',
+        });
+      }
+
+      if (numberOfInstallments !== 4 && numberOfInstallments !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'numberOfInstallments must be either 4 or 6',
+        });
+      }
+
+      if (
+        firstInstallment !== undefined &&
+        typeof firstInstallment !== 'number'
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'firstInstallment must be a number when provided',
+        });
+      }
+
+      const options: RepaymentOptions = {
+        loanAmount,
+        monthlySpendingPower,
+        numberOfInstallments: numberOfInstallments as RepaymentInstallmentCount,
+        ...(firstInstallment !== undefined && { firstInstallment }),
+      };
+
+      const plan = scoreService.calculateRepaymentPlan(options);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Repayment plan calculated successfully',
+        data: {
+          options,
+          plan,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error calculating repayment plan:', error);
+      const message = error.message || 'Failed to calculate repayment plan';
+      const status =
+        typeof message === 'string' &&
+        (message.includes('must be') ||
+          message.includes('must') ||
+          message.includes('not allowed') ||
+          message.includes('greater than') ||
+          message.includes('less than'))
           ? 400
           : 500;
       return res.status(status).json({
