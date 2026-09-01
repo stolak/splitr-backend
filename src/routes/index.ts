@@ -47,6 +47,7 @@ import flinksRoutes from "./flinks";
 import spendingPowerConfigRoutes from "./spendingPowerConfig";
 import incomeInsightRoutes from "./incomeInsight";
 import creditBureauRoutes from "./creditBureau";
+import inveriteRoutes from "./inverite";
 import { Router } from "express";
 
 const router = Router();
@@ -99,6 +100,7 @@ router.use("/flinks", flinksRoutes);
 router.use("/spending-power-config", spendingPowerConfigRoutes);
 router.use("/income-insights", incomeInsightRoutes);
 router.use("/credit-bureaus", creditBureauRoutes);
+router.use("/inverite", inveriteRoutes);
 
 /**
  * @swagger
