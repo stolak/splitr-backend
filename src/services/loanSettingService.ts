@@ -1,10 +1,8 @@
-import { EligibilityAndScoreService } from './eligibilityAndScoreService';
-import { accountDetailsService } from './accountDetailsService';
-import prisma from '../utils/prisma';
-import type { ScoringInput } from './scoringService';
-import { ScoringInputSnapshotService } from './scoringInputSnapshotService';
-import { ScoringService, type EligibilityDeterminationResult } from './scoringService';
-import { env } from 'process';
+import prisma from "../utils/prisma";
+import type { ScoringInput } from "./scoringService";
+import { ScoringInputSnapshotService } from "./scoringInputSnapshotService";
+import { ScoringService, type EligibilityDeterminationResult } from "./scoringService";
+import { env } from "process";
 
 const scoringInputSnapshotService = new ScoringInputSnapshotService();
 const scoringService = new ScoringService();
@@ -132,6 +130,33 @@ export interface EligibilityAndScoreParams {
   isLive?: boolean;
 }
 
+const LOAN_SETTINGS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+type LoanSettingsCacheEntry = {
+  data: LoanSettingData;
+  expiresAt: number;
+};
+
+let loanSettingsCache: LoanSettingsCacheEntry | null = null;
+
+function setLoanSettingsCache(data: LoanSettingData): void {
+  loanSettingsCache = {
+    data,
+    expiresAt: Date.now() + LOAN_SETTINGS_CACHE_TTL_MS,
+  };
+}
+
+function clearLoanSettingsCache(): void {
+  loanSettingsCache = null;
+}
+
+function getCachedLoanSettings(): LoanSettingData | null {
+  if (loanSettingsCache && Date.now() < loanSettingsCache.expiresAt) {
+    return loanSettingsCache.data;
+  }
+  return null;
+}
+
 export class LoanSettingService {
   /**
    * Helper function to convert Prisma Decimal fields to numbers
@@ -166,13 +191,18 @@ export class LoanSettingService {
    */
   async getLoanSettings(): Promise<LoanSettingData | null> {
     try {
+      const cached = getCachedLoanSettings();
+      if (cached) {
+        return cached;
+      }
+
       const loanSetting = await prisma.loanSetting.upsert({
-        where: { id: 'default' },
+        where: { id: "default" },
         create: {
-          id: 'default',
-          loanInterestRate: 7.5,
-          maxLoanAmount: 500000,
-          minLoanAmount: 10000,
+          id: "default",
+          loanInterestRate: 12.99,
+          maxLoanAmount: 7500,
+          minLoanAmount: 500,
           maxLoanTenure: 12,
           minLoanTenure: 1,
           incomeRatio: 35,
@@ -189,10 +219,12 @@ export class LoanSettingService {
         update: {},
       });
 
-      return this.convertDecimalToNumber(loanSetting);
+      const data = this.convertDecimalToNumber(loanSetting);
+      setLoanSettingsCache(data);
+      return data;
     } catch (error) {
-      console.error('Error fetching loan settings:', error);
-      throw new Error('Failed to fetch loan settings');
+      console.error("Error fetching loan settings:", error);
+      throw new Error("Failed to fetch loan settings");
     }
   }
 
@@ -204,7 +236,7 @@ export class LoanSettingService {
     try {
       // Validate required fields
       if (data.loanInterestRate === undefined) {
-        throw new Error('loanInterestRate is required');
+        throw new Error("loanInterestRate is required");
       }
 
       // Prepare the data for upsert
@@ -254,18 +286,20 @@ export class LoanSettingService {
       }
 
       const loanSetting = await prisma.loanSetting.upsert({
-        where: { id: 'default' },
+        where: { id: "default" },
         update: upsertData,
         create: {
-          id: 'default',
+          id: "default",
           ...upsertData,
         },
       });
 
-      return this.convertDecimalToNumber(loanSetting);
+      const settings = this.convertDecimalToNumber(loanSetting);
+      setLoanSettingsCache(settings);
+      return settings;
     } catch (error) {
-      console.error('Error upserting loan settings:', error);
-      throw new Error('Failed to upsert loan settings');
+      console.error("Error upserting loan settings:", error);
+      throw new Error("Failed to upsert loan settings");
     }
   }
 
@@ -276,11 +310,11 @@ export class LoanSettingService {
     try {
       // Check if loan settings exist
       const existing = await prisma.loanSetting.findUnique({
-        where: { id: 'default' },
+        where: { id: "default" },
       });
 
       if (!existing) {
-        throw new Error('Loan settings not found. Please create them first.');
+        throw new Error("Loan settings not found. Please create them first.");
       }
 
       // Prepare update data with only provided fields
@@ -330,18 +364,20 @@ export class LoanSettingService {
       }
 
       if (Object.keys(updateData).length === 0) {
-        throw new Error('No valid fields provided for update');
+        throw new Error("No valid fields provided for update");
       }
 
       const loanSetting = await prisma.loanSetting.update({
-        where: { id: 'default' },
+        where: { id: "default" },
         data: updateData,
       });
 
-      return this.convertDecimalToNumber(loanSetting);
+      const settings = this.convertDecimalToNumber(loanSetting);
+      setLoanSettingsCache(settings);
+      return settings;
     } catch (error) {
-      console.error('Error updating loan settings:', error);
-      throw new Error('Failed to update loan settings');
+      console.error("Error updating loan settings:", error);
+      throw new Error("Failed to update loan settings");
     }
   }
 
@@ -351,7 +387,7 @@ export class LoanSettingService {
   async resetLoanSettings(): Promise<LoanSettingData> {
     try {
       const defaultData = {
-        id: 'default',
+        id: "default",
         loanInterestRate: 0,
         maxLoanAmount: null,
         minLoanAmount: null,
@@ -369,15 +405,17 @@ export class LoanSettingService {
       };
 
       const loanSetting = await prisma.loanSetting.upsert({
-        where: { id: 'default' },
+        where: { id: "default" },
         update: defaultData,
         create: defaultData,
       });
 
-      return this.convertDecimalToNumber(loanSetting);
+      const data = this.convertDecimalToNumber(loanSetting);
+      setLoanSettingsCache(data);
+      return data;
     } catch (error) {
-      console.error('Error resetting loan settings:', error);
-      throw new Error('Failed to reset loan settings');
+      console.error("Error resetting loan settings:", error);
+      throw new Error("Failed to reset loan settings");
     }
   }
 
@@ -387,13 +425,14 @@ export class LoanSettingService {
   async deleteLoanSettings(): Promise<{ message: string }> {
     try {
       await prisma.loanSetting.delete({
-        where: { id: 'default' },
+        where: { id: "default" },
       });
 
-      return { message: 'Loan settings deleted successfully' };
+      clearLoanSettingsCache();
+      return { message: "Loan settings deleted successfully" };
     } catch (error) {
-      console.error('Error deleting loan settings:', error);
-      throw new Error('Failed to delete loan settings');
+      console.error("Error deleting loan settings:", error);
+      throw new Error("Failed to delete loan settings");
     }
   }
 
@@ -426,7 +465,7 @@ export class LoanSettingService {
     existingMonthlyRepayment: number = 0.0,
     requestedLoanAmount: number,
     repaymentRatio: number = 35,
-    maxLoanCap: number = Infinity,
+    maxLoanCap: number = Infinity
   ): LoanEvaluationResult {
     const monthlyRate = monthlyInterestRate / 12;
     const totalAllowedRepayment = monthlyIncome * repaymentRatio * 0.01;
@@ -459,8 +498,8 @@ export class LoanSettingService {
     if (requestedLoanAmount > maxLoanCap) {
       reasons.push(
         `Requested loan (${requestedLoanAmount.toFixed(
-          2,
-        )}) exceeds maximum allowed loan cap (${maxLoanCap.toFixed(2)}).`,
+          2
+        )}) exceeds maximum allowed loan cap (${maxLoanCap.toFixed(2)}).`
       );
     }
 
@@ -470,18 +509,18 @@ export class LoanSettingService {
     ) {
       reasons.push(
         `Total monthly repayment (${(existingMonthlyRepayment + requestedMonthlyRepayment).toFixed(
-          2,
+          2
         )}) exceeds ${
           repaymentRatio * 100
-        }% of monthly income (${totalAllowedRepayment.toFixed(2)}).`,
+        }% of monthly income (${totalAllowedRepayment.toFixed(2)}).`
       );
     }
 
     if (requestedLoanAmount > maxLoan) {
       reasons.push(
         `Requested loan (${requestedLoanAmount.toFixed(
-          2,
-        )}) exceeds allowable amount (${maxLoan.toFixed(2)}).`,
+          2
+        )}) exceeds allowable amount (${maxLoan.toFixed(2)}).`
       );
     }
 
@@ -530,7 +569,7 @@ export class LoanSettingService {
     if (maxMonthlyPayment <= 0) {
       return {
         approved: false,
-        reason: 'Repayment limit already exceeded by existing loans.',
+        reason: "Repayment limit already exceeded by existing loans.",
         maxEligibleLoan: 0,
         monthlyRepayment: 0,
       };
@@ -551,7 +590,7 @@ export class LoanSettingService {
     if (!requestedLoanAmount) {
       return {
         approved: true,
-        reason: 'Maximum eligible loan amount calculated.',
+        reason: "Maximum eligible loan amount calculated.",
         maxEligibleLoan,
         monthlyRepayment: maxMonthlyPayment,
       };
@@ -584,7 +623,7 @@ export class LoanSettingService {
       return {
         approved: false,
         reason: `Total repayment (₦${totalMonthlyObligation.toFixed(
-          2,
+          2
         )}) exceeds ${repaymentRatio.toFixed(2)}% of income.`,
         maxEligibleLoan,
         monthlyRepayment: requestedMonthlyRepayment,
@@ -604,7 +643,7 @@ export class LoanSettingService {
     return {
       approved: true,
       reason:
-        'Approved. Your employment stability, banking behavior, credit history, and DTI ratio meet our lending criteria. You are eligible to proceed.',
+        "Approved. Your employment stability, banking behavior, credit history, and DTI ratio meet our lending criteria. You are eligible to proceed.",
       maxEligibleLoan,
       monthlyRepayment: requestedMonthlyRepayment,
     };
@@ -668,7 +707,7 @@ export class LoanSettingService {
         reason: `Your current loan repayments exceed ${repaymentRatio}% of your income. 
 If you had no existing obligations, you could qualify for up to ₦${totalAllowedLoan.toFixed(2)}. 
 Alternatively, increase your income by ₦${neededIncome.toFixed(
-          2,
+          2
         )} or reduce current repayments to qualify.`,
         finalApprovedLoan: 0,
         maxEligibleLoan: totalAllowedLoan,
@@ -680,7 +719,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
     if (!requestedLoanAmount) {
       return {
         approved: true,
-        reason: 'Maximum eligible loan amount calculated.',
+        reason: "Maximum eligible loan amount calculated.",
         finalApprovedLoan: maxEligibleLoan,
         maxEligibleLoan,
         monthlyRepayment: eligibleMonthlyRepayment,
@@ -706,7 +745,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
       return {
         approved: false,
         reason: `Total repayment (₦${totalMonthlyObligation.toFixed(
-          2,
+          2
         )}) exceeds ${repaymentRatio.toFixed(2)}% of monthly income.`,
         finalApprovedLoan: maxEligibleLoan,
         maxEligibleLoan,
@@ -728,7 +767,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
     return {
       approved: true,
       reason:
-        'Approved. Your employment stability, banking behavior, credit history, and DTI ratio meet our lending criteria. You are eligible to proceed.',
+        "Approved. Your employment stability, banking behavior, credit history, and DTI ratio meet our lending criteria. You are eligible to proceed.",
       finalApprovedLoan: requestedLoanAmount,
       maxEligibleLoan,
       monthlyRepayment: requestedMonthlyRepayment,
@@ -750,8 +789,8 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
     // Calculate the minimum required down payment
     const requiredDownPayment = Number(
       Math.max(purchaseAmount * minDownPaymentPercent * 0.01, purchaseAmount - maxLoanCap).toFixed(
-        2,
-      ),
+        2
+      )
     );
 
     // If customer didn't specify, suggest the required one
@@ -853,13 +892,13 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
           approvedLoanAmount: assumedLoanRequest.finalApprovedLoan,
           requiredDownPayment: Math.ceil(
             (assumedLoanRequest.finalApprovedLoan * 100) / (100 - minDownPaymentPercent) -
-              assumedLoanRequest.finalApprovedLoan,
+              assumedLoanRequest.finalApprovedLoan
           ),
           customerDownPayment: Math.ceil(
             (assumedLoanRequest.finalApprovedLoan * 100) / (100 - minDownPaymentPercent) -
-              assumedLoanRequest.finalApprovedLoan,
+              assumedLoanRequest.finalApprovedLoan
           ),
-          message: 'Loan approved',
+          message: "Loan approved",
         };
       }
     }
@@ -920,16 +959,16 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
           ...evaluatePurchaseLoan2,
           ...evaluateLoanRequestWithFinalApproval,
           requiredDownPayment: Math.ceil(
-            (purchaseAmount || 0) - evaluateLoanRequestWithFinalApproval.maxEligibleLoan,
+            (purchaseAmount || 0) - evaluateLoanRequestWithFinalApproval.maxEligibleLoan
           ),
           approved: false,
           valid: false,
           reason:
-            'loan not approved your max eligible loan is ₦' +
+            "loan not approved your max eligible loan is ₦" +
             evaluateLoanRequestWithFinalApproval.maxEligibleLoan.toLocaleString() +
-            'To purchase this item, you need to increase your down payment to at least ₦' +
+            "To purchase this item, you need to increase your down payment to at least ₦" +
             Math.ceil(
-              (purchaseAmount || 0) - evaluateLoanRequestWithFinalApproval.maxEligibleLoan,
+              (purchaseAmount || 0) - evaluateLoanRequestWithFinalApproval.maxEligibleLoan
             ).toLocaleString(),
           finalApprovedLoan: 0,
           maxEligibleLoan: evaluateLoanRequestWithFinalApproval.maxEligibleLoan,
@@ -937,7 +976,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
 
           adminCharge: 0,
           insurance: 0,
-          message: 'Loan not approved.',
+          message: "Loan not approved.",
         };
       }
     }
@@ -959,7 +998,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
       customerDownPayment:
         (purchaseAmount || 0) - evaluateLoanRequestWithFinalApproval.maxEligibleLoan,
       message:
-        'Loan approved with down payment of ₦' +
+        "Loan approved with down payment of ₦" +
         (
           (purchaseAmount || 0) - evaluateLoanRequestWithFinalApproval.maxEligibleLoan
         ).toLocaleString(),
@@ -1012,7 +1051,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
     // Validate input values
     if (employmentStatusScore === 0 || overdraftScore === 0 || averageBalanceScore === 0) {
       if (isLive) {
-        console.log('isLive');
+        console.log("isLive");
       }
       return {
         eligibility: 0,
@@ -1111,7 +1150,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
     | undefined {
     let eligibility;
     if (isLive) {
-      console.log('isLive');
+      console.log("isLive");
       eligibility = {
         eligibility: 1,
         score: 100,
@@ -1141,10 +1180,10 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
         requiredDownPayment: 0,
         customerDownPayment: 0,
         message:
-          'Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.',
+          "Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.",
         approved: false,
         reason:
-          'Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.',
+          "Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.",
         finalApprovedLoan: 0,
         maxEligibleLoan: 0,
         monthlyRepayment: 0,
@@ -1165,7 +1204,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
       const fakeLoanAmount = this.PV(
         monthlyInterestRate / 100,
         months,
-        monthlyIncome * (repaymentRatio / 100) - (existingMonthlyRepayment || 0),
+        monthlyIncome * (repaymentRatio / 100) - (existingMonthlyRepayment || 0)
       );
       fakePurchaseAmount = fakeLoanAmount / (1 - minDownPaymentPercent / 100);
     }
@@ -1228,7 +1267,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
         12,
       adminCharge: this.calculateAdminFee(
         evaluatePurchaseLoanWithFinalApproval?.finalApprovedLoan || 0,
-        months,
+        months
       ),
     };
   }
@@ -1241,7 +1280,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
     const existingMonthlyRepayment = existingLoanRepayment * 0.01;
     let eligibility;
     if (livedataNew.isLive) {
-      console.log('isLive');
+      console.log("isLive");
       eligibility = {
         eligibility: 1,
         score: 100,
@@ -1266,10 +1305,10 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
         requiredDownPayment: 0,
         customerDownPayment: 0,
         message:
-          'Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.',
+          "Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.",
         approved: false,
         reason:
-          'Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.',
+          "Not Eligible. Some criteria such as employment stability, bank balance, credit history, or DTI did not meet the minimum requirements. You may reapply once these are improved.",
         finalApprovedLoan: 0,
         maxEligibleLoan: 0,
         monthlyRepayment: 0,
@@ -1290,7 +1329,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
       const fakeLoanAmount = this.PV(
         monthlyInterestRate / 100,
         months,
-        monthlyIncome * (repaymentRatio / 100) - (existingMonthlyRepayment || 0),
+        monthlyIncome * (repaymentRatio / 100) - (existingMonthlyRepayment || 0)
       );
       fakePurchaseAmount = fakeLoanAmount / (1 - minDownPaymentPercent / 100);
     }
@@ -1354,7 +1393,7 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
         12,
       adminCharge: this.calculateAdminFee(
         evaluatePurchaseLoanWithFinalApproval?.finalApprovedLoan || 0,
-        months,
+        months
       ),
     };
   }
@@ -1395,9 +1434,9 @@ Alternatively, increase your income by ₦${neededIncome.toFixed(
         approvedLoanAmount: 0,
         requiredDownPayment: 0,
         customerDownPayment: 0,
-        message: 'No account details found',
+        message: "No account details found",
         approved: false,
-        reason: 'No account details found',
+        reason: "No account details found",
         finalApprovedLoan: 0,
         monthlyIncome: 0,
       };

@@ -746,6 +746,31 @@ async function main() {
 
     console.log("✅ Bank accounts created successfully");
 
+    // Seed Loan Settings (single default record)
+    console.log("\n⚙️ Seeding loan settings...");
+    await prisma.loanSetting.upsert({
+      where: { id: "default" },
+      update: {},
+      create: {
+        id: "default",
+        loanInterestRate: 12.99,
+        maxLoanAmount: 7500,
+        minLoanAmount: 500,
+        maxLoanTenure: 12,
+        minLoanTenure: 1,
+        incomeRatio: 35,
+        minDownPayment: 20,
+        insuranceRate: 1,
+        adminFeeBase1To3: 2500,
+        adminFeeBase4To12: 5000,
+        adminFeePercentage: null,
+        adminFeeThreshold: 250000,
+        upfrontFeePercentage: 1,
+        upfrontFeeCap: 1000,
+      },
+    });
+    console.log("✅ Loan settings seeded successfully");
+
     // Seed Loan Penalties
     console.log("\n📊 Seeding loan penalties...");
     const penalty1 = await prisma.loanPenalty.upsert({
@@ -1004,8 +1029,7 @@ async function main() {
         maxScore: 100,
         riskTier: "A+",
         multiplier: 1.5,
-        treatment:
-          "Highest permitted positive adjustment, still subject to Maximum Exposure.",
+        treatment: "Highest permitted positive adjustment, still subject to Maximum Exposure.",
       },
       {
         id: "spending-power-risk-a",
@@ -1029,8 +1053,7 @@ async function main() {
         maxScore: 69,
         riskTier: "C",
         multiplier: 0.75,
-        treatment:
-          "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
+        treatment: "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
       },
       {
         id: "spending-power-risk-d",
@@ -1067,8 +1090,7 @@ async function main() {
         maxScore: 100,
         behaviourTier: "A+",
         multiplier: 1.5,
-        treatment:
-          "Highest permitted positive adjustment, still subject to Maximum Exposure.",
+        treatment: "Highest permitted positive adjustment, still subject to Maximum Exposure.",
       },
       {
         id: "spending-power-behaviour-a",
@@ -1092,8 +1114,7 @@ async function main() {
         maxScore: 69,
         behaviourTier: "C",
         multiplier: 0.75,
-        treatment:
-          "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
+        treatment: "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
       },
       {
         id: "spending-power-behaviour-d",
@@ -1169,6 +1190,11 @@ async function main() {
     console.log(`  - 14 days late: 5.0% penalty (Active)`);
     console.log(`  - 30 days late: 10.0% penalty (Active)`);
     console.log(`  - 60 days late: 15.0% penalty (Inactive)`);
+    console.log("\n⚙️ Loan Settings:");
+    console.log("  - Interest rate: 7.5%");
+    console.log("  - Loan amount: ₦10,000 – ₦500,000");
+    console.log("  - Tenure: 1–12 months");
+    console.log("  - Income ratio: 35% | Min down payment: 20%");
     console.log("\n🔄 Loan Debit Trials:");
     console.log(`  - 1 day after due: Debit trial (Active)`);
     console.log(`  - 3 days after due: Debit trial (Active)`);

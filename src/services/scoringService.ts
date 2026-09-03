@@ -1672,6 +1672,12 @@ export class ScoringService {
       numberOfInstallments
     );
   }
+
+  monthlyRepayment(principal: number, rate: number, months: number): number {
+    if (rate === 0) return principal / months;
+    const factor = Math.pow(1 + rate, months);
+    return (principal * rate * factor) / (factor - 1);
+  }
 }
 
 export const scoreService = new ScoringService();
