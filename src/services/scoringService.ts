@@ -364,6 +364,42 @@ export interface RepaymentOptions {
   firstInstallment?: number;
 }
 
+export interface FinancingEvaluationInput {
+  productAmount: number;
+  customerMaxRepayment: number;
+  maxPrincipal: number;
+  rate: number;
+  months: number;
+  intendedUpfrontPayment?: number;
+}
+
+export interface FinancingEvaluationPassed {
+  status: "PASSED";
+  productAmount: number;
+  upfrontPayment: number;
+  financeAmount: number;
+  monthlyRepayment: number;
+  maximumFinanceAmount: number;
+  minimumUpfrontRequired: number;
+  message: string;
+}
+
+export interface FinancingEvaluationFailed {
+  status: "FAILED";
+  reason: "INVALID_UPFRONT_PAYMENT" | "FINANCE_AMOUNT_EXCEEDS_LIMIT";
+  message: string;
+  productAmount?: number;
+  intendedUpfrontPayment?: number;
+  intendedFinanceAmount?: number;
+  maximumFinanceAmount?: number;
+  minimumUpfrontRequired?: number;
+  additionalUpfrontRequired?: number;
+}
+
+export type FinancingEvaluationResult =
+  | FinancingEvaluationPassed
+  | FinancingEvaluationFailed;
+
 export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
   affordability: {
     allocationPercentage: 0.25,
@@ -1687,6 +1723,109 @@ export class ScoringService {
     const factor = Math.pow(1 + rate, months);
 
     return (monthlyRepayment * (factor - 1)) / (rate * factor);
+  }
+
+  /**
+   * Evaluate a financing request against repayment capacity and principal limits.
+   * When `intendedUpfrontPayment` is omitted, the maximum financeable amount is used
+   * and the required upfront payment is derived from it.
+   */
+  evaluateFinancing({
+    productAmount,
+    customerMaxRepayment,
+    maxPrincipal,
+    rate,
+    months,
+    intendedUpfrontPayment,
+  }: FinancingEvaluationInput): FinancingEvaluationResult {
+    // Maximum principal allowed based on monthly repayment capacity
+    const maxPrincipalByRepayment = this.principalFromMonthlyRepayment(
+      customerMaxRepayment,
+      rate,
+      months
+    );
+
+    // Actual maximum amount the customer can finance
+    const maxFinanceAmount = Math.min(
+      productAmount,
+      maxPrincipal,
+      maxPrincipalByRepayment
+    );
+
+    // Minimum upfront payment required to stay within the limit
+    const minimumUpfrontRequired = Math.max(0, productAmount - maxFinanceAmount);
+
+    // Customer provided an intended upfront payment
+    if (intendedUpfrontPayment !== undefined) {
+      if (intendedUpfrontPayment < 0) {
+        return {
+          status: "FAILED",
+          reason: "INVALID_UPFRONT_PAYMENT",
+          message: "Upfront payment cannot be negative.",
+        };
+      }
+
+      if (intendedUpfrontPayment > productAmount) {
+        return {
+          status: "FAILED",
+          reason: "INVALID_UPFRONT_PAYMENT",
+          message: "Upfront payment cannot exceed the product amount.",
+        };
+      }
+
+      const financeAmount = productAmount - intendedUpfrontPayment;
+      const monthlyRepaymentAmount = this.monthlyRepayment(financeAmount, rate, months);
+
+      if (financeAmount > maxFinanceAmount) {
+        return {
+          status: "FAILED",
+          reason: "FINANCE_AMOUNT_EXCEEDS_LIMIT",
+          productAmount,
+          intendedUpfrontPayment,
+          intendedFinanceAmount: financeAmount,
+          maximumFinanceAmount: maxFinanceAmount,
+          minimumUpfrontRequired,
+          additionalUpfrontRequired: minimumUpfrontRequired - intendedUpfrontPayment,
+          message:
+            `You must pay at least ${minimumUpfrontRequired} upfront ` +
+            `and can finance a maximum of ${maxFinanceAmount}.`,
+        };
+      }
+
+      return {
+        status: "PASSED",
+        productAmount,
+        upfrontPayment: intendedUpfrontPayment,
+        financeAmount,
+        monthlyRepayment: monthlyRepaymentAmount,
+        maximumFinanceAmount: maxFinanceAmount,
+        minimumUpfrontRequired,
+        message: "The financing request is within the allowable limit.",
+      };
+    }
+
+    // No upfront payment provided: finance the maximum allowable amount
+    const calculatedFinanceAmount = maxFinanceAmount;
+    const calculatedUpfrontPayment = productAmount - calculatedFinanceAmount;
+    const calculatedMonthlyRepayment = this.monthlyRepayment(
+      calculatedFinanceAmount,
+      rate,
+      months
+    );
+
+    return {
+      status: "PASSED",
+      productAmount,
+      upfrontPayment: calculatedUpfrontPayment,
+      financeAmount: calculatedFinanceAmount,
+      monthlyRepayment: calculatedMonthlyRepayment,
+      maximumFinanceAmount: maxFinanceAmount,
+      minimumUpfrontRequired: calculatedUpfrontPayment,
+      message:
+        calculatedUpfrontPayment > 0
+          ? `You need to pay ${calculatedUpfrontPayment} upfront and can finance ${calculatedFinanceAmount}.`
+          : "The full product amount can be financed.",
+    };
   }
 }
 

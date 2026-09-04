@@ -13,6 +13,7 @@ router.post("/spending-power/calculate", scoringController.calculateSpendingPowe
 router.post("/repayment-plan/calculate", scoringController.calculateRepaymentPlan);
 router.post("/monthly-repayment/calculate", scoringController.calculateMonthlyRepayment);
 router.post("/principal/calculate", scoringController.calculatePrincipalFromMonthlyRepayment);
+router.post("/financing/evaluate", scoringController.evaluateFinancing);
 router.post("/final/calculate", scoringController.calculateFinalCustomerScore);
 router.post("/eligibility/determine", scoringController.determineEligibility);
 

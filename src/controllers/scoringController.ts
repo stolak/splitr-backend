@@ -16,6 +16,62 @@ import {
 
 /**
  * @swagger
+ * /api/v1/scoring/financing/evaluate:
+ *   post:
+ *     summary: Evaluate a financing request against repayment capacity and principal limits
+ *     description: >
+ *       Determines the maximum financeable amount from the product amount, the customer's
+ *       maximum monthly repayment capacity and the maximum allowed principal.
+ *       When intendedUpfrontPayment is provided, the request is validated against that limit;
+ *       otherwise the maximum financeable amount is used and the required upfront payment
+ *       is derived from it.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - productAmount
+ *               - customerMaxRepayment
+ *               - maxPrincipal
+ *               - rate
+ *               - months
+ *             properties:
+ *               productAmount:
+ *                 type: number
+ *                 example: 500000
+ *               customerMaxRepayment:
+ *                 type: number
+ *                 description: Maximum monthly repayment the customer can afford
+ *                 example: 40000
+ *               maxPrincipal:
+ *                 type: number
+ *                 description: Maximum principal the customer is allowed to finance
+ *                 example: 450000
+ *               rate:
+ *                 type: number
+ *                 description: Periodic interest rate as a decimal (e.g. 0.075 for 7.5%)
+ *                 example: 0.075
+ *               months:
+ *                 type: integer
+ *                 example: 12
+ *               intendedUpfrontPayment:
+ *                 type: number
+ *                 description: Optional upfront payment the customer intends to make
+ *                 example: 100000
+ *     responses:
+ *       200:
+ *         description: Financing evaluation completed (status is PASSED or FAILED)
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
  * /api/v1/scoring/principal/calculate:
  *   post:
  *     summary: Calculate loan principal from a monthly repayment
@@ -1837,6 +1893,103 @@ export class ScoringController {
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to calculate self-assessment scoring',
+      });
+    }
+  }
+
+  async evaluateFinancing(req: Request, res: Response) {
+    try {
+      const {
+        productAmount,
+        customerMaxRepayment,
+        maxPrincipal,
+        rate,
+        months,
+        intendedUpfrontPayment,
+      } = req.body ?? {};
+
+      const requiredNumbers: Array<[string, any]> = [
+        ['productAmount', productAmount],
+        ['customerMaxRepayment', customerMaxRepayment],
+        ['maxPrincipal', maxPrincipal],
+        ['rate', rate],
+        ['months', months],
+      ];
+
+      for (const [field, value] of requiredNumbers) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+      }
+
+      if (!Number.isInteger(months) || months <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'months must be an integer greater than zero',
+        });
+      }
+
+      if (productAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'productAmount must be greater than zero',
+        });
+      }
+
+      if (customerMaxRepayment <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'customerMaxRepayment must be greater than zero',
+        });
+      }
+
+      if (maxPrincipal < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'maxPrincipal cannot be negative',
+        });
+      }
+
+      if (rate < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'rate cannot be negative',
+        });
+      }
+
+      if (
+        intendedUpfrontPayment !== undefined &&
+        (typeof intendedUpfrontPayment !== 'number' ||
+          !Number.isFinite(intendedUpfrontPayment))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'intendedUpfrontPayment must be a number when provided',
+        });
+      }
+
+      const result = scoreService.evaluateFinancing({
+        productAmount,
+        customerMaxRepayment,
+        maxPrincipal,
+        rate,
+        months,
+        intendedUpfrontPayment,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error evaluating financing:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to evaluate financing',
       });
     }
   }
