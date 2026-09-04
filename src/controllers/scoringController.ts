@@ -16,6 +16,85 @@ import {
 
 /**
  * @swagger
+ * /api/v1/scoring/principal/calculate:
+ *   post:
+ *     summary: Calculate loan principal from a monthly repayment
+ *     description: >
+ *       Inverse of the amortization formula. Derives the affordable principal from a
+ *       monthly repayment, periodic interest rate, and number of months.
+ *       When rate is 0, returns monthlyRepayment * months.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - monthlyRepayment
+ *               - rate
+ *               - months
+ *             properties:
+ *               monthlyRepayment:
+ *                 type: number
+ *                 example: 43378.86
+ *               rate:
+ *                 type: number
+ *                 description: Periodic interest rate as a decimal (e.g. 0.075 for 7.5%)
+ *                 example: 0.075
+ *               months:
+ *                 type: integer
+ *                 example: 12
+ *     responses:
+ *       200:
+ *         description: Principal calculated successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
+ * /api/v1/scoring/monthly-repayment/calculate:
+ *   post:
+ *     summary: Calculate monthly loan repayment (amortization)
+ *     description: >
+ *       Computes the fixed monthly repayment for a principal, periodic interest rate,
+ *       and number of months. When rate is 0, returns principal / months.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - principal
+ *               - rate
+ *               - months
+ *             properties:
+ *               principal:
+ *                 type: number
+ *                 example: 500000
+ *               rate:
+ *                 type: number
+ *                 description: Periodic interest rate as a decimal (e.g. 0.075 for 7.5%)
+ *                 example: 0.075
+ *               months:
+ *                 type: integer
+ *                 example: 12
+ *     responses:
+ *       200:
+ *         description: Monthly repayment calculated successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
  * /api/v1/scoring/repayment-plan/calculate:
  *   post:
  *     summary: Calculate bi-weekly repayment plan
@@ -1322,6 +1401,146 @@ export class ScoringController {
           ? 400
           : 500;
       return res.status(status).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  async calculateMonthlyRepayment(req: Request, res: Response) {
+    try {
+      const { principal, rate, months } = req.body ?? {};
+
+      if (typeof principal !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'principal is required and must be a number',
+        });
+      }
+
+      if (typeof rate !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'rate is required and must be a number',
+        });
+      }
+
+      if (typeof months !== 'number' || !Number.isInteger(months)) {
+        return res.status(400).json({
+          success: false,
+          message: 'months is required and must be an integer',
+        });
+      }
+
+      if (principal <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'principal must be greater than zero',
+        });
+      }
+
+      if (months <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'months must be greater than zero',
+        });
+      }
+
+      if (rate < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'rate cannot be negative',
+        });
+      }
+
+      const monthlyRepayment = scoreService.monthlyRepayment(principal, rate, months);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Monthly repayment calculated successfully',
+        data: {
+          principal,
+          rate,
+          months,
+          monthlyRepayment,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error calculating monthly repayment:', error);
+      const message = error.message || 'Failed to calculate monthly repayment';
+      return res.status(500).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  async calculatePrincipalFromMonthlyRepayment(req: Request, res: Response) {
+    try {
+      const { monthlyRepayment, rate, months } = req.body ?? {};
+
+      if (typeof monthlyRepayment !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'monthlyRepayment is required and must be a number',
+        });
+      }
+
+      if (typeof rate !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'rate is required and must be a number',
+        });
+      }
+
+      if (typeof months !== 'number' || !Number.isInteger(months)) {
+        return res.status(400).json({
+          success: false,
+          message: 'months is required and must be an integer',
+        });
+      }
+
+      if (monthlyRepayment <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'monthlyRepayment must be greater than zero',
+        });
+      }
+
+      if (months <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'months must be greater than zero',
+        });
+      }
+
+      if (rate < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'rate cannot be negative',
+        });
+      }
+
+      const principal = scoreService.principalFromMonthlyRepayment(
+        monthlyRepayment,
+        rate,
+        months
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Principal calculated successfully',
+        data: {
+          monthlyRepayment,
+          rate,
+          months,
+          principal,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error calculating principal from monthly repayment:', error);
+      const message = error.message || 'Failed to calculate principal';
+      return res.status(500).json({
         success: false,
         message,
       });

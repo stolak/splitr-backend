@@ -13,6 +13,7 @@ export interface CreateRiskTierInput {
   maxScore: number;
   riskTier: string;
   multiplier: number;
+  maximumExposureCap: number;
   treatment: string;
 }
 
@@ -21,6 +22,7 @@ export interface UpdateRiskTierInput {
   maxScore?: number;
   riskTier?: string;
   multiplier?: number;
+  maximumExposureCap?: number;
   treatment?: string;
 }
 
@@ -58,6 +60,7 @@ export class SpendingPowerConfigService {
     return {
       ...tier,
       multiplier: Number(tier.multiplier),
+      maximumExposureCap: Number(tier.maximumExposureCap),
     };
   }
 
@@ -181,6 +184,13 @@ export class SpendingPowerConfigService {
   async createRiskTier(input: CreateRiskTierInput) {
     this.validateScoreRange(input.minScore, input.maxScore);
 
+    if (
+      !Number.isFinite(input.maximumExposureCap) ||
+      input.maximumExposureCap < 0
+    ) {
+      throw new Error("maximumExposureCap must be a non-negative number");
+    }
+
     const configId = input.configId ?? DEFAULT_CONFIG_ID;
     await this.ensureConfigExists(configId);
 
@@ -191,6 +201,7 @@ export class SpendingPowerConfigService {
         maxScore: input.maxScore,
         riskTier: input.riskTier,
         multiplier: input.multiplier,
+        maximumExposureCap: input.maximumExposureCap,
         treatment: input.treatment,
       },
     });
@@ -211,6 +222,13 @@ export class SpendingPowerConfigService {
     const maxScore = input.maxScore ?? existing.maxScore;
     this.validateScoreRange(minScore, maxScore);
 
+    if (
+      input.maximumExposureCap !== undefined &&
+      (!Number.isFinite(input.maximumExposureCap) || input.maximumExposureCap < 0)
+    ) {
+      throw new Error("maximumExposureCap must be a non-negative number");
+    }
+
     const tier = await prisma.spendingPowerRiskTier.update({
       where: { id },
       data: {
@@ -218,6 +236,9 @@ export class SpendingPowerConfigService {
         ...(input.maxScore !== undefined && { maxScore: input.maxScore }),
         ...(input.riskTier !== undefined && { riskTier: input.riskTier }),
         ...(input.multiplier !== undefined && { multiplier: input.multiplier }),
+        ...(input.maximumExposureCap !== undefined && {
+          maximumExposureCap: input.maximumExposureCap,
+        }),
         ...(input.treatment !== undefined && { treatment: input.treatment }),
       },
     });

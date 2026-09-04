@@ -11,6 +11,8 @@ router.post("/merchant-risk/calculate", scoringController.calculateMerchantRiskS
 router.post("/bri/calculate", scoringController.calculateBehaviouralRepaymentScore);
 router.post("/spending-power/calculate", scoringController.calculateSpendingPower);
 router.post("/repayment-plan/calculate", scoringController.calculateRepaymentPlan);
+router.post("/monthly-repayment/calculate", scoringController.calculateMonthlyRepayment);
+router.post("/principal/calculate", scoringController.calculatePrincipalFromMonthlyRepayment);
 router.post("/final/calculate", scoringController.calculateFinalCustomerScore);
 router.post("/eligibility/determine", scoringController.determineEligibility);
 

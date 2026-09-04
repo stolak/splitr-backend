@@ -108,20 +108,28 @@ export class SpendingPowerConfigController {
 
   async createRiskTier(req: Request, res: Response) {
     try {
-      const { minScore, maxScore, riskTier, multiplier, treatment, configId } =
-        req.body ?? {};
+      const {
+        minScore,
+        maxScore,
+        riskTier,
+        multiplier,
+        maximumExposureCap,
+        treatment,
+        configId,
+      } = req.body ?? {};
 
       if (
         minScore === undefined ||
         maxScore === undefined ||
         !riskTier ||
         multiplier === undefined ||
+        maximumExposureCap === undefined ||
         !treatment
       ) {
         return res.status(400).json({
           success: false,
           message:
-            "minScore, maxScore, riskTier, multiplier, and treatment are required",
+            "minScore, maxScore, riskTier, multiplier, maximumExposureCap, and treatment are required",
         });
       }
 
@@ -131,6 +139,7 @@ export class SpendingPowerConfigController {
         maxScore,
         riskTier,
         multiplier,
+        maximumExposureCap,
         treatment,
       });
 

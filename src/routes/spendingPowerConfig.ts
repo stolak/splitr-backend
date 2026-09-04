@@ -147,7 +147,7 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [minScore, maxScore, riskTier, multiplier, treatment]
+ *             required: [minScore, maxScore, riskTier, multiplier, maximumExposureCap, treatment]
  *             properties:
  *               configId:
  *                 type: string
@@ -164,6 +164,9 @@ router.get(
  *               multiplier:
  *                 type: number
  *                 example: 1.5
+ *               maximumExposureCap:
+ *                 type: number
+ *                 example: 7500
  *               treatment:
  *                 type: string
  *     responses:
@@ -232,6 +235,8 @@ router.get(
  *               riskTier:
  *                 type: string
  *               multiplier:
+ *                 type: number
+ *               maximumExposureCap:
  *                 type: number
  *               treatment:
  *                 type: string

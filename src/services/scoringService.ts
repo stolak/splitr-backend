@@ -303,6 +303,7 @@ export interface RiskAdjustmentTier {
   maxScore: number;
   riskTier: RiskTier;
   multiplier: number;
+  maximumExposureCap: number;
   treatment: string;
 }
 
@@ -343,6 +344,7 @@ export interface SpendingPowerResult {
   behaviourTier: RiskTier;
   behaviourMultiplier: number;
   behaviourAdjustedCapacity: number;
+  maximumExposureCap: number;
   maximumExposure: number;
   totalSpendingPower: number;
 }
@@ -373,6 +375,7 @@ export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
         maxScore: 100,
         riskTier: "A+",
         multiplier: 1.5,
+        maximumExposureCap: 7500,
         treatment: "Highest permitted positive adjustment, still subject to Maximum Exposure.",
       },
       {
@@ -380,6 +383,7 @@ export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
         maxScore: 89,
         riskTier: "A",
         multiplier: 1.25,
+        maximumExposureCap: 6000,
         treatment: "Positive adjustment, subject to caps.",
       },
       {
@@ -387,6 +391,7 @@ export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
         maxScore: 79,
         riskTier: "B",
         multiplier: 1.0,
+        maximumExposureCap: 5000,
         treatment: "Neutral adjustment.",
       },
       {
@@ -394,6 +399,7 @@ export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
         maxScore: 69,
         riskTier: "C",
         multiplier: 0.75,
+        maximumExposureCap: 3500,
         treatment: "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
       },
       {
@@ -401,6 +407,7 @@ export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
         maxScore: 59,
         riskTier: "D",
         multiplier: 0.0,
+        maximumExposureCap: 0,
         treatment:
           "Decline for financing unless a separate approved policy explicitly permits otherwise.",
       },
@@ -1031,9 +1038,7 @@ export class ScoringService {
    * Load spending power config from DB (SpendingPowerConfig + related tiers).
    * Falls back to DEFAULT_SPENDING_POWER_CONFIG when no row exists.
    */
-  async fetchSpendingPowerConfigFromDb(
-    configId: string = "default"
-  ): Promise<SpendingPowerConfig> {
+  async fetchSpendingPowerConfigFromDb(configId: string = "default"): Promise<SpendingPowerConfig> {
     const record = await prisma.spendingPowerConfig.findUnique({
       where: { id: configId },
       include: {
@@ -1056,6 +1061,7 @@ export class ScoringService {
           maxScore: tier.maxScore,
           riskTier: tier.riskTier as RiskTier,
           multiplier: Number(tier.multiplier),
+          maximumExposureCap: Number(tier.maximumExposureCap),
           treatment: tier.treatment,
         })),
       },
@@ -1126,6 +1132,7 @@ export class ScoringService {
 
     const totalSpendingPower = Math.min(
       behaviourAdjustedCapacity,
+      riskAdjustment.maximumExposureCap,
       resolvedConfig.maximumExposure
     );
 
@@ -1139,6 +1146,7 @@ export class ScoringService {
       behaviourTier: behaviouralAdjustment.behaviourTier,
       behaviourMultiplier: behaviouralAdjustment.multiplier,
       behaviourAdjustedCapacity,
+      maximumExposureCap: riskAdjustment.maximumExposureCap,
       maximumExposure: resolvedConfig.maximumExposure,
       totalSpendingPower,
     };
@@ -1635,8 +1643,7 @@ export class ScoringService {
 
     if (firstInstallment !== undefined) {
       const remainingBalance = loanAmount - firstInstallment;
-      const subsequentInstallment =
-        remainingBalance / (numberOfInstallments - 1);
+      const subsequentInstallment = remainingBalance / (numberOfInstallments - 1);
 
       if (subsequentInstallment * 2 > monthlySpendingPower) {
         throw new Error(
@@ -1655,11 +1662,7 @@ export class ScoringService {
     }
 
     if (normalMonthlyRepayment <= monthlySpendingPower) {
-      return this.createRepaymentPlan(
-        normalInstallment,
-        normalInstallment,
-        numberOfInstallments
-      );
+      return this.createRepaymentPlan(normalInstallment, normalInstallment, numberOfInstallments);
     }
 
     const subsequentInstallment = maxSubsequentInstallment;
@@ -1677,6 +1680,13 @@ export class ScoringService {
     if (rate === 0) return principal / months;
     const factor = Math.pow(1 + rate, months);
     return (principal * rate * factor) / (factor - 1);
+  }
+  principalFromMonthlyRepayment(monthlyRepayment: number, rate: number, months: number): number {
+    if (rate === 0) return monthlyRepayment * months;
+
+    const factor = Math.pow(1 + rate, months);
+
+    return (monthlyRepayment * (factor - 1)) / (rate * factor);
   }
 }
 

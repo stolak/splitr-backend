@@ -1029,6 +1029,7 @@ async function main() {
         maxScore: 100,
         riskTier: "A+",
         multiplier: 1.5,
+        maximumExposureCap: 7500,
         treatment: "Highest permitted positive adjustment, still subject to Maximum Exposure.",
       },
       {
@@ -1037,6 +1038,7 @@ async function main() {
         maxScore: 89,
         riskTier: "A",
         multiplier: 1.25,
+        maximumExposureCap: 6000,
         treatment: "Positive adjustment, subject to caps.",
       },
       {
@@ -1045,6 +1047,7 @@ async function main() {
         maxScore: 79,
         riskTier: "B",
         multiplier: 1.0,
+        maximumExposureCap: 5000,
         treatment: "Neutral adjustment.",
       },
       {
@@ -1053,6 +1056,7 @@ async function main() {
         maxScore: 69,
         riskTier: "C",
         multiplier: 0.75,
+        maximumExposureCap: 3500,
         treatment: "Reduced capacity; product eligibility in Section 4.2.6 still applies.",
       },
       {
@@ -1061,6 +1065,7 @@ async function main() {
         maxScore: 59,
         riskTier: "D",
         multiplier: 0.0,
+        maximumExposureCap: 0,
         treatment:
           "Decline for financing unless a separate approved policy explicitly permits otherwise.",
       },
@@ -1074,6 +1079,7 @@ async function main() {
           maxScore: tier.maxScore,
           riskTier: tier.riskTier,
           multiplier: tier.multiplier,
+          maximumExposureCap: tier.maximumExposureCap,
           treatment: tier.treatment,
         },
         create: {
