@@ -12,8 +12,124 @@ import {
   SpendingPowerConfig,
   RepaymentOptions,
   RepaymentInstallmentCount,
+  Tenor,
+  MonthlyFlexTenor,
 } from '../services/scoringService';
 
+/**
+ * @swagger
+ * /api/v1/scoring/finance/monthly-flex/calculate:
+ *   post:
+ *     summary: Monthly Flex finance calculation (3 to 12 month tenor)
+ *     description: >
+ *       Applies the same spending power band rules as /finance/calculate, but the tenor
+ *       runs from 3 to 12 months and the periodic installment is amortized using the
+ *       monthly repayment formula. The part payment is added to the first installment.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - purchaseAmount
+ *               - rate
+ *               - tenor
+ *               - minSp
+ *               - maxSp
+ *             properties:
+ *               purchaseAmount:
+ *                 type: number
+ *                 example: 1200
+ *               partPayment:
+ *                 type: number
+ *                 description: Optional part payment; defaults to 0 and is added to the first installment
+ *                 example: 300
+ *               rate:
+ *                 type: number
+ *                 description: Monthly rate as a percentage value (e.g. 2.5 for 2.5%)
+ *                 example: 2.5
+ *               tenor:
+ *                 type: integer
+ *                 description: Number of months, from 3 to 12
+ *                 minimum: 3
+ *                 maximum: 12
+ *                 example: 6
+ *               minSp:
+ *                 type: number
+ *                 description: Minimum spending power
+ *                 example: 500
+ *               maxSp:
+ *                 type: number
+ *                 description: Maximum spending power
+ *                 example: 1000
+ *     responses:
+ *       200:
+ *         description: Finance calculation completed (status is passed or failed)
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
+ * /api/v1/scoring/finance/calculate:
+ *   post:
+ *     summary: Validate a purchase against the spending power band and build the installment schedule
+ *     description: >
+ *       Checks the purchase amount and optional part payment against the customer's
+ *       minimum and maximum spending power. When the financed amount falls inside the
+ *       band, returns the total repayment, the periodic installment and the schedule
+ *       (the part payment is added to the first installment). When it falls outside the
+ *       band, returns the minimum part payment required or the maximum part payment allowed.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - purchaseAmount
+ *               - rate
+ *               - tenor
+ *               - minSp
+ *               - maxSp
+ *             properties:
+ *               purchaseAmount:
+ *                 type: number
+ *                 example: 1200
+ *               partPayment:
+ *                 type: number
+ *                 description: Optional part payment; defaults to 0 and is added to the first installment
+ *                 example: 300
+ *               rate:
+ *                 type: number
+ *                 description: Rate as a percentage value (e.g. 2.5 for 2.5%)
+ *                 example: 2.5
+ *               tenor:
+ *                 type: integer
+ *                 enum: [4, 6]
+ *                 example: 4
+ *               minSp:
+ *                 type: number
+ *                 description: Minimum spending power
+ *                 example: 500
+ *               maxSp:
+ *                 type: number
+ *                 description: Maximum spending power
+ *                 example: 1000
+ *     responses:
+ *       200:
+ *         description: Finance calculation completed (status is passed or failed)
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
 /**
  * @swagger
  * /api/v1/scoring/financing/evaluate:
@@ -1990,6 +2106,175 @@ export class ScoringController {
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to evaluate financing',
+      });
+    }
+  }
+
+  async calculateFinance(req: Request, res: Response) {
+    try {
+      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
+        req.body ?? {};
+
+      const requiredNumbers: Array<[string, any]> = [
+        ['purchaseAmount', purchaseAmount],
+        ['rate', rate],
+        ['minSp', minSp],
+        ['maxSp', maxSp],
+      ];
+
+      for (const [field, value] of requiredNumbers) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+      }
+
+      if (tenor !== 4 && tenor !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'tenor is required and must be either 4 or 6',
+        });
+      }
+
+      if (
+        partPayment !== undefined &&
+        (typeof partPayment !== 'number' || !Number.isFinite(partPayment))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'partPayment must be a number when provided',
+        });
+      }
+
+      if (rate < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'rate cannot be negative',
+        });
+      }
+
+      if (minSp < 0 || maxSp < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'minSp and maxSp cannot be negative',
+        });
+      }
+
+      if (minSp > maxSp) {
+        return res.status(400).json({
+          success: false,
+          message: 'minSp cannot be greater than maxSp',
+        });
+      }
+
+      const result = scoreService.calculateFinance({
+        purchaseAmount,
+        rate,
+        tenor: tenor as Tenor,
+        minSp,
+        maxSp,
+        ...(partPayment !== undefined && { partPayment }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating finance:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to calculate finance',
+      });
+    }
+  }
+
+  async calculateFinanceForMonthlyFlex(req: Request, res: Response) {
+    try {
+      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
+        req.body ?? {};
+
+      const requiredNumbers: Array<[string, any]> = [
+        ['purchaseAmount', purchaseAmount],
+        ['rate', rate],
+        ['minSp', minSp],
+        ['maxSp', maxSp],
+      ];
+
+      for (const [field, value] of requiredNumbers) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+      }
+
+      if (
+        typeof tenor !== 'number' ||
+        !Number.isInteger(tenor) ||
+        tenor < 3 ||
+        tenor > 12
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'tenor is required and must be an integer between 3 and 12',
+        });
+      }
+
+      if (
+        partPayment !== undefined &&
+        (typeof partPayment !== 'number' || !Number.isFinite(partPayment))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'partPayment must be a number when provided',
+        });
+      }
+
+      if (rate < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'rate cannot be negative',
+        });
+      }
+
+      if (minSp < 0 || maxSp < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'minSp and maxSp cannot be negative',
+        });
+      }
+
+      if (minSp > maxSp) {
+        return res.status(400).json({
+          success: false,
+          message: 'minSp cannot be greater than maxSp',
+        });
+      }
+
+      const result = scoreService.calculateFinanceForMonthlyFlex({
+        purchaseAmount,
+        rate,
+        tenor: tenor as MonthlyFlexTenor,
+        minSp,
+        maxSp,
+        ...(partPayment !== undefined && { partPayment }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating monthly flex finance:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to calculate monthly flex finance',
       });
     }
   }

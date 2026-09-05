@@ -14,6 +14,8 @@ router.post("/repayment-plan/calculate", scoringController.calculateRepaymentPla
 router.post("/monthly-repayment/calculate", scoringController.calculateMonthlyRepayment);
 router.post("/principal/calculate", scoringController.calculatePrincipalFromMonthlyRepayment);
 router.post("/financing/evaluate", scoringController.evaluateFinancing);
+router.post("/finance/calculate", scoringController.calculateFinance);
+router.post("/finance/monthly-flex/calculate", scoringController.calculateFinanceForMonthlyFlex);
 router.post("/final/calculate", scoringController.calculateFinalCustomerScore);
 router.post("/eligibility/determine", scoringController.determineEligibility);
 

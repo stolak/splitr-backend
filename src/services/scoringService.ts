@@ -396,9 +396,47 @@ export interface FinancingEvaluationFailed {
   additionalUpfrontRequired?: number;
 }
 
-export type FinancingEvaluationResult =
-  | FinancingEvaluationPassed
-  | FinancingEvaluationFailed;
+export type FinancingEvaluationResult = FinancingEvaluationPassed | FinancingEvaluationFailed;
+
+export type Tenor = 4 | 6;
+
+export interface FinanceInput {
+  purchaseAmount: number;
+  partPayment?: number;
+  rate: number;
+  tenor: Tenor;
+  minSp: number;
+  maxSp: number;
+}
+
+export interface Installment {
+  installmentNumber: number;
+  amount: number;
+}
+
+/** Monthly Flex supports a tenor of 3 to 12 months */
+export type MonthlyFlexTenor = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+
+export interface MonthlyFlexFinanceInput extends Omit<FinanceInput, "tenor"> {
+  tenor: MonthlyFlexTenor;
+}
+
+export interface FinanceResult {
+  status: "passed" | "failed";
+  purchaseAmount: number;
+  partPayment: number;
+  financeAmount: number;
+
+  totalRepayment?: number;
+  periodicInstallment?: number;
+  installments?: Installment[];
+
+  message: string;
+
+  /** Guidance when the transaction fails */
+  minimumPartPaymentRequired?: number;
+  maximumPartPaymentAllowed?: number;
+}
 
 export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
   affordability: {
@@ -1746,11 +1784,7 @@ export class ScoringService {
     );
 
     // Actual maximum amount the customer can finance
-    const maxFinanceAmount = Math.min(
-      productAmount,
-      maxPrincipal,
-      maxPrincipalByRepayment
-    );
+    const maxFinanceAmount = Math.min(productAmount, maxPrincipal, maxPrincipalByRepayment);
 
     // Minimum upfront payment required to stay within the limit
     const minimumUpfrontRequired = Math.max(0, productAmount - maxFinanceAmount);
@@ -1807,11 +1841,7 @@ export class ScoringService {
     // No upfront payment provided: finance the maximum allowable amount
     const calculatedFinanceAmount = maxFinanceAmount;
     const calculatedUpfrontPayment = productAmount - calculatedFinanceAmount;
-    const calculatedMonthlyRepayment = this.monthlyRepayment(
-      calculatedFinanceAmount,
-      rate,
-      months
-    );
+    const calculatedMonthlyRepayment = this.monthlyRepayment(calculatedFinanceAmount, rate, months);
 
     return {
       status: "PASSED",
@@ -1825,6 +1855,251 @@ export class ScoringService {
         calculatedUpfrontPayment > 0
           ? `You need to pay ${calculatedUpfrontPayment} upfront and can finance ${calculatedFinanceAmount}.`
           : "The full product amount can be financed.",
+    };
+  }
+
+  /**
+   * Validate a purchase against the customer's spending power band and, when valid,
+   * build the installment schedule. The part payment is optional and is added to the
+   * first installment.
+   */
+  calculateFinance(input: FinanceInput): FinanceResult {
+    const { purchaseAmount: pA, rate, tenor, minSp, maxSp } = input;
+
+    const pP = input.partPayment ?? 0;
+
+    if (pA <= 0) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: 0,
+        message: "The purchase amount must be greater than zero.",
+      };
+    }
+
+    if (pP < 0) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA,
+        message: "Part payment cannot be negative.",
+      };
+    }
+
+    if (pP > pA) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: 0,
+        message: "Part payment cannot be greater than the purchase amount.",
+      };
+    }
+
+    if (tenor !== 4 && tenor !== 6) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message: "Tenor must be either 4 or 6 installments.",
+      };
+    }
+
+    // The purchase itself must reach the minimum spending power
+    if (pA < minSp) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message:
+          `Transaction failed. The purchase amount of ${pA.toFixed(2)} ` +
+          `is below the minimum spending power of ${minSp.toFixed(2)}.`,
+      };
+    }
+
+    const fA = pA - pP;
+
+    // Too little part payment: financed amount exceeds the spending power ceiling
+    if (fA > maxSp) {
+      const minimumPartPayment = pA - maxSp;
+
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: fA,
+        minimumPartPaymentRequired: minimumPartPayment,
+        message:
+          `Transaction failed. You must make a minimum part payment of ` +
+          `${minimumPartPayment.toFixed(2)} for the financed amount to be ` +
+          `within the allowed range. The maximum finance amount is ` +
+          `${maxSp.toFixed(2)}.`,
+      };
+    }
+
+    // Too much part payment: financed amount falls below the spending power floor
+    if (fA < minSp) {
+      const maximumPartPayment = Math.max(0, pA - minSp);
+
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: fA,
+        maximumPartPaymentAllowed: maximumPartPayment,
+        message:
+          `Transaction failed. The maximum part payment you can make is ` +
+          `${maximumPartPayment.toFixed(2)}. ` +
+          `The financed amount must be at least ${minSp.toFixed(2)}.`,
+      };
+    }
+
+    // minSp <= fA <= maxSp
+    const tp = fA * (1 + rate * 0.01);
+    const pi = tp / tenor;
+
+    const installments: Installment[] = [{ installmentNumber: 1, amount: pP + pi }];
+
+    for (let i = 2; i <= tenor; i++) {
+      installments.push({ installmentNumber: i, amount: pi });
+    }
+
+    return {
+      status: "passed",
+      purchaseAmount: pA,
+      partPayment: pP,
+      financeAmount: fA,
+      totalRepayment: tp,
+      periodicInstallment: pi,
+      installments,
+      message: "Transaction passed. The finance amount is within the allowed range.",
+    };
+  }
+
+  /**
+   * Monthly Flex variant of `calculateFinance`. Same spending power band rules, but the
+   * tenor runs from 3 to 12 months and the periodic installment is amortized via
+   * `monthlyRepayment` rather than a flat division of the total repayment.
+   */
+  calculateFinanceForMonthlyFlex(input: MonthlyFlexFinanceInput): FinanceResult {
+    const { purchaseAmount: pA, rate, tenor, minSp, maxSp } = input;
+
+    const pP = input.partPayment ?? 0;
+
+    if (pA <= 0) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: 0,
+        message: "The purchase amount must be greater than zero.",
+      };
+    }
+
+    if (pP < 0) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA,
+        message: "Part payment cannot be negative.",
+      };
+    }
+
+    if (pP > pA) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: 0,
+        message: "Part payment cannot be greater than the purchase amount.",
+      };
+    }
+
+    if (!Number.isInteger(tenor) || tenor < 3 || tenor > 12) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message: "Tenor must be a whole number of months between 3 and 12.",
+      };
+    }
+
+    // The purchase itself must reach the minimum spending power
+    if (pA < minSp) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message:
+          `Transaction failed. The purchase amount of ${pA.toFixed(2)} ` +
+          `is below the minimum spending power of ${minSp.toFixed(2)}.`,
+      };
+    }
+
+    const fA = pA - pP;
+
+    // Too little part payment: financed amount exceeds the spending power ceiling
+    if (fA > maxSp) {
+      const minimumPartPayment = pA - maxSp;
+
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: fA,
+        minimumPartPaymentRequired: minimumPartPayment,
+        message:
+          `Transaction failed. You must make a minimum part payment of ` +
+          `${minimumPartPayment.toFixed(2)} for the financed amount to be ` +
+          `within the allowed range. The maximum finance amount is ` +
+          `${maxSp.toFixed(2)}.`,
+      };
+    }
+
+    // Too much part payment: financed amount falls below the spending power floor
+    if (fA < minSp) {
+      const maximumPartPayment = Math.max(0, pA - minSp);
+
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: fA,
+        maximumPartPaymentAllowed: maximumPartPayment,
+        message:
+          `Transaction failed. The maximum part payment you can make is ` +
+          `${maximumPartPayment.toFixed(2)}. ` +
+          `The financed amount must be at least ${minSp.toFixed(2)}.`,
+      };
+    }
+
+    // minSp <= fA <= maxSp
+    // `rate` is a percentage, so it is converted to a decimal for the amortization formula
+    const pi = this.monthlyRepayment(fA, (rate * 0.01) / 12, tenor);
+    const tp = fA * (1 + rate * 0.01);
+
+    const installments: Installment[] = [{ installmentNumber: 1, amount: pP + pi }];
+
+    for (let i = 2; i <= tenor; i++) {
+      installments.push({ installmentNumber: i, amount: pi });
+    }
+
+    return {
+      status: "passed",
+      purchaseAmount: pA,
+      partPayment: pP,
+      financeAmount: fA,
+      totalRepayment: tp,
+      periodicInstallment: pi,
+      installments,
+      message: "Transaction passed. The finance amount is within the allowed range.",
     };
   }
 }
