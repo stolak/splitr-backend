@@ -14,8 +14,73 @@ import {
   RepaymentInstallmentCount,
   Tenor,
   MonthlyFlexTenor,
-  SpendingPowerProductType,
+  FinancingProductType,
 } from "../services/scoringService";
+
+/**
+ * @swagger
+ * /api/v1/scoring/finance/by-product/calculate:
+ *   post:
+ *     summary: Finance calculation for either product type
+ *     description: >
+ *       Routes to the bi-weekly (Pay-in-N) or Monthly Flex finance calculation based on
+ *       productType, so callers can use a single endpoint for both.
+ *       BI_WEEKLY accepts a tenor of 4 or 6, divides the total repayment evenly across
+ *       the installments and resolves defaults from PAY_IN_{tenor}; MONTHLY_FLEX accepts
+ *       a tenor of 3 to 12, amortizes the installment and resolves defaults from
+ *       MONTHLY_FLEX_{tenor}. The branch taken is echoed back as productType in the
+ *       response. productType is matched case-insensitively and hyphens are accepted
+ *       (e.g. bi-weekly).
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - productType
+ *               - purchaseAmount
+ *               - tenor
+ *             properties:
+ *               productType:
+ *                 type: string
+ *                 enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                 example: MONTHLY_FLEX
+ *               purchaseAmount:
+ *                 type: number
+ *                 example: 1200
+ *               tenor:
+ *                 type: integer
+ *                 description: 4 or 6 for BI_WEEKLY; 3 to 12 for MONTHLY_FLEX
+ *                 example: 6
+ *               partPayment:
+ *                 type: number
+ *                 description: Optional part payment; defaults to 0 and is added to the first installment
+ *                 example: 300
+ *               rate:
+ *                 type: number
+ *                 description: >
+ *                   Optional rate as a percentage value. Defaults to the product
+ *                   configuration rate for the resolved code.
+ *                 example: 12.99
+ *               minSp:
+ *                 type: number
+ *                 description: Optional; defaults to the product configuration minimumFinance
+ *                 example: 350
+ *               maxSp:
+ *                 type: number
+ *                 description: Optional; defaults to the product configuration maximumFinance
+ *                 example: 30000
+ *     responses:
+ *       200:
+ *         description: Finance calculation completed (status is passed or failed)
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
 
 /**
  * @swagger
@@ -2506,6 +2571,121 @@ export class ScoringController {
     }
   }
 
+  async calculateFinanceByProduct(req: Request, res: Response) {
+    try {
+      const { productType, purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
+        req.body ?? {};
+
+      const normalisedProductType =
+        typeof productType === "string"
+          ? productType.trim().toUpperCase().replace(/-/g, "_")
+          : undefined;
+
+      if (
+        normalisedProductType !== "BI_WEEKLY" &&
+        normalisedProductType !== "MONTHLY_FLEX"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "productType is required and must be either BI_WEEKLY or MONTHLY_FLEX",
+        });
+      }
+
+      if (typeof purchaseAmount !== "number" || !Number.isFinite(purchaseAmount)) {
+        return res.status(400).json({
+          success: false,
+          message: "purchaseAmount is required and must be a number",
+        });
+      }
+
+      if (typeof tenor !== "number" || !Number.isInteger(tenor)) {
+        return res.status(400).json({
+          success: false,
+          message: "tenor is required and must be an integer",
+        });
+      }
+
+      if (normalisedProductType === "BI_WEEKLY" && tenor !== 4 && tenor !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: "tenor must be either 4 or 6 for BI_WEEKLY",
+        });
+      }
+
+      if (normalisedProductType === "MONTHLY_FLEX" && (tenor < 3 || tenor > 12)) {
+        return res.status(400).json({
+          success: false,
+          message: "tenor must be between 3 and 12 for MONTHLY_FLEX",
+        });
+      }
+
+      if (
+        partPayment !== undefined &&
+        (typeof partPayment !== "number" || !Number.isFinite(partPayment))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "partPayment must be a number when provided",
+        });
+      }
+
+      // rate, minSp and maxSp are optional; the service resolves them from the
+      // product configuration for the resolved code when they are omitted
+      const optionalNumbers: Array<[string, any]> = [
+        ["rate", rate],
+        ["minSp", minSp],
+        ["maxSp", maxSp],
+      ];
+
+      for (const [field, value] of optionalNumbers) {
+        if (value === undefined) continue;
+
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} must be a number when provided`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
+      }
+
+      if (minSp !== undefined && maxSp !== undefined && minSp > maxSp) {
+        return res.status(400).json({
+          success: false,
+          message: "minSp cannot be greater than maxSp",
+        });
+      }
+
+      const result = await scoreService.calculateFinanceByProduct({
+        productType: normalisedProductType as FinancingProductType,
+        purchaseAmount,
+        tenor: tenor as Tenor | MonthlyFlexTenor,
+        ...(rate !== undefined && { rate }),
+        ...(minSp !== undefined && { minSp }),
+        ...(maxSp !== undefined && { maxSp }),
+        ...(partPayment !== undefined && { partPayment }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("Error calculating finance by product:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to calculate finance",
+      });
+    }
+  }
+
   async calculateAvailableSpendingPower(req: Request, res: Response) {
     try {
       const {
@@ -2820,7 +3000,7 @@ export class ScoringController {
       }
 
       const result = await scoreService.calculateAvailableSpendingPowerByProduct({
-        productType: normalisedProductType as SpendingPowerProductType,
+        productType: normalisedProductType as FinancingProductType,
         tenure: tenure as Tenor | MonthlyFlexTenor,
         disposableIncome,
         affordabilityAllocationRate,

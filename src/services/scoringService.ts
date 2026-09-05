@@ -401,6 +401,9 @@ export type FinancingEvaluationResult = FinancingEvaluationPassed | FinancingEva
 
 export type Tenor = 4 | 6;
 
+/** Which product variant a request should be routed to */
+export type FinancingProductType = "BI_WEEKLY" | "MONTHLY_FLEX";
+
 export interface FinanceInput {
   purchaseAmount: number;
   partPayment?: number;
@@ -423,6 +426,12 @@ export type MonthlyFlexTenor = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 export interface MonthlyFlexFinanceInput extends Omit<FinanceInput, "tenor"> {
   tenor: MonthlyFlexTenor;
+}
+
+export interface FinanceByProductInput extends Omit<FinanceInput, "tenor"> {
+  productType: FinancingProductType;
+  /** 4 or 6 for BI_WEEKLY; 3 to 12 for MONTHLY_FLEX */
+  tenor: Tenor | MonthlyFlexTenor;
 }
 
 /** Product configuration codes backing each Pay-in-N tenor */
@@ -454,12 +463,9 @@ export interface AvailableSpendingPowerMonthlyFlexInput
   tenure: MonthlyFlexTenor;
 }
 
-/** Which spending power calculation a request should be routed to */
-export type SpendingPowerProductType = "BI_WEEKLY" | "MONTHLY_FLEX";
-
 export interface AvailableSpendingPowerByProductInput
   extends Omit<AvailableSpendingPowerInput, "tenure"> {
-  productType: SpendingPowerProductType;
+  productType: FinancingProductType;
   /** 4 or 6 for BI_WEEKLY; 3 to 12 for MONTHLY_FLEX */
   tenure: Tenor | MonthlyFlexTenor;
 }
@@ -481,7 +487,7 @@ export interface AvailableSpendingPowerResult {
   productRate?: number;
 
   /** Which calculation produced this result, set when routed by product type */
-  productType?: SpendingPowerProductType;
+  productType?: FinancingProductType;
 
   message: string;
 }
@@ -511,6 +517,9 @@ export interface FinanceResult {
   installments?: Installment[];
 
   message: string;
+
+  /** Which calculation produced this result, set when routed by product type */
+  productType?: FinancingProductType;
 
   /** Guidance when the transaction fails */
   minimumPartPaymentRequired?: number;
@@ -2255,6 +2264,38 @@ export class ScoringService {
       periodicInstallment: pi,
       installments,
       message: "Transaction passed. The finance amount is within the allowed range.",
+    };
+  }
+
+  /**
+   * Route a finance request to the bi-weekly (Pay-in-N) or Monthly Flex calculation
+   * based on `productType`, and tag the result with the branch taken.
+   */
+  async calculateFinanceByProduct(input: FinanceByProductInput): Promise<FinanceResult> {
+    const { productType, tenor, ...shared } = input;
+
+    if (productType === "BI_WEEKLY") {
+      const result = await this.calculateFinance({
+        ...shared,
+        tenor: tenor as Tenor,
+      });
+      return { ...result, productType };
+    }
+
+    if (productType === "MONTHLY_FLEX") {
+      const result = await this.calculateFinanceForMonthlyFlex({
+        ...shared,
+        tenor: tenor as MonthlyFlexTenor,
+      });
+      return { ...result, productType };
+    }
+
+    return {
+      status: "failed",
+      purchaseAmount: input.purchaseAmount,
+      partPayment: input.partPayment ?? 0,
+      financeAmount: 0,
+      message: "productType must be either BI_WEEKLY or MONTHLY_FLEX.",
     };
   }
 
