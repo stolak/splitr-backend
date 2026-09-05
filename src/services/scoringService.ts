@@ -454,6 +454,16 @@ export interface AvailableSpendingPowerMonthlyFlexInput
   tenure: MonthlyFlexTenor;
 }
 
+/** Which spending power calculation a request should be routed to */
+export type SpendingPowerProductType = "BI_WEEKLY" | "MONTHLY_FLEX";
+
+export interface AvailableSpendingPowerByProductInput
+  extends Omit<AvailableSpendingPowerInput, "tenure"> {
+  productType: SpendingPowerProductType;
+  /** 4 or 6 for BI_WEEKLY; 3 to 12 for MONTHLY_FLEX */
+  tenure: Tenor | MonthlyFlexTenor;
+}
+
 export interface AvailableSpendingPowerResult {
   status: "passed" | "failed";
 
@@ -469,6 +479,9 @@ export interface AvailableSpendingPowerResult {
 
   /** Resolved rate, reported by the Monthly Flex variant */
   productRate?: number;
+
+  /** Which calculation produced this result, set when routed by product type */
+  productType?: SpendingPowerProductType;
 
   message: string;
 }
@@ -2499,6 +2512,45 @@ export class ScoringService {
       message:
         `Transaction passed. Available spending power is ` +
         `${availableSpendingPower.toFixed(2)}.`,
+    };
+  }
+
+  /**
+   * Route a spending power request to the bi-weekly (Pay-in-N) or Monthly Flex
+   * calculation based on `productType`, and tag the result with the branch taken.
+   */
+  async calculateAvailableSpendingPowerByProduct(
+    input: AvailableSpendingPowerByProductInput
+  ): Promise<AvailableSpendingPowerResult> {
+    const { productType, tenure, ...shared } = input;
+
+    if (productType === "BI_WEEKLY") {
+      const result = await this.calculateAvailableSpendingPower({
+        ...shared,
+        tenure: tenure as Tenor,
+      });
+      return { ...result, productType };
+    }
+
+    if (productType === "MONTHLY_FLEX") {
+      const result = await this.calculateAvailableSpendingPowerMonthlyFlex({
+        ...shared,
+        tenure: tenure as MonthlyFlexTenor,
+      });
+      return { ...result, productType };
+    }
+
+    return {
+      status: "failed",
+      weeklyAffordability: 0,
+      biWeeklyAffordability: 0,
+      baseProductAffordability: 0,
+      affordableAfterRiskEffect: 0,
+      availableSpendingPower: 0,
+      productMini: 0,
+      productMax: 0,
+      productRate: 0,
+      message: "productType must be either BI_WEEKLY or MONTHLY_FLEX.",
     };
   }
 }

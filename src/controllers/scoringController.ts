@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response } from "express";
 import {
   scoreService,
   ScoringInput,
@@ -14,7 +14,87 @@ import {
   RepaymentInstallmentCount,
   Tenor,
   MonthlyFlexTenor,
-} from '../services/scoringService';
+  SpendingPowerProductType,
+} from "../services/scoringService";
+
+/**
+ * @swagger
+ * /api/v1/scoring/available-spending-power/by-product/calculate:
+ *   post:
+ *     summary: Calculate available spending power for either product type
+ *     description: >
+ *       Routes to the bi-weekly (Pay-in-N) or Monthly Flex spending power calculation
+ *       based on productType, so callers can use a single endpoint for both.
+ *       BI_WEEKLY accepts a tenure of 4 or 6 and resolves defaults from PAY_IN_{tenure};
+ *       MONTHLY_FLEX accepts a tenure of 3 to 12 and resolves defaults from
+ *       MONTHLY_FLEX_{tenure}. The branch taken is echoed back as productType in the
+ *       response. productType is matched case-insensitively and hyphens are accepted
+ *       (e.g. bi-weekly).
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - productType
+ *               - tenure
+ *               - disposableIncome
+ *               - affordabilityAllocationRate
+ *               - riskMultiplier
+ *               - behaviourMultiplier
+ *               - totalPlatformExposure
+ *             properties:
+ *               productType:
+ *                 type: string
+ *                 enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                 example: MONTHLY_FLEX
+ *               tenure:
+ *                 type: integer
+ *                 description: 4 or 6 for BI_WEEKLY; 3 to 12 for MONTHLY_FLEX
+ *                 example: 6
+ *               disposableIncome:
+ *                 type: number
+ *                 description: Monthly disposable income
+ *                 example: 2500
+ *               affordabilityAllocationRate:
+ *                 type: number
+ *                 description: Share of disposable income allocated to repayments, as a decimal (e.g. 0.30)
+ *                 example: 0.25
+ *               riskMultiplier:
+ *                 type: number
+ *                 example: 1.25
+ *               behaviourMultiplier:
+ *                 type: number
+ *                 example: 1.15
+ *               totalPlatformExposure:
+ *                 type: number
+ *                 description: Customer's existing exposure across the platform
+ *                 example: 500
+ *               productRate:
+ *                 type: number
+ *                 description: >
+ *                   Optional rate as a percentage value. Defaults to the product
+ *                   configuration rate for the resolved code. Only used by MONTHLY_FLEX.
+ *                 example: 12.99
+ *               productMini:
+ *                 type: number
+ *                 description: Optional; defaults to the product configuration minimumFinance
+ *                 example: 350
+ *               productMax:
+ *                 type: number
+ *                 description: Optional; defaults to the product configuration maximumFinance
+ *                 example: 30000
+ *     responses:
+ *       200:
+ *         description: Spending power calculated (status is passed or failed)
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
 
 /**
  * @swagger
@@ -58,13 +138,13 @@ import {
  *               affordabilityAllocationRate:
  *                 type: number
  *                 description: Share of disposable income allocated to repayments, as a decimal (e.g. 0.30)
- *                 example: 0.3
+ *                 example: 0.25
  *               riskMultiplier:
  *                 type: number
- *                 example: 1
+ *                 example: 1.25
  *               behaviourMultiplier:
  *                 type: number
- *                 example: 1
+ *                 example: 1.15
  *               totalPlatformExposure:
  *                 type: number
  *                 description: Customer's existing exposure across the platform
@@ -135,13 +215,13 @@ import {
  *               affordabilityAllocationRate:
  *                 type: number
  *                 description: Share of disposable income allocated to repayments, as a decimal (e.g. 0.30)
- *                 example: 0.3
+ *                 example: 0.25
  *               riskMultiplier:
  *                 type: number
- *                 example: 1.2
+ *                 example: 1.25
  *               behaviourMultiplier:
  *                 type: number
- *                 example: 1
+ *                 example: 1.15
  *               totalPlatformExposure:
  *                 type: number
  *                 description: Customer's existing exposure across the platform
@@ -1387,25 +1467,25 @@ export class ScoringController {
     try {
       const input: OpenBankingInput = req.body;
 
-      if (!input || typeof input !== 'object') {
+      if (!input || typeof input !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'Request body is required',
+          message: "Request body is required",
         });
       }
 
       const requiredFields: (keyof OpenBankingInput)[] = [
-        'monthlyIncome',
-        'incomeStabilityVariance',
-        'netCashFlowPercentage',
-        'liquidityMonths',
-        'nsfEvents',
-        'overdraftFrequency',
-        'loanBurdenPercentage',
+        "monthlyIncome",
+        "incomeStabilityVariance",
+        "netCashFlowPercentage",
+        "liquidityMonths",
+        "nsfEvents",
+        "overdraftFrequency",
+        "loanBurdenPercentage",
       ];
 
       for (const field of requiredFields) {
-        if (typeof input[field] !== 'number') {
+        if (typeof input[field] !== "number") {
           return res.status(400).json({
             success: false,
             message: `${field} is required and must be a number`,
@@ -1417,14 +1497,14 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Open banking score calculated successfully',
+        message: "Open banking score calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating open banking score:', error);
+      console.error("Error calculating open banking score:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate open banking score',
+        message: error.message || "Failed to calculate open banking score",
       });
     }
   }
@@ -1433,22 +1513,22 @@ export class ScoringController {
     try {
       const input: CreditBureauInput = req.body;
 
-      if (!input || typeof input !== 'object') {
+      if (!input || typeof input !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'Request body is required',
+          message: "Request body is required",
         });
       }
 
       const numberFields: (keyof CreditBureauInput)[] = [
-        'creditScore',
-        'utilizationPercentage',
-        'delinquencies24Months',
-        'hardInquiries12Months',
+        "creditScore",
+        "utilizationPercentage",
+        "delinquencies24Months",
+        "hardInquiries12Months",
       ];
 
       for (const field of numberFields) {
-        if (typeof input[field] !== 'number') {
+        if (typeof input[field] !== "number") {
           return res.status(400).json({
             success: false,
             message: `${field} is required and must be a number`,
@@ -1456,20 +1536,19 @@ export class ScoringController {
         }
       }
 
-      const validCollections = ['NONE', 'PAID', 'ACTIVE'];
+      const validCollections = ["NONE", "PAID", "ACTIVE"];
       if (!validCollections.includes(input.collections)) {
         return res.status(400).json({
           success: false,
-          message: 'collections must be one of NONE, PAID, ACTIVE',
+          message: "collections must be one of NONE, PAID, ACTIVE",
         });
       }
 
-      const validBankruptcy = ['NONE', 'DISCHARGED_OVER_5_YEARS', 'ACTIVE_OR_RECENT'];
+      const validBankruptcy = ["NONE", "DISCHARGED_OVER_5_YEARS", "ACTIVE_OR_RECENT"];
       if (!validBankruptcy.includes(input.bankruptcy)) {
         return res.status(400).json({
           success: false,
-          message:
-            'bankruptcy must be one of NONE, DISCHARGED_OVER_5_YEARS, ACTIVE_OR_RECENT',
+          message: "bankruptcy must be one of NONE, DISCHARGED_OVER_5_YEARS, ACTIVE_OR_RECENT",
         });
       }
 
@@ -1477,14 +1556,14 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Credit bureau score calculated successfully',
+        message: "Credit bureau score calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating credit bureau score:', error);
+      console.error("Error calculating credit bureau score:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate credit bureau score',
+        message: error.message || "Failed to calculate credit bureau score",
       });
     }
   }
@@ -1493,31 +1572,31 @@ export class ScoringController {
     try {
       const input: MerchantRiskInput = req.body;
 
-      if (!input || typeof input !== 'object') {
+      if (!input || typeof input !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'Request body is required',
+          message: "Request body is required",
         });
       }
 
-      if (typeof input.merchantCategory !== 'string' || !input.merchantCategory.trim()) {
+      if (typeof input.merchantCategory !== "string" || !input.merchantCategory.trim()) {
         return res.status(400).json({
           success: false,
-          message: 'merchantCategory is required and must be a non-empty string',
+          message: "merchantCategory is required and must be a non-empty string",
         });
       }
 
-      if (typeof input.merchantCategoryScore !== 'number') {
+      if (typeof input.merchantCategoryScore !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'merchantCategoryScore is required and must be a number',
+          message: "merchantCategoryScore is required and must be a number",
         });
       }
 
-      if (typeof input.purchaseUtilizationPercentage !== 'number') {
+      if (typeof input.purchaseUtilizationPercentage !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'purchaseUtilizationPercentage is required and must be a number',
+          message: "purchaseUtilizationPercentage is required and must be a number",
         });
       }
 
@@ -1525,17 +1604,17 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Merchant risk score calculated successfully',
+        message: "Merchant risk score calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating merchant risk score:', error);
-      const message = error.message || 'Failed to calculate merchant risk score';
+      console.error("Error calculating merchant risk score:", error);
+      const message = error.message || "Failed to calculate merchant risk score";
       const status =
-        typeof message === 'string' &&
-        (message.includes('must be') ||
-          message.includes('required') ||
-          message.includes('cannot be'))
+        typeof message === "string" &&
+        (message.includes("must be") ||
+          message.includes("required") ||
+          message.includes("cannot be"))
           ? 400
           : 500;
       return res.status(status).json({
@@ -1547,50 +1626,48 @@ export class ScoringController {
 
   async calculateBehaviouralRepaymentScore(req: Request, res: Response) {
     try {
-      const { isExistingCustomer, onTimePaymentRatio, achSuccessRate } =
-        req.body ?? {};
+      const { isExistingCustomer, onTimePaymentRatio, achSuccessRate } = req.body ?? {};
 
-      if (typeof isExistingCustomer !== 'boolean') {
+      if (typeof isExistingCustomer !== "boolean") {
         return res.status(400).json({
           success: false,
-          message: 'isExistingCustomer is required and must be a boolean',
+          message: "isExistingCustomer is required and must be a boolean",
         });
       }
 
-      if (typeof onTimePaymentRatio !== 'number') {
+      if (typeof onTimePaymentRatio !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'onTimePaymentRatio is required and must be a number',
+          message: "onTimePaymentRatio is required and must be a number",
         });
       }
 
-      if (typeof achSuccessRate !== 'number') {
+      if (typeof achSuccessRate !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'achSuccessRate is required and must be a number',
+          message: "achSuccessRate is required and must be a number",
         });
       }
 
       const result = scoreService.calculateBehaviouralRepaymentScore(
         isExistingCustomer,
         onTimePaymentRatio,
-        achSuccessRate,
+        achSuccessRate
       );
 
       return res.status(200).json({
         success: true,
-        message: 'Behavioural repayment score calculated successfully',
+        message: "Behavioural repayment score calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating behavioural repayment score:', error);
-      const message =
-        error.message || 'Failed to calculate behavioural repayment score';
+      console.error("Error calculating behavioural repayment score:", error);
+      const message = error.message || "Failed to calculate behavioural repayment score";
       const status =
-        typeof message === 'string' &&
-        (message.includes('must be') ||
-          message.includes('required') ||
-          message.includes('cannot be'))
+        typeof message === "string" &&
+        (message.includes("must be") ||
+          message.includes("required") ||
+          message.includes("cannot be"))
           ? 400
           : 500;
       return res.status(status).json({
@@ -1610,24 +1687,24 @@ export class ScoringController {
         config,
       } = req.body ?? {};
 
-      if (typeof disposableIncome !== 'number') {
+      if (typeof disposableIncome !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'disposableIncome is required and must be a number',
+          message: "disposableIncome is required and must be a number",
         });
       }
 
-      if (typeof riskScore !== 'number') {
+      if (typeof riskScore !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'riskScore is required and must be a number',
+          message: "riskScore is required and must be a number",
         });
       }
 
-      if (typeof behaviourScore !== 'number') {
+      if (typeof behaviourScore !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'behaviourScore is required and must be a number',
+          message: "behaviourScore is required and must be a number",
         });
       }
 
@@ -1638,7 +1715,7 @@ export class ScoringController {
       };
 
       const spendingConfig: SpendingPowerConfig | undefined =
-        config && typeof config === 'object' ? config : undefined;
+        config && typeof config === "object" ? config : undefined;
 
       const result = await scoreService.calculateSpendingPower(
         input,
@@ -1648,19 +1725,19 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Spending power calculated successfully',
+        message: "Spending power calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating spending power:', error);
-      const message = error.message || 'Failed to calculate spending power';
+      console.error("Error calculating spending power:", error);
+      const message = error.message || "Failed to calculate spending power";
       const status =
-        typeof message === 'string' &&
-        (message.includes('must be') ||
-          message.includes('required') ||
-          message.includes('cannot be') ||
-          message.includes('No risk') ||
-          message.includes('No behavioural'))
+        typeof message === "string" &&
+        (message.includes("must be") ||
+          message.includes("required") ||
+          message.includes("cannot be") ||
+          message.includes("No risk") ||
+          message.includes("No behavioural"))
           ? 400
           : 500;
       return res.status(status).json({
@@ -1672,41 +1749,34 @@ export class ScoringController {
 
   async calculateRepaymentPlan(req: Request, res: Response) {
     try {
-      const {
-        loanAmount,
-        monthlySpendingPower,
-        numberOfInstallments,
-        firstInstallment,
-      } = req.body ?? {};
+      const { loanAmount, monthlySpendingPower, numberOfInstallments, firstInstallment } =
+        req.body ?? {};
 
-      if (typeof loanAmount !== 'number') {
+      if (typeof loanAmount !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'loanAmount is required and must be a number',
+          message: "loanAmount is required and must be a number",
         });
       }
 
-      if (typeof monthlySpendingPower !== 'number') {
+      if (typeof monthlySpendingPower !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'monthlySpendingPower is required and must be a number',
+          message: "monthlySpendingPower is required and must be a number",
         });
       }
 
       if (numberOfInstallments !== 4 && numberOfInstallments !== 6) {
         return res.status(400).json({
           success: false,
-          message: 'numberOfInstallments must be either 4 or 6',
+          message: "numberOfInstallments must be either 4 or 6",
         });
       }
 
-      if (
-        firstInstallment !== undefined &&
-        typeof firstInstallment !== 'number'
-      ) {
+      if (firstInstallment !== undefined && typeof firstInstallment !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'firstInstallment must be a number when provided',
+          message: "firstInstallment must be a number when provided",
         });
       }
 
@@ -1721,22 +1791,22 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Repayment plan calculated successfully',
+        message: "Repayment plan calculated successfully",
         data: {
           options,
           plan,
         },
       });
     } catch (error: any) {
-      console.error('Error calculating repayment plan:', error);
-      const message = error.message || 'Failed to calculate repayment plan';
+      console.error("Error calculating repayment plan:", error);
+      const message = error.message || "Failed to calculate repayment plan";
       const status =
-        typeof message === 'string' &&
-        (message.includes('must be') ||
-          message.includes('must') ||
-          message.includes('not allowed') ||
-          message.includes('greater than') ||
-          message.includes('less than'))
+        typeof message === "string" &&
+        (message.includes("must be") ||
+          message.includes("must") ||
+          message.includes("not allowed") ||
+          message.includes("greater than") ||
+          message.includes("less than"))
           ? 400
           : 500;
       return res.status(status).json({
@@ -1750,45 +1820,45 @@ export class ScoringController {
     try {
       const { principal, rate, months } = req.body ?? {};
 
-      if (typeof principal !== 'number') {
+      if (typeof principal !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'principal is required and must be a number',
+          message: "principal is required and must be a number",
         });
       }
 
-      if (typeof rate !== 'number') {
+      if (typeof rate !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'rate is required and must be a number',
+          message: "rate is required and must be a number",
         });
       }
 
-      if (typeof months !== 'number' || !Number.isInteger(months)) {
+      if (typeof months !== "number" || !Number.isInteger(months)) {
         return res.status(400).json({
           success: false,
-          message: 'months is required and must be an integer',
+          message: "months is required and must be an integer",
         });
       }
 
       if (principal <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'principal must be greater than zero',
+          message: "principal must be greater than zero",
         });
       }
 
       if (months <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'months must be greater than zero',
+          message: "months must be greater than zero",
         });
       }
 
       if (rate < 0) {
         return res.status(400).json({
           success: false,
-          message: 'rate cannot be negative',
+          message: "rate cannot be negative",
         });
       }
 
@@ -1796,7 +1866,7 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Monthly repayment calculated successfully',
+        message: "Monthly repayment calculated successfully",
         data: {
           principal,
           rate,
@@ -1805,8 +1875,8 @@ export class ScoringController {
         },
       });
     } catch (error: any) {
-      console.error('Error calculating monthly repayment:', error);
-      const message = error.message || 'Failed to calculate monthly repayment';
+      console.error("Error calculating monthly repayment:", error);
+      const message = error.message || "Failed to calculate monthly repayment";
       return res.status(500).json({
         success: false,
         message,
@@ -1818,57 +1888,53 @@ export class ScoringController {
     try {
       const { monthlyRepayment, rate, months } = req.body ?? {};
 
-      if (typeof monthlyRepayment !== 'number') {
+      if (typeof monthlyRepayment !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'monthlyRepayment is required and must be a number',
+          message: "monthlyRepayment is required and must be a number",
         });
       }
 
-      if (typeof rate !== 'number') {
+      if (typeof rate !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'rate is required and must be a number',
+          message: "rate is required and must be a number",
         });
       }
 
-      if (typeof months !== 'number' || !Number.isInteger(months)) {
+      if (typeof months !== "number" || !Number.isInteger(months)) {
         return res.status(400).json({
           success: false,
-          message: 'months is required and must be an integer',
+          message: "months is required and must be an integer",
         });
       }
 
       if (monthlyRepayment <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'monthlyRepayment must be greater than zero',
+          message: "monthlyRepayment must be greater than zero",
         });
       }
 
       if (months <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'months must be greater than zero',
+          message: "months must be greater than zero",
         });
       }
 
       if (rate < 0) {
         return res.status(400).json({
           success: false,
-          message: 'rate cannot be negative',
+          message: "rate cannot be negative",
         });
       }
 
-      const principal = scoreService.principalFromMonthlyRepayment(
-        monthlyRepayment,
-        rate,
-        months
-      );
+      const principal = scoreService.principalFromMonthlyRepayment(monthlyRepayment, rate, months);
 
       return res.status(200).json({
         success: true,
-        message: 'Principal calculated successfully',
+        message: "Principal calculated successfully",
         data: {
           monthlyRepayment,
           rate,
@@ -1877,8 +1943,8 @@ export class ScoringController {
         },
       });
     } catch (error: any) {
-      console.error('Error calculating principal from monthly repayment:', error);
-      const message = error.message || 'Failed to calculate principal';
+      console.error("Error calculating principal from monthly repayment:", error);
+      const message = error.message || "Failed to calculate principal";
       return res.status(500).json({
         success: false,
         message,
@@ -1890,57 +1956,53 @@ export class ScoringController {
     try {
       const body = req.body as FinalCustomerScoreInput;
 
-      if (!body || typeof body !== 'object') {
+      if (!body || typeof body !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'Request body is required',
+          message: "Request body is required",
         });
       }
 
-      const validTypes: CustomerLenderType[] = [
-        'FIRST_TIME_LENDER',
-        'RETURNING_CUSTOMER',
-      ];
+      const validTypes: CustomerLenderType[] = ["FIRST_TIME_LENDER", "RETURNING_CUSTOMER"];
       if (!validTypes.includes(body.customerType)) {
         return res.status(400).json({
           success: false,
-          message:
-            'customerType must be FIRST_TIME_LENDER or RETURNING_CUSTOMER',
+          message: "customerType must be FIRST_TIME_LENDER or RETURNING_CUSTOMER",
         });
       }
 
-      if (!body.openBanking || typeof body.openBanking !== 'object') {
+      if (!body.openBanking || typeof body.openBanking !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'openBanking is required',
+          message: "openBanking is required",
         });
       }
 
-      if (!body.creditBureau || typeof body.creditBureau !== 'object') {
+      if (!body.creditBureau || typeof body.creditBureau !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'creditBureau is required',
+          message: "creditBureau is required",
         });
       }
 
-      if (!body.merchantRisk || typeof body.merchantRisk !== 'object') {
+      if (!body.merchantRisk || typeof body.merchantRisk !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'merchantRisk is required',
+          message: "merchantRisk is required",
         });
       }
 
-      if (body.customerType === 'RETURNING_CUSTOMER') {
-        if (typeof body.onTimePaymentRatio !== 'number') {
+      if (body.customerType === "RETURNING_CUSTOMER") {
+        if (typeof body.onTimePaymentRatio !== "number") {
           return res.status(400).json({
             success: false,
-            message: 'onTimePaymentRatio is required for RETURNING_CUSTOMER',
+            message: "onTimePaymentRatio is required for RETURNING_CUSTOMER",
           });
         }
-        if (typeof body.achSuccessRate !== 'number') {
+        if (typeof body.achSuccessRate !== "number") {
           return res.status(400).json({
             success: false,
-            message: 'achSuccessRate is required for RETURNING_CUSTOMER',
+            message: "achSuccessRate is required for RETURNING_CUSTOMER",
           });
         }
       }
@@ -1949,17 +2011,17 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Final customer score calculated successfully',
+        message: "Final customer score calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating final customer score:', error);
-      const message = error.message || 'Failed to calculate final customer score';
+      console.error("Error calculating final customer score:", error);
+      const message = error.message || "Failed to calculate final customer score";
       const status =
-        typeof message === 'string' &&
-        (message.includes('must be') ||
-          message.includes('required') ||
-          message.includes('cannot be'))
+        typeof message === "string" &&
+        (message.includes("must be") ||
+          message.includes("required") ||
+          message.includes("cannot be"))
           ? 400
           : 500;
       return res.status(status).json({
@@ -1973,43 +2035,43 @@ export class ScoringController {
     try {
       const { totalScore, existingLoanRepayment, estimatedMonthlyIncome } = req.body ?? {};
 
-      if (typeof totalScore !== 'number') {
+      if (typeof totalScore !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'totalScore is required and must be a number',
+          message: "totalScore is required and must be a number",
         });
       }
 
-      if (typeof existingLoanRepayment !== 'number') {
+      if (typeof existingLoanRepayment !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'existingLoanRepayment is required and must be a number',
+          message: "existingLoanRepayment is required and must be a number",
         });
       }
 
-      if (typeof estimatedMonthlyIncome !== 'number') {
+      if (typeof estimatedMonthlyIncome !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'estimatedMonthlyIncome is required and must be a number',
+          message: "estimatedMonthlyIncome is required and must be a number",
         });
       }
 
       const result = scoreService.determineEligibility(
         totalScore,
         existingLoanRepayment,
-        estimatedMonthlyIncome,
+        estimatedMonthlyIncome
       );
 
       return res.status(200).json({
         success: true,
-        message: 'Eligibility determined successfully',
+        message: "Eligibility determined successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error determining eligibility:', error);
+      console.error("Error determining eligibility:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to determine eligibility',
+        message: error.message || "Failed to determine eligibility",
       });
     }
   }
@@ -2018,52 +2080,52 @@ export class ScoringController {
     try {
       const input: ScoringInput = req.body;
 
-      if (!input || typeof input !== 'object') {
+      if (!input || typeof input !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'Request body is required',
+          message: "Request body is required",
         });
       }
 
       if (!input.incomeRecurrent || !input.incomeStability || !input.liquidityBuffer) {
         return res.status(400).json({
           success: false,
-          message: 'incomeRecurrent, incomeStability, and liquidityBuffer are required',
+          message: "incomeRecurrent, incomeStability, and liquidityBuffer are required",
         });
       }
 
-      if (typeof input.netCashFlowPositiveCount !== 'number') {
+      if (typeof input.netCashFlowPositiveCount !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'netCashFlowPositiveCount is required and must be a number',
+          message: "netCashFlowPositiveCount is required and must be a number",
         });
       }
 
-      if (typeof input.creditHistory !== 'number') {
+      if (typeof input.creditHistory !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'creditHistory is required and must be a number',
+          message: "creditHistory is required and must be a number",
         });
       }
 
-      if (typeof input.existingLoanRepayment !== 'number') {
+      if (typeof input.existingLoanRepayment !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'existingLoanRepayment is required and must be a number',
+          message: "existingLoanRepayment is required and must be a number",
         });
       }
 
-      if (input.overdraftRecent !== undefined && typeof input.overdraftRecent !== 'boolean') {
+      if (input.overdraftRecent !== undefined && typeof input.overdraftRecent !== "boolean") {
         return res.status(400).json({
           success: false,
-          message: 'overdraftRecent must be a boolean when provided',
+          message: "overdraftRecent must be a boolean when provided",
         });
       }
 
-      if (!input.riskFactor || typeof input.riskFactor !== 'object') {
+      if (!input.riskFactor || typeof input.riskFactor !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'riskFactor is required and must be an object (MonthlyScores)',
+          message: "riskFactor is required and must be an object (MonthlyScores)",
         });
       }
 
@@ -2071,14 +2133,14 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Scoring calculated successfully',
+        message: "Scoring calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating scoring:', error);
+      console.error("Error calculating scoring:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate scoring',
+        message: error.message || "Failed to calculate scoring",
       });
     }
   }
@@ -2087,80 +2149,80 @@ export class ScoringController {
     try {
       const input: SelfAssessmentScoringInput = req.body;
 
-      if (!input || typeof input !== 'object') {
+      if (!input || typeof input !== "object") {
         return res.status(400).json({
           success: false,
-          message: 'Request body is required',
+          message: "Request body is required",
         });
       }
 
       if (!input.incomeRecurrent) {
         return res.status(400).json({
           success: false,
-          message: 'incomeRecurrent is required',
+          message: "incomeRecurrent is required",
         });
       }
 
-      if (typeof input.overdraftCount !== 'number') {
+      if (typeof input.overdraftCount !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'overdraftCount is required and must be a number',
+          message: "overdraftCount is required and must be a number",
         });
       }
 
-      if (typeof input.overdraftEvents !== 'number') {
+      if (typeof input.overdraftEvents !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'overdraftEvents is required and must be a number',
+          message: "overdraftEvents is required and must be a number",
         });
       }
 
-      if (typeof input.overdraftDeepestNegativeBalance !== 'number') {
+      if (typeof input.overdraftDeepestNegativeBalance !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'overdraftDeepestNegativeBalance is required and must be a number',
+          message: "overdraftDeepestNegativeBalance is required and must be a number",
         });
       }
 
-      if (typeof input.overdraftNegativeDays !== 'number') {
+      if (typeof input.overdraftNegativeDays !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'overdraftNegativeDays is required and must be a number',
+          message: "overdraftNegativeDays is required and must be a number",
         });
       }
 
-      if (typeof input.overdraftRecent !== 'boolean') {
+      if (typeof input.overdraftRecent !== "boolean") {
         return res.status(400).json({
           success: false,
-          message: 'overdraftRecent is required and must be a boolean',
+          message: "overdraftRecent is required and must be a boolean",
         });
       }
 
-      if (typeof input.creditHistory !== 'number') {
+      if (typeof input.creditHistory !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'creditHistory is required and must be a number',
+          message: "creditHistory is required and must be a number",
         });
       }
 
-      if (typeof input.totalFlags !== 'number') {
+      if (typeof input.totalFlags !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'totalFlags is required and must be a number',
+          message: "totalFlags is required and must be a number",
         });
       }
 
-      if (typeof input.estimatedMonthlyIncome !== 'number') {
+      if (typeof input.estimatedMonthlyIncome !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'estimatedMonthlyIncome is required and must be a number',
+          message: "estimatedMonthlyIncome is required and must be a number",
         });
       }
 
-      if (typeof input.existingLoanRepayment !== 'number') {
+      if (typeof input.existingLoanRepayment !== "number") {
         return res.status(400).json({
           success: false,
-          message: 'existingLoanRepayment is required and must be a number',
+          message: "existingLoanRepayment is required and must be a number",
         });
       }
 
@@ -2168,14 +2230,14 @@ export class ScoringController {
 
       return res.status(200).json({
         success: true,
-        message: 'Self-assessment scoring calculated successfully',
+        message: "Self-assessment scoring calculated successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating self-assessment scoring:', error);
+      console.error("Error calculating self-assessment scoring:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate self-assessment scoring',
+        message: error.message || "Failed to calculate self-assessment scoring",
       });
     }
   }
@@ -2192,15 +2254,15 @@ export class ScoringController {
       } = req.body ?? {};
 
       const requiredNumbers: Array<[string, any]> = [
-        ['productAmount', productAmount],
-        ['customerMaxRepayment', customerMaxRepayment],
-        ['maxPrincipal', maxPrincipal],
-        ['rate', rate],
-        ['months', months],
+        ["productAmount", productAmount],
+        ["customerMaxRepayment", customerMaxRepayment],
+        ["maxPrincipal", maxPrincipal],
+        ["rate", rate],
+        ["months", months],
       ];
 
       for (const [field, value] of requiredNumbers) {
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return res.status(400).json({
             success: false,
             message: `${field} is required and must be a number`,
@@ -2211,46 +2273,45 @@ export class ScoringController {
       if (!Number.isInteger(months) || months <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'months must be an integer greater than zero',
+          message: "months must be an integer greater than zero",
         });
       }
 
       if (productAmount <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'productAmount must be greater than zero',
+          message: "productAmount must be greater than zero",
         });
       }
 
       if (customerMaxRepayment <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'customerMaxRepayment must be greater than zero',
+          message: "customerMaxRepayment must be greater than zero",
         });
       }
 
       if (maxPrincipal < 0) {
         return res.status(400).json({
           success: false,
-          message: 'maxPrincipal cannot be negative',
+          message: "maxPrincipal cannot be negative",
         });
       }
 
       if (rate < 0) {
         return res.status(400).json({
           success: false,
-          message: 'rate cannot be negative',
+          message: "rate cannot be negative",
         });
       }
 
       if (
         intendedUpfrontPayment !== undefined &&
-        (typeof intendedUpfrontPayment !== 'number' ||
-          !Number.isFinite(intendedUpfrontPayment))
+        (typeof intendedUpfrontPayment !== "number" || !Number.isFinite(intendedUpfrontPayment))
       ) {
         return res.status(400).json({
           success: false,
-          message: 'intendedUpfrontPayment must be a number when provided',
+          message: "intendedUpfrontPayment must be a number when provided",
         });
       }
 
@@ -2269,55 +2330,54 @@ export class ScoringController {
         data: result,
       });
     } catch (error: any) {
-      console.error('Error evaluating financing:', error);
+      console.error("Error evaluating financing:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to evaluate financing',
+        message: error.message || "Failed to evaluate financing",
       });
     }
   }
 
   async calculateFinance(req: Request, res: Response) {
     try {
-      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
-        req.body ?? {};
+      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } = req.body ?? {};
 
-      if (typeof purchaseAmount !== 'number' || !Number.isFinite(purchaseAmount)) {
+      if (typeof purchaseAmount !== "number" || !Number.isFinite(purchaseAmount)) {
         return res.status(400).json({
           success: false,
-          message: 'purchaseAmount is required and must be a number',
+          message: "purchaseAmount is required and must be a number",
         });
       }
 
       if (tenor !== 4 && tenor !== 6) {
         return res.status(400).json({
           success: false,
-          message: 'tenor is required and must be either 4 or 6',
+          message: "tenor is required and must be either 4 or 6",
         });
       }
 
       if (
         partPayment !== undefined &&
-        (typeof partPayment !== 'number' || !Number.isFinite(partPayment))
+        (typeof partPayment !== "number" || !Number.isFinite(partPayment))
       ) {
         return res.status(400).json({
           success: false,
-          message: 'partPayment must be a number when provided',
+          message: "partPayment must be a number when provided",
         });
       }
 
       // rate, minSp and maxSp are optional; the service resolves them from the
       // product configuration for this tenor when they are omitted
       const optionalNumbers: Array<[string, any]> = [
-        ['rate', rate],
-        ['minSp', minSp],
-        ['maxSp', maxSp],
+        ["rate", rate],
+        ["minSp", minSp],
+        ["maxSp", maxSp],
       ];
 
       for (const [field, value] of optionalNumbers) {
         if (value === undefined) continue;
 
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return res.status(400).json({
             success: false,
             message: `${field} must be a number when provided`,
@@ -2335,7 +2395,7 @@ export class ScoringController {
       if (minSp !== undefined && maxSp !== undefined && minSp > maxSp) {
         return res.status(400).json({
           success: false,
-          message: 'minSp cannot be greater than maxSp',
+          message: "minSp cannot be greater than maxSp",
         });
       }
 
@@ -2354,60 +2414,54 @@ export class ScoringController {
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating finance:', error);
+      console.error("Error calculating finance:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate finance',
+        message: error.message || "Failed to calculate finance",
       });
     }
   }
 
   async calculateFinanceForMonthlyFlex(req: Request, res: Response) {
     try {
-      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
-        req.body ?? {};
+      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } = req.body ?? {};
 
-      if (typeof purchaseAmount !== 'number' || !Number.isFinite(purchaseAmount)) {
+      if (typeof purchaseAmount !== "number" || !Number.isFinite(purchaseAmount)) {
         return res.status(400).json({
           success: false,
-          message: 'purchaseAmount is required and must be a number',
+          message: "purchaseAmount is required and must be a number",
         });
       }
 
-      if (
-        typeof tenor !== 'number' ||
-        !Number.isInteger(tenor) ||
-        tenor < 3 ||
-        tenor > 12
-      ) {
+      if (typeof tenor !== "number" || !Number.isInteger(tenor) || tenor < 3 || tenor > 12) {
         return res.status(400).json({
           success: false,
-          message: 'tenor is required and must be an integer between 3 and 12',
+          message: "tenor is required and must be an integer between 3 and 12",
         });
       }
 
       if (
         partPayment !== undefined &&
-        (typeof partPayment !== 'number' || !Number.isFinite(partPayment))
+        (typeof partPayment !== "number" || !Number.isFinite(partPayment))
       ) {
         return res.status(400).json({
           success: false,
-          message: 'partPayment must be a number when provided',
+          message: "partPayment must be a number when provided",
         });
       }
 
       // rate, minSp and maxSp are optional; the service resolves them from the
       // product configuration for this tenor when they are omitted
       const optionalNumbers: Array<[string, any]> = [
-        ['rate', rate],
-        ['minSp', minSp],
-        ['maxSp', maxSp],
+        ["rate", rate],
+        ["minSp", minSp],
+        ["maxSp", maxSp],
       ];
 
       for (const [field, value] of optionalNumbers) {
         if (value === undefined) continue;
 
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return res.status(400).json({
             success: false,
             message: `${field} must be a number when provided`,
@@ -2425,7 +2479,7 @@ export class ScoringController {
       if (minSp !== undefined && maxSp !== undefined && minSp > maxSp) {
         return res.status(400).json({
           success: false,
-          message: 'minSp cannot be greater than maxSp',
+          message: "minSp cannot be greater than maxSp",
         });
       }
 
@@ -2444,10 +2498,10 @@ export class ScoringController {
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating monthly flex finance:', error);
+      console.error("Error calculating monthly flex finance:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate monthly flex finance',
+        message: error.message || "Failed to calculate monthly flex finance",
       });
     }
   }
@@ -2469,20 +2523,20 @@ export class ScoringController {
       if (tenure !== 4 && tenure !== 6) {
         return res.status(400).json({
           success: false,
-          message: 'tenure is required and must be either 4 or 6',
+          message: "tenure is required and must be either 4 or 6",
         });
       }
 
       const requiredNumbers: Array<[string, any]> = [
-        ['disposableIncome', disposableIncome],
-        ['affordabilityAllocationRate', affordabilityAllocationRate],
-        ['riskMultiplier', riskMultiplier],
-        ['behaviourMultiplier', behaviourMultiplier],
-        ['totalPlatformExposure', totalPlatformExposure],
+        ["disposableIncome", disposableIncome],
+        ["affordabilityAllocationRate", affordabilityAllocationRate],
+        ["riskMultiplier", riskMultiplier],
+        ["behaviourMultiplier", behaviourMultiplier],
+        ["totalPlatformExposure", totalPlatformExposure],
       ];
 
       for (const [field, value] of requiredNumbers) {
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return res.status(400).json({
             success: false,
             message: `${field} is required and must be a number`,
@@ -2500,15 +2554,15 @@ export class ScoringController {
       // productMini and productMax are optional; the service resolves them from the
       // product configuration for this tenure when they are omitted
       const optionalNumbers: Array<[string, any]> = [
-        ['productRate', productRate],
-        ['productMini', productMini],
-        ['productMax', productMax],
+        ["productRate", productRate],
+        ["productMini", productMini],
+        ["productMax", productMax],
       ];
 
       for (const [field, value] of optionalNumbers) {
         if (value === undefined) continue;
 
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return res.status(400).json({
             success: false,
             message: `${field} must be a number when provided`,
@@ -2523,14 +2577,10 @@ export class ScoringController {
         }
       }
 
-      if (
-        productMini !== undefined &&
-        productMax !== undefined &&
-        productMini > productMax
-      ) {
+      if (productMini !== undefined && productMax !== undefined && productMini > productMax) {
         return res.status(400).json({
           success: false,
-          message: 'productMini cannot be greater than productMax',
+          message: "productMini cannot be greater than productMax",
         });
       }
 
@@ -2552,10 +2602,10 @@ export class ScoringController {
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating available spending power:', error);
+      console.error("Error calculating available spending power:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate available spending power',
+        message: error.message || "Failed to calculate available spending power",
       });
     }
   }
@@ -2574,28 +2624,23 @@ export class ScoringController {
         productMax,
       } = req.body ?? {};
 
-      if (
-        typeof tenure !== 'number' ||
-        !Number.isInteger(tenure) ||
-        tenure < 3 ||
-        tenure > 12
-      ) {
+      if (typeof tenure !== "number" || !Number.isInteger(tenure) || tenure < 3 || tenure > 12) {
         return res.status(400).json({
           success: false,
-          message: 'tenure is required and must be an integer between 3 and 12',
+          message: "tenure is required and must be an integer between 3 and 12",
         });
       }
 
       const requiredNumbers: Array<[string, any]> = [
-        ['disposableIncome', disposableIncome],
-        ['affordabilityAllocationRate', affordabilityAllocationRate],
-        ['riskMultiplier', riskMultiplier],
-        ['behaviourMultiplier', behaviourMultiplier],
-        ['totalPlatformExposure', totalPlatformExposure],
+        ["disposableIncome", disposableIncome],
+        ["affordabilityAllocationRate", affordabilityAllocationRate],
+        ["riskMultiplier", riskMultiplier],
+        ["behaviourMultiplier", behaviourMultiplier],
+        ["totalPlatformExposure", totalPlatformExposure],
       ];
 
       for (const [field, value] of requiredNumbers) {
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return res.status(400).json({
             success: false,
             message: `${field} is required and must be a number`,
@@ -2613,15 +2658,15 @@ export class ScoringController {
       // productRate, productMini and productMax are optional; the service resolves them
       // from the product configuration for this tenure when they are omitted
       const optionalNumbers: Array<[string, any]> = [
-        ['productRate', productRate],
-        ['productMini', productMini],
-        ['productMax', productMax],
+        ["productRate", productRate],
+        ["productMini", productMini],
+        ["productMax", productMax],
       ];
 
       for (const [field, value] of optionalNumbers) {
         if (value === undefined) continue;
 
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return res.status(400).json({
             success: false,
             message: `${field} must be a number when provided`,
@@ -2636,14 +2681,10 @@ export class ScoringController {
         }
       }
 
-      if (
-        productMini !== undefined &&
-        productMax !== undefined &&
-        productMini > productMax
-      ) {
+      if (productMini !== undefined && productMax !== undefined && productMini > productMax) {
         return res.status(400).json({
           success: false,
-          message: 'productMini cannot be greater than productMax',
+          message: "productMini cannot be greater than productMax",
         });
       }
 
@@ -2665,11 +2706,142 @@ export class ScoringController {
         data: result,
       });
     } catch (error: any) {
-      console.error('Error calculating monthly flex available spending power:', error);
+      console.error("Error calculating monthly flex available spending power:", error);
       return res.status(500).json({
         success: false,
-        message:
-          error.message || 'Failed to calculate monthly flex available spending power',
+        message: error.message || "Failed to calculate monthly flex available spending power",
+      });
+    }
+  }
+
+  async calculateAvailableSpendingPowerByProduct(req: Request, res: Response) {
+    try {
+      const {
+        productType,
+        tenure,
+        disposableIncome,
+        affordabilityAllocationRate,
+        riskMultiplier,
+        behaviourMultiplier,
+        totalPlatformExposure,
+        productRate,
+        productMini,
+        productMax,
+      } = req.body ?? {};
+
+      const normalisedProductType =
+        typeof productType === "string"
+          ? productType.trim().toUpperCase().replace(/-/g, "_")
+          : undefined;
+
+      if (normalisedProductType !== "BI_WEEKLY" && normalisedProductType !== "MONTHLY_FLEX") {
+        return res.status(400).json({
+          success: false,
+          message: "productType is required and must be either BI_WEEKLY or MONTHLY_FLEX",
+        });
+      }
+
+      if (typeof tenure !== "number" || !Number.isInteger(tenure)) {
+        return res.status(400).json({
+          success: false,
+          message: "tenure is required and must be an integer",
+        });
+      }
+
+      if (normalisedProductType === "BI_WEEKLY" && tenure !== 4 && tenure !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: "tenure must be either 4 or 6 for BI_WEEKLY",
+        });
+      }
+
+      if (normalisedProductType === "MONTHLY_FLEX" && (tenure < 3 || tenure > 12)) {
+        return res.status(400).json({
+          success: false,
+          message: "tenure must be between 3 and 12 for MONTHLY_FLEX",
+        });
+      }
+
+      const requiredNumbers: Array<[string, any]> = [
+        ["disposableIncome", disposableIncome],
+        ["affordabilityAllocationRate", affordabilityAllocationRate],
+        ["riskMultiplier", riskMultiplier],
+        ["behaviourMultiplier", behaviourMultiplier],
+        ["totalPlatformExposure", totalPlatformExposure],
+      ];
+
+      for (const [field, value] of requiredNumbers) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
+      }
+
+      // Product configuration values are optional; the service resolves whatever is
+      // omitted from the product configuration for the resolved code
+      const optionalNumbers: Array<[string, any]> = [
+        ["productRate", productRate],
+        ["productMini", productMini],
+        ["productMax", productMax],
+      ];
+
+      for (const [field, value] of optionalNumbers) {
+        if (value === undefined) continue;
+
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} must be a number when provided`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
+      }
+
+      if (productMini !== undefined && productMax !== undefined && productMini > productMax) {
+        return res.status(400).json({
+          success: false,
+          message: "productMini cannot be greater than productMax",
+        });
+      }
+
+      const result = await scoreService.calculateAvailableSpendingPowerByProduct({
+        productType: normalisedProductType as SpendingPowerProductType,
+        tenure: tenure as Tenor | MonthlyFlexTenor,
+        disposableIncome,
+        affordabilityAllocationRate,
+        riskMultiplier,
+        behaviourMultiplier,
+        totalPlatformExposure,
+        ...(productRate !== undefined && { productRate }),
+        ...(productMini !== undefined && { productMini }),
+        ...(productMax !== undefined && { productMax }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("Error calculating available spending power by product:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to calculate available spending power",
       });
     }
   }
