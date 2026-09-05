@@ -18,6 +18,85 @@ import {
 
 /**
  * @swagger
+ * /api/v1/scoring/available-spending-power/monthly-flex/calculate:
+ *   post:
+ *     summary: Calculate the spending power available for a Monthly Flex product
+ *     description: >
+ *       Monthly Flex variant with a tenure of 3 to 12 months. The base affordability is
+ *       the principal that the customer's monthly affordability can amortize over the
+ *       tenure, then scaled by the risk and behaviour multipliers, capped at the product
+ *       maximum and reduced by the customer's existing platform exposure.
+ *       productRate, productMini and productMax are optional: any that are omitted are
+ *       read from the MONTHLY_FLEX_{tenure} product configuration (e.g. tenure 6 maps to
+ *       MONTHLY_FLEX_6), taking rate, minimumFinance and maximumFinance respectively.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - tenure
+ *               - disposableIncome
+ *               - affordabilityAllocationRate
+ *               - riskMultiplier
+ *               - behaviourMultiplier
+ *               - totalPlatformExposure
+ *             properties:
+ *               tenure:
+ *                 type: integer
+ *                 description: Number of months, from 3 to 12
+ *                 minimum: 3
+ *                 maximum: 12
+ *                 example: 6
+ *               disposableIncome:
+ *                 type: number
+ *                 description: Monthly disposable income
+ *                 example: 2500
+ *               affordabilityAllocationRate:
+ *                 type: number
+ *                 description: Share of disposable income allocated to repayments, as a decimal (e.g. 0.30)
+ *                 example: 0.3
+ *               riskMultiplier:
+ *                 type: number
+ *                 example: 1
+ *               behaviourMultiplier:
+ *                 type: number
+ *                 example: 1
+ *               totalPlatformExposure:
+ *                 type: number
+ *                 description: Customer's existing exposure across the platform
+ *                 example: 500
+ *               productRate:
+ *                 type: number
+ *                 description: >
+ *                   Optional annual rate as a percentage value (e.g. 12.99 for 12.99%).
+ *                   Defaults to the MONTHLY_FLEX_{tenure} product configuration rate.
+ *                 example: 12.99
+ *               productMini:
+ *                 type: number
+ *                 description: >
+ *                   Optional minimum finance amount. Defaults to the product
+ *                   configuration minimumFinance for this tenure.
+ *                 example: 350
+ *               productMax:
+ *                 type: number
+ *                 description: >
+ *                   Optional maximum finance amount. Defaults to the product
+ *                   configuration maximumFinance for this tenure.
+ *                 example: 30000
+ *     responses:
+ *       200:
+ *         description: Spending power calculated (status is passed or failed)
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
  * /api/v1/scoring/available-spending-power/calculate:
  *   post:
  *     summary: Calculate the spending power available for a Pay-in-N product
@@ -2477,6 +2556,120 @@ export class ScoringController {
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to calculate available spending power',
+      });
+    }
+  }
+
+  async calculateAvailableSpendingPowerMonthlyFlex(req: Request, res: Response) {
+    try {
+      const {
+        tenure,
+        disposableIncome,
+        affordabilityAllocationRate,
+        riskMultiplier,
+        behaviourMultiplier,
+        totalPlatformExposure,
+        productRate,
+        productMini,
+        productMax,
+      } = req.body ?? {};
+
+      if (
+        typeof tenure !== 'number' ||
+        !Number.isInteger(tenure) ||
+        tenure < 3 ||
+        tenure > 12
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'tenure is required and must be an integer between 3 and 12',
+        });
+      }
+
+      const requiredNumbers: Array<[string, any]> = [
+        ['disposableIncome', disposableIncome],
+        ['affordabilityAllocationRate', affordabilityAllocationRate],
+        ['riskMultiplier', riskMultiplier],
+        ['behaviourMultiplier', behaviourMultiplier],
+        ['totalPlatformExposure', totalPlatformExposure],
+      ];
+
+      for (const [field, value] of requiredNumbers) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
+      }
+
+      // productRate, productMini and productMax are optional; the service resolves them
+      // from the product configuration for this tenure when they are omitted
+      const optionalNumbers: Array<[string, any]> = [
+        ['productRate', productRate],
+        ['productMini', productMini],
+        ['productMax', productMax],
+      ];
+
+      for (const [field, value] of optionalNumbers) {
+        if (value === undefined) continue;
+
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} must be a number when provided`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
+      }
+
+      if (
+        productMini !== undefined &&
+        productMax !== undefined &&
+        productMini > productMax
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'productMini cannot be greater than productMax',
+        });
+      }
+
+      const result = await scoreService.calculateAvailableSpendingPowerMonthlyFlex({
+        tenure: tenure as MonthlyFlexTenor,
+        disposableIncome,
+        affordabilityAllocationRate,
+        riskMultiplier,
+        behaviourMultiplier,
+        totalPlatformExposure,
+        ...(productRate !== undefined && { productRate }),
+        ...(productMini !== undefined && { productMini }),
+        ...(productMax !== undefined && { productMax }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating monthly flex available spending power:', error);
+      return res.status(500).json({
+        success: false,
+        message:
+          error.message || 'Failed to calculate monthly flex available spending power',
       });
     }
   }

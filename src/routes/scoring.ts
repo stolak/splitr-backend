@@ -20,6 +20,10 @@ router.post(
   "/available-spending-power/calculate",
   scoringController.calculateAvailableSpendingPower
 );
+router.post(
+  "/available-spending-power/monthly-flex/calculate",
+  scoringController.calculateAvailableSpendingPowerMonthlyFlex
+);
 router.post("/final/calculate", scoringController.calculateFinalCustomerScore);
 router.post("/eligibility/determine", scoringController.determineEligibility);
 

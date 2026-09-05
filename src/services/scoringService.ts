@@ -438,12 +438,20 @@ export interface AvailableSpendingPowerInput {
   riskMultiplier: number;
   behaviourMultiplier: number;
   totalPlatformExposure: number;
-  /** Accepted for payload symmetry; not used by this calculation */
+  /**
+   * Falls back to the product configuration `rate` when omitted.
+   * Only used by the Monthly Flex variant; the Pay-in-N calculation ignores it.
+   */
   productRate?: number;
   /** Falls back to the product configuration `minimumFinance` when omitted */
   productMini?: number;
   /** Falls back to the product configuration `maximumFinance` when omitted */
   productMax?: number;
+}
+
+export interface AvailableSpendingPowerMonthlyFlexInput
+  extends Omit<AvailableSpendingPowerInput, "tenure"> {
+  tenure: MonthlyFlexTenor;
 }
 
 export interface AvailableSpendingPowerResult {
@@ -458,6 +466,9 @@ export interface AvailableSpendingPowerResult {
 
   productMini: number;
   productMax: number;
+
+  /** Resolved rate, reported by the Monthly Flex variant */
+  productRate?: number;
 
   message: string;
 }
@@ -2346,6 +2357,144 @@ export class ScoringService {
 
       productMini,
       productMax,
+
+      message:
+        `Transaction passed. Available spending power is ` +
+        `${availableSpendingPower.toFixed(2)}.`,
+    };
+  }
+
+  /**
+   * Monthly Flex variant of `calculateAvailableSpendingPower`. The tenure runs from 3 to
+   * 12 months and the base affordability is the principal that the customer's monthly
+   * affordability can amortize over the tenure, rather than a bi-weekly multiple.
+   *
+   * `productRate`, `productMini` and `productMax` fall back to the MONTHLY_FLEX_{tenure}
+   * product configuration when they are not supplied.
+   */
+  async calculateAvailableSpendingPowerMonthlyFlex(
+    input: AvailableSpendingPowerMonthlyFlexInput
+  ): Promise<AvailableSpendingPowerResult> {
+    const {
+      tenure,
+      disposableIncome,
+      affordabilityAllocationRate,
+      riskMultiplier,
+      behaviourMultiplier,
+      totalPlatformExposure,
+    } = input;
+
+    const zeroedAffordability = {
+      weeklyAffordability: 0,
+      biWeeklyAffordability: 0,
+      baseProductAffordability: 0,
+      affordableAfterRiskEffect: 0,
+      availableSpendingPower: 0,
+      productMini: 0,
+      productMax: 0,
+      productRate: 0,
+    };
+
+    if (!Number.isInteger(tenure) || tenure < 3 || tenure > 12) {
+      return {
+        status: "failed",
+        ...zeroedAffordability,
+        message: "Tenure must be a whole number of months between 3 and 12.",
+      };
+    }
+
+    // productRate, productMini and productMax fall back to the product configuration
+    const productCode = MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR[tenure];
+    const needsProductConfiguration =
+      input.productRate === undefined ||
+      input.productMini === undefined ||
+      input.productMax === undefined;
+
+    const productConfiguration = needsProductConfiguration
+      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      : null;
+
+    if (needsProductConfiguration && !productConfiguration) {
+      return {
+        status: "failed",
+        ...zeroedAffordability,
+        message:
+          `Transaction failed. No product configuration found for code ${productCode}, ` +
+          `so productRate, productMini and productMax could not be resolved.`,
+      };
+    }
+
+    const productMini = input.productMini ?? productConfiguration!.minimumFinance;
+    const productMax = input.productMax ?? productConfiguration!.maximumFinance;
+    const productRate = input.productRate ?? productConfiguration!.rate;
+
+    if (productMini > productMax) {
+      return {
+        status: "failed",
+        ...zeroedAffordability,
+        productMini,
+        productMax,
+        productRate,
+        message: "The minimum finance amount cannot be greater than the maximum.",
+      };
+    }
+
+    // Monthly affordability, plus the weekly/bi-weekly equivalents for reporting
+    const monthlyAffordability = disposableIncome * affordabilityAllocationRate;
+    const weeklyAffordability = monthlyAffordability * (12 / 52);
+    const biWeeklyAffordability = 2 * weeklyAffordability;
+
+    // Principal that the monthly affordability can amortize over the tenure.
+    // `productRate` is an annual percentage, so it is converted to a monthly decimal.
+    const baseProductAffordability = this.principalFromMonthlyRepayment(
+      monthlyAffordability,
+      (productRate * 0.01) / 12,
+      tenure
+    );
+
+    // Apply risk and behavioural multipliers
+    const affordableAfterRiskEffect =
+      baseProductAffordability * riskMultiplier * behaviourMultiplier;
+
+    const availableSpendingPower =
+      Math.min(affordableAfterRiskEffect, baseProductAffordability, productMax) -
+      totalPlatformExposure;
+
+    if (availableSpendingPower < productMini) {
+      return {
+        status: "failed",
+
+        weeklyAffordability,
+        biWeeklyAffordability,
+        baseProductAffordability,
+
+        affordableAfterRiskEffect,
+        availableSpendingPower,
+
+        productMini,
+        productMax,
+        productRate,
+
+        message:
+          `Transaction failed. Your available spending power of ` +
+          `${availableSpendingPower.toFixed(2)} is below the minimum ` +
+          `required amount of ${productMini.toFixed(2)}.`,
+      };
+    }
+
+    return {
+      status: "passed",
+
+      weeklyAffordability,
+      biWeeklyAffordability,
+      baseProductAffordability,
+
+      affordableAfterRiskEffect,
+      availableSpendingPower,
+
+      productMini,
+      productMax,
+      productRate,
 
       message:
         `Transaction passed. Available spending power is ` +
