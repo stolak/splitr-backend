@@ -16,6 +16,10 @@ router.post("/principal/calculate", scoringController.calculatePrincipalFromMont
 router.post("/financing/evaluate", scoringController.evaluateFinancing);
 router.post("/finance/calculate", scoringController.calculateFinance);
 router.post("/finance/monthly-flex/calculate", scoringController.calculateFinanceForMonthlyFlex);
+router.post(
+  "/available-spending-power/calculate",
+  scoringController.calculateAvailableSpendingPower
+);
 router.post("/final/calculate", scoringController.calculateFinalCustomerScore);
 router.post("/eligibility/determine", scoringController.determineEligibility);
 

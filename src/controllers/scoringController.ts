@@ -18,6 +18,82 @@ import {
 
 /**
  * @swagger
+ * /api/v1/scoring/available-spending-power/calculate:
+ *   post:
+ *     summary: Calculate the spending power available for a Pay-in-N product
+ *     description: >
+ *       Derives the weekly and bi-weekly affordability from disposable income and the
+ *       affordability allocation rate, scales it by the risk and behaviour multipliers,
+ *       caps it at the product maximum and subtracts the customer's existing platform
+ *       exposure. Fails when the result falls below the product minimum.
+ *       productMini and productMax are optional: either one that is omitted is read from
+ *       the product configuration for the tenure (tenure 4 maps to PAY_IN_4, tenure 6 to
+ *       PAY_IN_6), taking minimumFinance and maximumFinance respectively.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - tenure
+ *               - disposableIncome
+ *               - affordabilityAllocationRate
+ *               - riskMultiplier
+ *               - behaviourMultiplier
+ *               - totalPlatformExposure
+ *             properties:
+ *               tenure:
+ *                 type: integer
+ *                 enum: [4, 6]
+ *                 example: 4
+ *               disposableIncome:
+ *                 type: number
+ *                 description: Monthly disposable income
+ *                 example: 2500
+ *               affordabilityAllocationRate:
+ *                 type: number
+ *                 description: Share of disposable income allocated to repayments, as a decimal (e.g. 0.30)
+ *                 example: 0.3
+ *               riskMultiplier:
+ *                 type: number
+ *                 example: 1.2
+ *               behaviourMultiplier:
+ *                 type: number
+ *                 example: 1
+ *               totalPlatformExposure:
+ *                 type: number
+ *                 description: Customer's existing exposure across the platform
+ *                 example: 500
+ *               productRate:
+ *                 type: number
+ *                 description: Optional; accepted for payload symmetry but not used by this calculation
+ *                 example: 0
+ *               productMini:
+ *                 type: number
+ *                 description: >
+ *                   Optional minimum finance amount. Defaults to the product
+ *                   configuration minimumFinance for this tenure.
+ *                 example: 100
+ *               productMax:
+ *                 type: number
+ *                 description: >
+ *                   Optional maximum finance amount. Defaults to the product
+ *                   configuration maximumFinance for this tenure.
+ *                 example: 2500
+ *     responses:
+ *       200:
+ *         description: Spending power calculated (status is passed or failed)
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
  * /api/v1/scoring/finance/monthly-flex/calculate:
  *   post:
  *     summary: Monthly Flex finance calculation (3 to 12 month tenor)
@@ -2293,6 +2369,114 @@ export class ScoringController {
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to calculate monthly flex finance',
+      });
+    }
+  }
+
+  async calculateAvailableSpendingPower(req: Request, res: Response) {
+    try {
+      const {
+        tenure,
+        disposableIncome,
+        affordabilityAllocationRate,
+        riskMultiplier,
+        behaviourMultiplier,
+        totalPlatformExposure,
+        productRate,
+        productMini,
+        productMax,
+      } = req.body ?? {};
+
+      if (tenure !== 4 && tenure !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'tenure is required and must be either 4 or 6',
+        });
+      }
+
+      const requiredNumbers: Array<[string, any]> = [
+        ['disposableIncome', disposableIncome],
+        ['affordabilityAllocationRate', affordabilityAllocationRate],
+        ['riskMultiplier', riskMultiplier],
+        ['behaviourMultiplier', behaviourMultiplier],
+        ['totalPlatformExposure', totalPlatformExposure],
+      ];
+
+      for (const [field, value] of requiredNumbers) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} is required and must be a number`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
+      }
+
+      // productMini and productMax are optional; the service resolves them from the
+      // product configuration for this tenure when they are omitted
+      const optionalNumbers: Array<[string, any]> = [
+        ['productRate', productRate],
+        ['productMini', productMini],
+        ['productMax', productMax],
+      ];
+
+      for (const [field, value] of optionalNumbers) {
+        if (value === undefined) continue;
+
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} must be a number when provided`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
+      }
+
+      if (
+        productMini !== undefined &&
+        productMax !== undefined &&
+        productMini > productMax
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'productMini cannot be greater than productMax',
+        });
+      }
+
+      const result = await scoreService.calculateAvailableSpendingPower({
+        tenure: tenure as Tenor,
+        disposableIncome,
+        affordabilityAllocationRate,
+        riskMultiplier,
+        behaviourMultiplier,
+        totalPlatformExposure,
+        ...(productRate !== undefined && { productRate }),
+        ...(productMini !== undefined && { productMini }),
+        ...(productMax !== undefined && { productMax }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error calculating available spending power:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to calculate available spending power',
       });
     }
   }

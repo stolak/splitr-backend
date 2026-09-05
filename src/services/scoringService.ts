@@ -431,6 +431,37 @@ export const PAY_IN_PRODUCT_CODE_BY_TENOR: Record<Tenor, string> = {
   6: "PAY_IN_6",
 };
 
+export interface AvailableSpendingPowerInput {
+  tenure: Tenor;
+  disposableIncome: number;
+  affordabilityAllocationRate: number;
+  riskMultiplier: number;
+  behaviourMultiplier: number;
+  totalPlatformExposure: number;
+  /** Accepted for payload symmetry; not used by this calculation */
+  productRate?: number;
+  /** Falls back to the product configuration `minimumFinance` when omitted */
+  productMini?: number;
+  /** Falls back to the product configuration `maximumFinance` when omitted */
+  productMax?: number;
+}
+
+export interface AvailableSpendingPowerResult {
+  status: "passed" | "failed";
+
+  weeklyAffordability: number;
+  biWeeklyAffordability: number;
+  baseProductAffordability: number;
+
+  affordableAfterRiskEffect: number;
+  availableSpendingPower: number;
+
+  productMini: number;
+  productMax: number;
+
+  message: string;
+}
+
 /** Product configuration codes backing each Monthly Flex tenor */
 export const MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR: Record<MonthlyFlexTenor, string> = {
   3: "MONTHLY_FLEX_3",
@@ -1779,12 +1810,18 @@ export class ScoringService {
     const factor = Math.pow(1 + rate, months);
     return (principal * rate * factor) / (factor - 1);
   }
+  // principalFromMonthlyRepayment(monthlyRepayment: number, rate: number, months: number): number {
+  //   if (rate === 0) return monthlyRepayment * months;
+
+  //   const factor = Math.pow(1 + rate, months);
+
+  //   return (monthlyRepayment * (factor - 1)) / (rate * factor);
+  // }
+
   principalFromMonthlyRepayment(monthlyRepayment: number, rate: number, months: number): number {
     if (rate === 0) return monthlyRepayment * months;
 
-    const factor = Math.pow(1 + rate, months);
-
-    return (monthlyRepayment * (factor - 1)) / (rate * factor);
+    return monthlyRepayment * ((1 - Math.pow(1 + rate, -months)) / rate) * (1 + rate);
   }
 
   /**
@@ -2044,9 +2081,7 @@ export class ScoringService {
    * tenor runs from 3 to 12 months and the periodic installment is amortized via
    * `monthlyRepayment` rather than a flat division of the total repayment.
    */
-  async calculateFinanceForMonthlyFlex(
-    input: MonthlyFlexFinanceInput
-  ): Promise<FinanceResult> {
+  async calculateFinanceForMonthlyFlex(input: MonthlyFlexFinanceInput): Promise<FinanceResult> {
     const { purchaseAmount: pA, tenor } = input;
 
     const pP = input.partPayment ?? 0;
@@ -2196,6 +2231,125 @@ export class ScoringService {
       periodicInstallment: pi,
       installments,
       message: "Transaction passed. The finance amount is within the allowed range.",
+    };
+  }
+
+  /**
+   * Derive the spending power available to a customer for a Pay-in-N product from their
+   * disposable income, the affordability allocation and the risk/behaviour multipliers,
+   * net of their existing platform exposure.
+   *
+   * `productMini` and `productMax` fall back to the product configuration for the tenure
+   * (tenure 4 maps to PAY_IN_4, tenure 6 to PAY_IN_6) when they are not supplied.
+   */
+  async calculateAvailableSpendingPower(
+    input: AvailableSpendingPowerInput
+  ): Promise<AvailableSpendingPowerResult> {
+    const {
+      tenure,
+      disposableIncome,
+      affordabilityAllocationRate,
+      riskMultiplier,
+      behaviourMultiplier,
+      totalPlatformExposure,
+    } = input;
+
+    const zeroedAffordability = {
+      weeklyAffordability: 0,
+      biWeeklyAffordability: 0,
+      baseProductAffordability: 0,
+      affordableAfterRiskEffect: 0,
+      availableSpendingPower: 0,
+      productMini: 0,
+      productMax: 0,
+      productRate: 0,
+    };
+
+    if (tenure !== 4 && tenure !== 6) {
+      return {
+        status: "failed",
+        ...zeroedAffordability,
+        message: "Tenure must be either 4 or 6 installments.",
+      };
+    }
+
+    // productMini and productMax fall back to the product configuration for this tenure
+    const productCode = PAY_IN_PRODUCT_CODE_BY_TENOR[tenure];
+    const needsProductConfiguration =
+      input.productMini === undefined || input.productMax === undefined;
+
+    const productConfiguration = needsProductConfiguration
+      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      : null;
+
+    if (needsProductConfiguration && !productConfiguration) {
+      return {
+        status: "failed",
+        ...zeroedAffordability,
+        message:
+          `Transaction failed. No product configuration found for code ${productCode}, ` +
+          `so productMini and productMax could not be resolved.`,
+      };
+    }
+
+    const productMini = input.productMini ?? productConfiguration!.minimumFinance;
+    const productMax = input.productMax ?? productConfiguration!.maximumFinance;
+    const productRate = input.productRate ?? productConfiguration!.rate;
+
+    // Affordability schedule - weekly
+    const weeklyAffordability = disposableIncome * affordabilityAllocationRate * (12 / 52);
+
+    // Affordability schedule - bi-weekly
+    const biWeeklyAffordability = 2 * weeklyAffordability;
+
+    // Base product affordability
+    const baseProductAffordability = (biWeeklyAffordability * tenure) / (1 + productRate / 100);
+
+    // Apply risk and behavioural multipliers
+    const affordableAfterRiskEffect =
+      baseProductAffordability * riskMultiplier * behaviourMultiplier;
+
+    const availableSpendingPower =
+      Math.min(affordableAfterRiskEffect, baseProductAffordability, productMax) -
+      totalPlatformExposure;
+
+    if (availableSpendingPower < productMini) {
+      return {
+        status: "failed",
+
+        weeklyAffordability,
+        biWeeklyAffordability,
+        baseProductAffordability,
+
+        affordableAfterRiskEffect,
+        availableSpendingPower,
+
+        productMini,
+        productMax,
+
+        message:
+          `Transaction failed. Your available spending power of ` +
+          `${availableSpendingPower.toFixed(2)} is below the minimum ` +
+          `required amount of ${productMini.toFixed(2)}.`,
+      };
+    }
+
+    return {
+      status: "passed",
+
+      weeklyAffordability,
+      biWeeklyAffordability,
+      baseProductAffordability,
+
+      affordableAfterRiskEffect,
+      availableSpendingPower,
+
+      productMini,
+      productMax,
+
+      message:
+        `Transaction passed. Available spending power is ` +
+        `${availableSpendingPower.toFixed(2)}.`,
     };
   }
 }
