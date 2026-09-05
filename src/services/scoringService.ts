@@ -414,6 +414,11 @@ export interface FinanceInput {
   minSp?: number;
   /** Falls back to the product configuration `maximumFinance` when omitted */
   maxSp?: number;
+  /**
+   * The customer's available spending power. When supplied, the financed amount is
+   * checked against it as a final gate; when omitted the check is skipped.
+   */
+  spendingCapacity?: number;
 }
 
 export interface Installment {
@@ -524,6 +529,13 @@ export interface FinanceResult {
   /** Guidance when the transaction fails */
   minimumPartPaymentRequired?: number;
   maximumPartPaymentAllowed?: number;
+
+  /** Echoed back when the spending capacity check runs */
+  spendingCapacity?: number;
+  /** How much more part payment is needed on top of what was supplied */
+  additionalPartPaymentRequired?: number;
+  /** Whether adjusting the part payment can bring the finance amount within capacity */
+  partPaymentAdjustmentPossible?: boolean;
 }
 
 export const DEFAULT_SPENDING_POWER_CONFIG: SpendingPowerConfig = {
@@ -1957,6 +1969,52 @@ export class ScoringService {
    * build the installment schedule. The part payment is optional and is added to the
    * first installment.
    */
+  /**
+   * Build the failure result for a financed amount that exceeds the customer's spending
+   * capacity. Raising the part payment lowers the financed amount, so the fix is a part
+   * payment of at least `purchaseAmount - spendingCapacity` — but that is only allowed
+   * while the financed amount stays at or above `minSp`, which is what makes the
+   * adjustment impossible when the spending capacity sits below the product floor.
+   */
+  private buildSpendingCapacityFailure(params: {
+    purchaseAmount: number;
+    partPayment: number;
+    financeAmount: number;
+    minSp: number;
+    spendingCapacity: number;
+  }): FinanceResult {
+    const { purchaseAmount, partPayment, financeAmount, minSp, spendingCapacity } = params;
+
+    const requiredPartPayment = Math.max(0, purchaseAmount - spendingCapacity);
+    const maximumPartPaymentAllowed = Math.max(0, purchaseAmount - minSp);
+    const partPaymentAdjustmentPossible = requiredPartPayment <= maximumPartPaymentAllowed;
+
+    const preamble =
+      `Transaction failed. The finance amount of ${financeAmount.toFixed(2)} cannot be ` +
+      `greater than your spending capacity of ${spendingCapacity.toFixed(2)}.`;
+
+    return {
+      status: "failed",
+      purchaseAmount,
+      partPayment,
+      financeAmount,
+      spendingCapacity,
+      minimumPartPaymentRequired: requiredPartPayment,
+      maximumPartPaymentAllowed,
+      additionalPartPaymentRequired: Math.max(0, requiredPartPayment - partPayment),
+      partPaymentAdjustmentPossible,
+      message: partPaymentAdjustmentPossible
+        ? `${preamble} Increase your part payment to at least ` +
+          `${requiredPartPayment.toFixed(2)} (an additional ` +
+          `${Math.max(0, requiredPartPayment - partPayment).toFixed(2)}) to bring the ` +
+          `finance amount within your spending capacity.`
+        : `${preamble} Even at the highest part payment allowed for this product ` +
+          `(${maximumPartPaymentAllowed.toFixed(2)}), the finance amount would stay at ` +
+          `the minimum of ${minSp.toFixed(2)}, which is still above your spending ` +
+          `capacity, so this purchase cannot be financed.`,
+    };
+  }
+
   async calculateFinance(input: FinanceInput): Promise<FinanceResult> {
     const { purchaseAmount: pA, tenor } = input;
 
@@ -2085,6 +2143,19 @@ export class ScoringService {
           `${maximumPartPayment.toFixed(2)}. ` +
           `The financed amount must be at least ${minSp.toFixed(2)}.`,
       };
+    }
+
+    // Final gate: the financed amount must fit within the customer's spending capacity
+    const { spendingCapacity } = input;
+
+    if (spendingCapacity !== undefined && fA > spendingCapacity) {
+      return this.buildSpendingCapacityFailure({
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: fA,
+        minSp,
+        spendingCapacity,
+      });
     }
 
     // minSp <= fA <= maxSp
@@ -2242,6 +2313,19 @@ export class ScoringService {
           `${maximumPartPayment.toFixed(2)}. ` +
           `The financed amount must be at least ${minSp.toFixed(2)}.`,
       };
+    }
+
+    // Final gate: the financed amount must fit within the customer's spending capacity
+    const { spendingCapacity } = input;
+
+    if (spendingCapacity !== undefined && fA > spendingCapacity) {
+      return this.buildSpendingCapacityFailure({
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: fA,
+        minSp,
+        spendingCapacity,
+      });
     }
 
     // minSp <= fA <= maxSp

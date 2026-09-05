@@ -73,6 +73,13 @@ import {
  *                 type: number
  *                 description: Optional; defaults to the product configuration maximumFinance
  *                 example: 30000
+ *               spendingCapacity:
+ *                 type: number
+ *                 description: >
+ *                   Optional. The customer's available spending power. When supplied, the
+ *                   finance amount is checked against it as a final gate and the response
+ *                   reports the part payment needed to fit within it. Skipped when omitted.
+ *                 example: 800
  *     responses:
  *       200:
  *         description: Finance calculation completed (status is passed or failed)
@@ -371,6 +378,13 @@ import {
  *                   Optional maximum spending power. Defaults to the product
  *                   configuration maximumFinance for this tenor.
  *                 example: 30000
+ *               spendingCapacity:
+ *                 type: number
+ *                 description: >
+ *                   Optional. The customer's available spending power. When supplied, the
+ *                   finance amount is checked against it as a final gate and the response
+ *                   reports the part payment needed to fit within it. Skipped when omitted.
+ *                 example: 800
  *     responses:
  *       200:
  *         description: Finance calculation completed (status is passed or failed)
@@ -434,6 +448,13 @@ import {
  *                   Optional maximum spending power. Defaults to the product
  *                   configuration maximumFinance for this tenor.
  *                 example: 1000
+ *               spendingCapacity:
+ *                 type: number
+ *                 description: >
+ *                   Optional. The customer's available spending power. When supplied, the
+ *                   finance amount is checked against it as a final gate and the response
+ *                   reports the part payment needed to fit within it. Skipped when omitted.
+ *                 example: 800
  *     responses:
  *       200:
  *         description: Finance calculation completed (status is passed or failed)
@@ -2405,7 +2426,8 @@ export class ScoringController {
 
   async calculateFinance(req: Request, res: Response) {
     try {
-      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } = req.body ?? {};
+      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp, spendingCapacity } =
+        req.body ?? {};
 
       if (typeof purchaseAmount !== "number" || !Number.isFinite(purchaseAmount)) {
         return res.status(400).json({
@@ -2437,6 +2459,7 @@ export class ScoringController {
         ["rate", rate],
         ["minSp", minSp],
         ["maxSp", maxSp],
+        ["spendingCapacity", spendingCapacity],
       ];
 
       for (const [field, value] of optionalNumbers) {
@@ -2470,6 +2493,7 @@ export class ScoringController {
         ...(rate !== undefined && { rate }),
         ...(minSp !== undefined && { minSp }),
         ...(maxSp !== undefined && { maxSp }),
+        ...(spendingCapacity !== undefined && { spendingCapacity }),
         ...(partPayment !== undefined && { partPayment }),
       });
 
@@ -2489,7 +2513,8 @@ export class ScoringController {
 
   async calculateFinanceForMonthlyFlex(req: Request, res: Response) {
     try {
-      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } = req.body ?? {};
+      const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp, spendingCapacity } =
+        req.body ?? {};
 
       if (typeof purchaseAmount !== "number" || !Number.isFinite(purchaseAmount)) {
         return res.status(400).json({
@@ -2521,6 +2546,7 @@ export class ScoringController {
         ["rate", rate],
         ["minSp", minSp],
         ["maxSp", maxSp],
+        ["spendingCapacity", spendingCapacity],
       ];
 
       for (const [field, value] of optionalNumbers) {
@@ -2554,6 +2580,7 @@ export class ScoringController {
         ...(rate !== undefined && { rate }),
         ...(minSp !== undefined && { minSp }),
         ...(maxSp !== undefined && { maxSp }),
+        ...(spendingCapacity !== undefined && { spendingCapacity }),
         ...(partPayment !== undefined && { partPayment }),
       });
 
@@ -2573,8 +2600,16 @@ export class ScoringController {
 
   async calculateFinanceByProduct(req: Request, res: Response) {
     try {
-      const { productType, purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
-        req.body ?? {};
+      const {
+        productType,
+        purchaseAmount,
+        partPayment,
+        rate,
+        tenor,
+        minSp,
+        maxSp,
+        spendingCapacity,
+      } = req.body ?? {};
 
       const normalisedProductType =
         typeof productType === "string"
@@ -2635,6 +2670,7 @@ export class ScoringController {
         ["rate", rate],
         ["minSp", minSp],
         ["maxSp", maxSp],
+        ["spendingCapacity", spendingCapacity],
       ];
 
       for (const [field, value] of optionalNumbers) {
@@ -2669,6 +2705,7 @@ export class ScoringController {
         ...(rate !== undefined && { rate }),
         ...(minSp !== undefined && { minSp }),
         ...(maxSp !== undefined && { maxSp }),
+        ...(spendingCapacity !== undefined && { spendingCapacity }),
         ...(partPayment !== undefined && { partPayment }),
       });
 
