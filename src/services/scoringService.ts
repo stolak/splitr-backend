@@ -1,4 +1,5 @@
 import prisma from "../utils/prisma";
+import { productConfigurationService } from "./productConfigurationService";
 
 export interface IncomeRecurrentInput {
   incomeMonths: number;
@@ -403,10 +404,13 @@ export type Tenor = 4 | 6;
 export interface FinanceInput {
   purchaseAmount: number;
   partPayment?: number;
-  rate: number;
+  /** Falls back to the matching product configuration when omitted */
+  rate?: number;
   tenor: Tenor;
-  minSp: number;
-  maxSp: number;
+  /** Falls back to the product configuration `minimumFinance` when omitted */
+  minSp?: number;
+  /** Falls back to the product configuration `maximumFinance` when omitted */
+  maxSp?: number;
 }
 
 export interface Installment {
@@ -420,6 +424,26 @@ export type MonthlyFlexTenor = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 export interface MonthlyFlexFinanceInput extends Omit<FinanceInput, "tenor"> {
   tenor: MonthlyFlexTenor;
 }
+
+/** Product configuration codes backing each Pay-in-N tenor */
+export const PAY_IN_PRODUCT_CODE_BY_TENOR: Record<Tenor, string> = {
+  4: "PAY_IN_4",
+  6: "PAY_IN_6",
+};
+
+/** Product configuration codes backing each Monthly Flex tenor */
+export const MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR: Record<MonthlyFlexTenor, string> = {
+  3: "MONTHLY_FLEX_3",
+  4: "MONTHLY_FLEX_4",
+  5: "MONTHLY_FLEX_5",
+  6: "MONTHLY_FLEX_6",
+  7: "MONTHLY_FLEX_7",
+  8: "MONTHLY_FLEX_8",
+  9: "MONTHLY_FLEX_9",
+  10: "MONTHLY_FLEX_10",
+  11: "MONTHLY_FLEX_11",
+  12: "MONTHLY_FLEX_12",
+};
 
 export interface FinanceResult {
   status: "passed" | "failed";
@@ -1863,8 +1887,8 @@ export class ScoringService {
    * build the installment schedule. The part payment is optional and is added to the
    * first installment.
    */
-  calculateFinance(input: FinanceInput): FinanceResult {
-    const { purchaseAmount: pA, rate, tenor, minSp, maxSp } = input;
+  async calculateFinance(input: FinanceInput): Promise<FinanceResult> {
+    const { purchaseAmount: pA, tenor } = input;
 
     const pP = input.partPayment ?? 0;
 
@@ -1905,6 +1929,41 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message: "Tenor must be either 4 or 6 installments.",
+      };
+    }
+
+    // rate, minSp and maxSp fall back to the product configuration for this tenor
+    const productCode = PAY_IN_PRODUCT_CODE_BY_TENOR[tenor];
+    const needsProductConfiguration =
+      input.rate === undefined || input.minSp === undefined || input.maxSp === undefined;
+
+    const productConfiguration = needsProductConfiguration
+      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      : null;
+
+    if (needsProductConfiguration && !productConfiguration) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message:
+          `Transaction failed. No product configuration found for code ${productCode}, ` +
+          `so rate, minSp and maxSp could not be resolved.`,
+      };
+    }
+
+    const rate = input.rate ?? productConfiguration!.rate;
+    const minSp = input.minSp ?? productConfiguration!.minimumFinance;
+    const maxSp = input.maxSp ?? productConfiguration!.maximumFinance;
+
+    if (minSp > maxSp) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message: "The minimum spending power cannot be greater than the maximum spending power.",
       };
     }
 
@@ -1985,8 +2044,10 @@ export class ScoringService {
    * tenor runs from 3 to 12 months and the periodic installment is amortized via
    * `monthlyRepayment` rather than a flat division of the total repayment.
    */
-  calculateFinanceForMonthlyFlex(input: MonthlyFlexFinanceInput): FinanceResult {
-    const { purchaseAmount: pA, rate, tenor, minSp, maxSp } = input;
+  async calculateFinanceForMonthlyFlex(
+    input: MonthlyFlexFinanceInput
+  ): Promise<FinanceResult> {
+    const { purchaseAmount: pA, tenor } = input;
 
     const pP = input.partPayment ?? 0;
 
@@ -2027,6 +2088,41 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message: "Tenor must be a whole number of months between 3 and 12.",
+      };
+    }
+
+    // rate, minSp and maxSp fall back to the product configuration for this tenor
+    const productCode = MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR[tenor];
+    const needsProductConfiguration =
+      input.rate === undefined || input.minSp === undefined || input.maxSp === undefined;
+
+    const productConfiguration = needsProductConfiguration
+      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      : null;
+
+    if (needsProductConfiguration && !productConfiguration) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message:
+          `Transaction failed. No product configuration found for code ${productCode}, ` +
+          `so rate, minSp and maxSp could not be resolved.`,
+      };
+    }
+
+    const rate = input.rate ?? productConfiguration!.rate;
+    const minSp = input.minSp ?? productConfiguration!.minimumFinance;
+    const maxSp = input.maxSp ?? productConfiguration!.maximumFinance;
+
+    if (minSp > maxSp) {
+      return {
+        status: "failed",
+        purchaseAmount: pA,
+        partPayment: pP,
+        financeAmount: pA - pP,
+        message: "The minimum spending power cannot be greater than the maximum spending power.",
       };
     }
 

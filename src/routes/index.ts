@@ -48,6 +48,7 @@ import spendingPowerConfigRoutes from "./spendingPowerConfig";
 import incomeInsightRoutes from "./incomeInsight";
 import creditBureauRoutes from "./creditBureau";
 import inveriteRoutes from "./inverite";
+import productConfigurationRoutes from "./productConfiguration";
 import { Router } from "express";
 
 const router = Router();
@@ -101,6 +102,7 @@ router.use("/spending-power-config", spendingPowerConfigRoutes);
 router.use("/income-insights", incomeInsightRoutes);
 router.use("/credit-bureaus", creditBureauRoutes);
 router.use("/inverite", inveriteRoutes);
+router.use("/product-configurations", productConfigurationRoutes);
 
 /**
  * @swagger

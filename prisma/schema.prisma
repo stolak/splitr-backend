@@ -1245,3 +1245,19 @@ model CreditBureau {
   @@index([buyerId])
   @@map("credit_bureau")
 }
+
+/// Configurable financing products (e.g. Pay in 4, Monthly Flex) with their tenure, limits and rate.
+model ProductConfiguration {
+  id             String   @id @default(uuid())
+  code           String   @unique @db.VarChar(50)
+  productName    String   @db.VarChar(150)
+  tenure         Int
+  minimumFinance Decimal  @db.Decimal(15, 2)
+  maximumFinance Decimal  @db.Decimal(15, 2)
+  rate           Decimal  @db.Decimal(10, 4) // rate as a percentage, e.g. 2.5 for 2.5%
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([code])
+  @@map("product_configuration")
+}

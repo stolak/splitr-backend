@@ -1152,6 +1152,123 @@ async function main() {
 
     console.log("✅ Spending power config seeded successfully");
 
+    // Seed Product Configurations
+    console.log("\n🛍️ Seeding product configurations...");
+    const productConfigurations = [
+      {
+        code: "PAY_IN_4",
+        productName: "Pay in 4",
+        tenure: 4,
+        minimumFinance: 100,
+        maximumFinance: 2500,
+        rate: 0,
+      },
+      {
+        code: "PAY_IN_6",
+        productName: "Pay in 6",
+        tenure: 6,
+        minimumFinance: 150,
+        maximumFinance: 4000,
+        rate: 5.0,
+      },
+      {
+        code: "MONTHLY_FLEX_3",
+        productName: "Monthly Flex - 3 months",
+        tenure: 3,
+        minimumFinance: 200,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_4",
+        productName: "Monthly Flex - 4 months",
+        tenure: 4,
+        minimumFinance: 250,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_5",
+        productName: "Monthly Flex - 5 months",
+        tenure: 5,
+        minimumFinance: 300,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_6",
+        productName: "Monthly Flex - 6 months",
+        tenure: 6,
+        minimumFinance: 350,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_7",
+        productName: "Monthly Flex - 7 months",
+        tenure: 7,
+        minimumFinance: 400,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_8",
+        productName: "Monthly Flex - 8 months",
+        tenure: 8,
+        minimumFinance: 450,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_9",
+        productName: "Monthly Flex - 9 months",
+        tenure: 9,
+        minimumFinance: 500,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_10",
+        productName: "Monthly Flex - 10 months",
+        tenure: 10,
+        minimumFinance: 550,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_11",
+        productName: "Monthly Flex - 11 months",
+        tenure: 11,
+        minimumFinance: 600,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+      {
+        code: "MONTHLY_FLEX_12",
+        productName: "Monthly Flex - 12 months",
+        tenure: 12,
+        minimumFinance: 650,
+        maximumFinance: 15000,
+        rate: 12.99,
+      },
+    ];
+
+    for (const product of productConfigurations) {
+      await prisma.productConfiguration.upsert({
+        where: { code: product.code },
+        update: {
+          productName: product.productName,
+          tenure: product.tenure,
+          minimumFinance: product.minimumFinance,
+          maximumFinance: product.maximumFinance,
+          rate: product.rate,
+        },
+        create: product,
+      });
+    }
+
+    console.log("✅ Product configurations seeded successfully");
+
     console.log("\n🎉 Database seeding completed successfully!");
     console.log("\n📋 Sample Data Created:");
     console.log("👥 Users:");
@@ -1227,6 +1344,10 @@ async function main() {
     console.log("  - Maximum exposure: ₦500,000");
     console.log("  - Risk tiers: A+, A, B, C, D");
     console.log("  - Behaviour tiers: A+, A, B, C, D");
+    console.log("\n🛍️ Product Configurations:");
+    console.log("  - PAY_IN_4: 4 installments | ₦500 – ₦5,000 | 0%");
+    console.log("  - PAY_IN_6: 6 installments | ₦500 – ₦7,500 | 2.5%");
+    console.log("  - MONTHLY_FLEX_3 / _6 / _12: ₦500 – ₦7,500 | 12.99%");
   } catch (error) {
     console.error("❌ Error during seeding:", error);
     throw error;

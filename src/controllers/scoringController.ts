@@ -25,6 +25,9 @@ import {
  *       Applies the same spending power band rules as /finance/calculate, but the tenor
  *       runs from 3 to 12 months and the periodic installment is amortized using the
  *       monthly repayment formula. The part payment is added to the first installment.
+ *       rate, minSp and maxSp are optional: any of them that is omitted is read from the
+ *       MONTHLY_FLEX_{tenor} product configuration (e.g. tenor 6 maps to MONTHLY_FLEX_6),
+ *       taking rate, minimumFinance and maximumFinance respectively.
  *     tags: [Scoring]
  *     security: []
  *     requestBody:
@@ -35,10 +38,7 @@ import {
  *             type: object
  *             required:
  *               - purchaseAmount
- *               - rate
  *               - tenor
- *               - minSp
- *               - maxSp
  *             properties:
  *               purchaseAmount:
  *                 type: number
@@ -47,24 +47,30 @@ import {
  *                 type: number
  *                 description: Optional part payment; defaults to 0 and is added to the first installment
  *                 example: 300
- *               rate:
- *                 type: number
- *                 description: Monthly rate as a percentage value (e.g. 2.5 for 2.5%)
- *                 example: 2.5
  *               tenor:
  *                 type: integer
  *                 description: Number of months, from 3 to 12
  *                 minimum: 3
  *                 maximum: 12
  *                 example: 6
+ *               rate:
+ *                 type: number
+ *                 description: >
+ *                   Optional rate as a percentage value (e.g. 12.99 for 12.99%).
+ *                   Defaults to the MONTHLY_FLEX_{tenor} product configuration rate.
+ *                 example: 12.99
  *               minSp:
  *                 type: number
- *                 description: Minimum spending power
- *                 example: 500
+ *                 description: >
+ *                   Optional minimum spending power. Defaults to the product
+ *                   configuration minimumFinance for this tenor.
+ *                 example: 350
  *               maxSp:
  *                 type: number
- *                 description: Maximum spending power
- *                 example: 1000
+ *                 description: >
+ *                   Optional maximum spending power. Defaults to the product
+ *                   configuration maximumFinance for this tenor.
+ *                 example: 30000
  *     responses:
  *       200:
  *         description: Finance calculation completed (status is passed or failed)
@@ -84,6 +90,9 @@ import {
  *       band, returns the total repayment, the periodic installment and the schedule
  *       (the part payment is added to the first installment). When it falls outside the
  *       band, returns the minimum part payment required or the maximum part payment allowed.
+ *       rate, minSp and maxSp are optional: any of them that is omitted is read from the
+ *       product configuration for the tenor (tenor 4 maps to PAY_IN_4, tenor 6 to PAY_IN_6),
+ *       taking rate, minimumFinance and maximumFinance respectively.
  *     tags: [Scoring]
  *     security: []
  *     requestBody:
@@ -94,10 +103,7 @@ import {
  *             type: object
  *             required:
  *               - purchaseAmount
- *               - rate
  *               - tenor
- *               - minSp
- *               - maxSp
  *             properties:
  *               purchaseAmount:
  *                 type: number
@@ -106,21 +112,27 @@ import {
  *                 type: number
  *                 description: Optional part payment; defaults to 0 and is added to the first installment
  *                 example: 300
- *               rate:
- *                 type: number
- *                 description: Rate as a percentage value (e.g. 2.5 for 2.5%)
- *                 example: 2.5
  *               tenor:
  *                 type: integer
  *                 enum: [4, 6]
  *                 example: 4
+ *               rate:
+ *                 type: number
+ *                 description: >
+ *                   Optional rate as a percentage value (e.g. 2.5 for 2.5%).
+ *                   Defaults to the product configuration rate for this tenor.
+ *                 example: 2.5
  *               minSp:
  *                 type: number
- *                 description: Minimum spending power
+ *                 description: >
+ *                   Optional minimum spending power. Defaults to the product
+ *                   configuration minimumFinance for this tenor.
  *                 example: 500
  *               maxSp:
  *                 type: number
- *                 description: Maximum spending power
+ *                 description: >
+ *                   Optional maximum spending power. Defaults to the product
+ *                   configuration maximumFinance for this tenor.
  *                 example: 1000
  *     responses:
  *       200:
@@ -2115,20 +2127,11 @@ export class ScoringController {
       const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
         req.body ?? {};
 
-      const requiredNumbers: Array<[string, any]> = [
-        ['purchaseAmount', purchaseAmount],
-        ['rate', rate],
-        ['minSp', minSp],
-        ['maxSp', maxSp],
-      ];
-
-      for (const [field, value] of requiredNumbers) {
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
-          return res.status(400).json({
-            success: false,
-            message: `${field} is required and must be a number`,
-          });
-        }
+      if (typeof purchaseAmount !== 'number' || !Number.isFinite(purchaseAmount)) {
+        return res.status(400).json({
+          success: false,
+          message: 'purchaseAmount is required and must be a number',
+        });
       }
 
       if (tenor !== 4 && tenor !== 6) {
@@ -2148,33 +2151,45 @@ export class ScoringController {
         });
       }
 
-      if (rate < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'rate cannot be negative',
-        });
+      // rate, minSp and maxSp are optional; the service resolves them from the
+      // product configuration for this tenor when they are omitted
+      const optionalNumbers: Array<[string, any]> = [
+        ['rate', rate],
+        ['minSp', minSp],
+        ['maxSp', maxSp],
+      ];
+
+      for (const [field, value] of optionalNumbers) {
+        if (value === undefined) continue;
+
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} must be a number when provided`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
       }
 
-      if (minSp < 0 || maxSp < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'minSp and maxSp cannot be negative',
-        });
-      }
-
-      if (minSp > maxSp) {
+      if (minSp !== undefined && maxSp !== undefined && minSp > maxSp) {
         return res.status(400).json({
           success: false,
           message: 'minSp cannot be greater than maxSp',
         });
       }
 
-      const result = scoreService.calculateFinance({
+      const result = await scoreService.calculateFinance({
         purchaseAmount,
-        rate,
         tenor: tenor as Tenor,
-        minSp,
-        maxSp,
+        ...(rate !== undefined && { rate }),
+        ...(minSp !== undefined && { minSp }),
+        ...(maxSp !== undefined && { maxSp }),
         ...(partPayment !== undefined && { partPayment }),
       });
 
@@ -2197,20 +2212,11 @@ export class ScoringController {
       const { purchaseAmount, partPayment, rate, tenor, minSp, maxSp } =
         req.body ?? {};
 
-      const requiredNumbers: Array<[string, any]> = [
-        ['purchaseAmount', purchaseAmount],
-        ['rate', rate],
-        ['minSp', minSp],
-        ['maxSp', maxSp],
-      ];
-
-      for (const [field, value] of requiredNumbers) {
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
-          return res.status(400).json({
-            success: false,
-            message: `${field} is required and must be a number`,
-          });
-        }
+      if (typeof purchaseAmount !== 'number' || !Number.isFinite(purchaseAmount)) {
+        return res.status(400).json({
+          success: false,
+          message: 'purchaseAmount is required and must be a number',
+        });
       }
 
       if (
@@ -2235,33 +2241,45 @@ export class ScoringController {
         });
       }
 
-      if (rate < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'rate cannot be negative',
-        });
+      // rate, minSp and maxSp are optional; the service resolves them from the
+      // product configuration for this tenor when they are omitted
+      const optionalNumbers: Array<[string, any]> = [
+        ['rate', rate],
+        ['minSp', minSp],
+        ['maxSp', maxSp],
+      ];
+
+      for (const [field, value] of optionalNumbers) {
+        if (value === undefined) continue;
+
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} must be a number when provided`,
+          });
+        }
+
+        if (value < 0) {
+          return res.status(400).json({
+            success: false,
+            message: `${field} cannot be negative`,
+          });
+        }
       }
 
-      if (minSp < 0 || maxSp < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'minSp and maxSp cannot be negative',
-        });
-      }
-
-      if (minSp > maxSp) {
+      if (minSp !== undefined && maxSp !== undefined && minSp > maxSp) {
         return res.status(400).json({
           success: false,
           message: 'minSp cannot be greater than maxSp',
         });
       }
 
-      const result = scoreService.calculateFinanceForMonthlyFlex({
+      const result = await scoreService.calculateFinanceForMonthlyFlex({
         purchaseAmount,
-        rate,
         tenor: tenor as MonthlyFlexTenor,
-        minSp,
-        maxSp,
+        ...(rate !== undefined && { rate }),
+        ...(minSp !== undefined && { minSp }),
+        ...(maxSp !== undefined && { maxSp }),
         ...(partPayment !== undefined && { partPayment }),
       });
 
