@@ -9,11 +9,20 @@ const router = Router();
  *   get:
  *     summary: Get all product configurations
  *     description: >
- *       Returns every configured financing product. Results are served from an in-memory
- *       cache for 30 minutes; the cache is cleared whenever a product configuration is updated.
+ *       Returns every configured financing product, optionally filtered by product type.
+ *       Results are served from an in-memory cache for 30 minutes; the cache is cleared
+ *       whenever a product configuration is updated.
  *     tags: [Product Configurations]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: productType
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *         description: Optional product type filter
  *     responses:
  *       200:
  *         description: Product configurations retrieved successfully
@@ -31,6 +40,10 @@ const router = Router();
  *                     properties:
  *                       id:
  *                         type: string
+ *                       productType:
+ *                         type: string
+ *                         enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                         example: MONTHLY_FLEX
  *                       code:
  *                         type: string
  *                         example: MONTHLY_FLEX_6
@@ -88,6 +101,47 @@ router.get("/code/:code", productConfigurationController.getProductConfiguration
 
 /**
  * @swagger
+ * /api/v1/product-configurations/type/{productType}/tenure/{tenure}:
+ *   get:
+ *     summary: Get the product configuration for a product type and tenure
+ *     description: >
+ *       This is the pair the financing calculations use to resolve a product's rate and
+ *       limits, so it is the canonical lookup. productType is matched case-insensitively
+ *       and hyphens are accepted (e.g. bi-weekly).
+ *     tags: [Product Configurations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productType
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *         example: MONTHLY_FLEX
+ *       - in: path
+ *         name: tenure
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 6
+ *     responses:
+ *       200:
+ *         description: Product configuration retrieved successfully
+ *       400:
+ *         description: Invalid product type or tenure
+ *       404:
+ *         description: Product configuration not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  "/type/:productType/tenure/:tenure",
+  productConfigurationController.getProductConfigurationByTypeAndTenure
+);
+
+/**
+ * @swagger
  * /api/v1/product-configurations/{id}:
  *   get:
  *     summary: Get a product configuration by id
@@ -134,6 +188,13 @@ router.get("/:id", productConfigurationController.getProductConfigurationById);
  *           schema:
  *             type: object
  *             properties:
+ *               productType:
+ *                 type: string
+ *                 enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                 description: >
+ *                   Product type. Each productType and tenure pair must stay unique,
+ *                   since that pair is what the financing calculations resolve against.
+ *                 example: MONTHLY_FLEX
  *               code:
  *                 type: string
  *                 description: Unique product code
@@ -188,6 +249,9 @@ router.put("/:id", authenticateJWT, productConfigurationController.updateProduct
  *           schema:
  *             type: object
  *             properties:
+ *               productType:
+ *                 type: string
+ *                 enum: [BI_WEEKLY, MONTHLY_FLEX]
  *               code:
  *                 type: string
  *               productName:

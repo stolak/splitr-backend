@@ -439,12 +439,6 @@ export interface FinanceByProductInput extends Omit<FinanceInput, "tenor"> {
   tenor: Tenor | MonthlyFlexTenor;
 }
 
-/** Product configuration codes backing each Pay-in-N tenor */
-export const PAY_IN_PRODUCT_CODE_BY_TENOR: Record<Tenor, string> = {
-  4: "PAY_IN_4",
-  6: "PAY_IN_6",
-};
-
 export interface AvailableSpendingPowerInput {
   tenure: Tenor;
   disposableIncome: number;
@@ -496,20 +490,6 @@ export interface AvailableSpendingPowerResult {
 
   message: string;
 }
-
-/** Product configuration codes backing each Monthly Flex tenor */
-export const MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR: Record<MonthlyFlexTenor, string> = {
-  3: "MONTHLY_FLEX_3",
-  4: "MONTHLY_FLEX_4",
-  5: "MONTHLY_FLEX_5",
-  6: "MONTHLY_FLEX_6",
-  7: "MONTHLY_FLEX_7",
-  8: "MONTHLY_FLEX_8",
-  9: "MONTHLY_FLEX_9",
-  10: "MONTHLY_FLEX_10",
-  11: "MONTHLY_FLEX_11",
-  12: "MONTHLY_FLEX_12",
-};
 
 export interface FinanceResult {
   status: "passed" | "failed";
@@ -2060,13 +2040,15 @@ export class ScoringService {
       };
     }
 
-    // rate, minSp and maxSp fall back to the product configuration for this tenor
-    const productCode = PAY_IN_PRODUCT_CODE_BY_TENOR[tenor];
+    // rate, minSp and maxSp fall back to the BI_WEEKLY product configuration for this tenor
     const needsProductConfiguration =
       input.rate === undefined || input.minSp === undefined || input.maxSp === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          "BI_WEEKLY",
+          tenor
+        )
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2076,8 +2058,8 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so rate, minSp and maxSp could not be resolved.`,
+          `Transaction failed. No BI_WEEKLY product configuration found for a tenor of ` +
+          `${tenor}, so rate, minSp and maxSp could not be resolved.`,
       };
     }
 
@@ -2230,13 +2212,15 @@ export class ScoringService {
       };
     }
 
-    // rate, minSp and maxSp fall back to the product configuration for this tenor
-    const productCode = MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR[tenor];
+    // rate, minSp and maxSp fall back to the MONTHLY_FLEX configuration for this tenor
     const needsProductConfiguration =
       input.rate === undefined || input.minSp === undefined || input.maxSp === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          "MONTHLY_FLEX",
+          tenor
+        )
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2246,8 +2230,8 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so rate, minSp and maxSp could not be resolved.`,
+          `Transaction failed. No MONTHLY_FLEX product configuration found for a tenor ` +
+          `of ${tenor}, so rate, minSp and maxSp could not be resolved.`,
       };
     }
 
@@ -2422,13 +2406,15 @@ export class ScoringService {
       };
     }
 
-    // productMini and productMax fall back to the product configuration for this tenure
-    const productCode = PAY_IN_PRODUCT_CODE_BY_TENOR[tenure];
+    // productMini and productMax fall back to the BI_WEEKLY configuration for this tenure
     const needsProductConfiguration =
       input.productMini === undefined || input.productMax === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          "BI_WEEKLY",
+          tenure
+        )
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2436,8 +2422,8 @@ export class ScoringService {
         status: "failed",
         ...zeroedAffordability,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so productMini and productMax could not be resolved.`,
+          `Transaction failed. No BI_WEEKLY product configuration found for a tenure of ` +
+          `${tenure}, so productMini and productMax could not be resolved.`,
       };
     }
 
@@ -2541,15 +2527,17 @@ export class ScoringService {
       };
     }
 
-    // productRate, productMini and productMax fall back to the product configuration
-    const productCode = MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR[tenure];
+    // productRate, productMini and productMax fall back to the MONTHLY_FLEX configuration
     const needsProductConfiguration =
       input.productRate === undefined ||
       input.productMini === undefined ||
       input.productMax === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          "MONTHLY_FLEX",
+          tenure
+        )
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2557,8 +2545,8 @@ export class ScoringService {
         status: "failed",
         ...zeroedAffordability,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so productRate, productMini and productMax could not be resolved.`,
+          `Transaction failed. No MONTHLY_FLEX product configuration found for a tenure ` +
+          `of ${tenure}, so productRate, productMini and productMax could not be resolved.`,
       };
     }
 
