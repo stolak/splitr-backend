@@ -550,19 +550,7 @@ export class MerchantService {
       throw new Error('Merchant not found');
     }
 
-    // Check for email uniqueness if updating email
-    if (data.businessEmail) {
-      const byEmail = await prisma.merchant.findFirst({
-        where: {
-          AND: [{ id: { not: id } }, { businessEmail: data.businessEmail }],
-        },
-      });
-      if (byEmail) {
-        throw new Error('Another merchant exists with provided business email');
-      }
-    }
-
-    await this.ensureBusinessPhoneIsUnique(data.businessPhone, id);
+    await this.ensureUniqueFieldsAreAvailable(data, id);
 
     // check if any properties exist in data and push it to updateData
     // Filter data to only include properties that match FormatedtInput interface
@@ -609,7 +597,7 @@ export class MerchantService {
         data: updateData,
         select: merchantSelect,
       })
-      .catch((error) => this.rethrowDuplicateBusinessPhone(error));
+      .catch((error) => this.rethrowDuplicateMerchantField(error));
 
     if (data?.directors) {
       await this.createDirectors(id, data.directors);
