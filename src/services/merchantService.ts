@@ -425,6 +425,42 @@ export class MerchantService {
     throw error;
   }
 
+  /**
+   * Apply a merchant field update with unique-constraint validation.
+   * Use this from other services (e.g. Stripe sync) instead of writing via Prisma directly.
+   * Does not run onboarding side-effects that `updateMerchant` handles (authorisers, terms, etc.).
+   */
+  async updateMerchantRecord(id: string, data: Record<string, unknown>) {
+    const existing = await prisma.merchant.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new Error('Merchant not found');
+    }
+
+    await this.ensureUniqueFieldsAreAvailable(data, id);
+
+    const updateData: Record<string, unknown> = {};
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined) {
+        updateData[key] = value;
+      }
+    });
+
+    if (Object.keys(updateData).length === 0) {
+      return this.getMerchantById(id);
+    }
+
+    return prisma.merchant
+      .update({
+        where: { id },
+        data: updateData,
+        select: merchantSelect,
+      })
+      .catch((error) => this.rethrowDuplicateMerchantField(error));
+  }
+
   async createMerchant(input: CreateMerchantInput) {
     const { businessEmail, businessName, authorizedPerson, authorizedEmail } = input;
     if (!businessEmail) {
@@ -550,8 +586,6 @@ export class MerchantService {
       throw new Error('Merchant not found');
     }
 
-    await this.ensureUniqueFieldsAreAvailable(data, id);
-
     // check if any properties exist in data and push it to updateData
     // Filter data to only include properties that match FormatedtInput interface
 
@@ -591,13 +625,7 @@ export class MerchantService {
       updateData.verificationStatus = 'Approved';
       updateData.documentStatus = 'Approved';
     }
-    const merchant = await prisma.merchant
-      .update({
-        where: { id },
-        data: updateData,
-        select: merchantSelect,
-      })
-      .catch((error) => this.rethrowDuplicateMerchantField(error));
+    const merchant = await this.updateMerchantRecord(id, updateData);
 
     if (data?.directors) {
       await this.createDirectors(id, data.directors);

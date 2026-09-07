@@ -1,6 +1,7 @@
 import Stripe from "stripe";
-import { DocumentStatus, MerchantStatus, Prisma, StripeMandateStatus } from "@prisma/client";
+import { DocumentStatus, MerchantStatus, StripeMandateStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
+import { merchantService } from "./merchantService";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_DEFAULT_CURRENCY = process.env.STRIPE_DEFAULT_CURRENCY || "cad";
@@ -193,9 +194,8 @@ export class StripeService {
       email,
     });
 
-    await prisma.merchant.update({
-      where: { id: merchant.id },
-      data: { stripeConnectAccountId: account.id },
+    await merchantService.updateMerchantRecord(merchant.id, {
+      stripeConnectAccountId: account.id,
     });
 
     return {
@@ -356,7 +356,7 @@ export class StripeService {
     const verifiedStatus = isVerified ? MerchantStatus.Approved : MerchantStatus.Pending;
     const verifiedDocStatus = isVerified ? DocumentStatus.Approved : DocumentStatus.Pending;
 
-    const updateData: Prisma.MerchantUpdateInput = {
+    const updateData: Record<string, unknown> = {
       stripeConnectAccountId: account.id,
       ...(company?.name ? { businessName: company.name } : {}),
       ...(account.email ? { businessEmail: account.email } : {}),
@@ -387,10 +387,7 @@ export class StripeService {
       isAuthorizedPersonVerified: verifiedDocStatus,
     };
 
-    const updatedMerchant = await prisma.merchant.update({
-      where: { id: merchant.id },
-      data: updateData,
-    });
+    const updatedMerchant = await merchantService.updateMerchantRecord(merchant.id, updateData);
 
     return {
       accountId: account.id,
