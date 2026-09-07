@@ -18,6 +18,7 @@ router.post("/finance/calculate", scoringController.calculateFinance);
 router.post("/finance/monthly-flex/calculate", scoringController.calculateFinanceForMonthlyFlex);
 router.post("/finance/by-product/calculate", scoringController.calculateFinanceByProduct);
 router.get("/buyer-score/:buyerId", scoringController.buyerScore);
+router.post("/buyer-finance-quote", scoringController.buyerFinanceQuote);
 router.post(
   "/available-spending-power/calculate",
   scoringController.calculateAvailableSpendingPower

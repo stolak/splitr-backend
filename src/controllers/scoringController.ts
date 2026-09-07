@@ -19,6 +19,118 @@ import {
 
 /**
  * @swagger
+ * /api/v1/scoring/buyer-finance-quote:
+ *   post:
+ *     summary: Quote a purchase against every product for a buyer
+ *     description: >
+ *       Resolves the buyer's available spending power for every product configuration
+ *       (the same figures returned by /buyer-score/{buyerId}), then runs the finance
+ *       calculation for each product with that spending power as the spending capacity.
+ *       Every product's outcome is returned, so the caller can see which products can
+ *       fund the purchase and, where one cannot, what part payment would be needed.
+ *       Products the buyer has no spending power for are reported as failed with the
+ *       spending power reason and skip the finance checks.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - buyerId
+ *               - purchaseAmount
+ *             properties:
+ *               buyerId:
+ *                 type: string
+ *               purchaseAmount:
+ *                 type: number
+ *                 example: 3800
+ *               partPayment:
+ *                 type: number
+ *                 description: Optional; defaults to 0 and is added to the first installment
+ *                 example: 2300
+ *     responses:
+ *       200:
+ *         description: Purchase quoted against all products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     buyerId:
+ *                       type: string
+ *                     purchaseAmount:
+ *                       type: number
+ *                     partPayment:
+ *                       type: number
+ *                     parameters:
+ *                       type: object
+ *                       description: The affordability metrics the spending power was derived from
+ *                     products:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           productConfigurationId:
+ *                             type: string
+ *                           productType:
+ *                             type: string
+ *                             enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                           code:
+ *                             type: string
+ *                           productName:
+ *                             type: string
+ *                           tenure:
+ *                             type: integer
+ *                           status:
+ *                             type: string
+ *                             enum: [passed, failed]
+ *                           availableSpendingPower:
+ *                             type: number
+ *                           spendingPowerStatus:
+ *                             type: string
+ *                             enum: [passed, failed]
+ *                           spendingPowerMessage:
+ *                             type: string
+ *                           financeAmount:
+ *                             type: number
+ *                           totalRepayment:
+ *                             type: number
+ *                           periodicInstallment:
+ *                             type: number
+ *                           installments:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 installmentNumber:
+ *                                   type: integer
+ *                                 amount:
+ *                                   type: number
+ *                           minimumPartPaymentRequired:
+ *                             type: number
+ *                           maximumPartPaymentAllowed:
+ *                             type: number
+ *                           additionalPartPaymentRequired:
+ *                             type: number
+ *                           partPaymentAdjustmentPossible:
+ *                             type: boolean
+ *                           message:
+ *                             type: string
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
  * /api/v1/scoring/buyer-score/{buyerId}:
  *   get:
  *     summary: Score a buyer against every configured product
@@ -2838,6 +2950,65 @@ export class ScoringController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to score buyer",
+      });
+    }
+  }
+
+  async buyerFinanceQuote(req: Request, res: Response) {
+    try {
+      const { buyerId, purchaseAmount, partPayment } = req.body ?? {};
+
+      if (typeof buyerId !== "string" || !buyerId.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "buyerId is required",
+        });
+      }
+
+      if (
+        typeof purchaseAmount !== "number" ||
+        !Number.isFinite(purchaseAmount) ||
+        purchaseAmount <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "purchaseAmount is required and must be a number greater than zero",
+        });
+      }
+
+      if (
+        partPayment !== undefined &&
+        (typeof partPayment !== "number" || !Number.isFinite(partPayment) || partPayment < 0)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "partPayment must be a number of zero or more when provided",
+        });
+      }
+
+      if (partPayment !== undefined && partPayment > purchaseAmount) {
+        return res.status(400).json({
+          success: false,
+          message: "partPayment cannot be greater than purchaseAmount",
+        });
+      }
+
+      const result = await scoreService.buyerFinanceQuote({
+        buyerId: buyerId.trim(),
+        purchaseAmount,
+        ...(partPayment !== undefined && { partPayment }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Purchase quoted against all product configurations successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("Error quoting buyer finance:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to quote buyer finance",
       });
     }
   }

@@ -526,6 +526,32 @@ export interface BuyerScoreResult {
   products: BuyerScoreProductOutcome[];
 }
 
+export interface BuyerFinanceQuoteInput {
+  buyerId: string;
+  purchaseAmount: number;
+  partPayment?: number;
+}
+
+export interface BuyerFinanceQuoteProductOutcome extends FinanceResult {
+  productConfigurationId: string;
+  code: string;
+  productName: string;
+  tenure: number;
+
+  /** The spending power this product was checked against */
+  availableSpendingPower: number;
+  spendingPowerStatus: "passed" | "failed";
+  spendingPowerMessage: string;
+}
+
+export interface BuyerFinanceQuoteResult {
+  buyerId: string;
+  purchaseAmount: number;
+  partPayment: number;
+  parameters: BuyerScoreParameters;
+  products: BuyerFinanceQuoteProductOutcome[];
+}
+
 export interface FinanceResult {
   status: "passed" | "failed";
   purchaseAmount: number;
@@ -2742,6 +2768,83 @@ export class ScoringService {
     }
 
     return { buyerId, parameters, products };
+  }
+
+  /**
+   * Quote a purchase against every configured product for a buyer.
+   *
+   * Each product's available spending power comes from `buyerScore`, and is then fed to
+   * `calculateFinanceByProduct` as the spending capacity so the finance check is made
+   * against what this buyer can actually take on for that product.
+   */
+  async buyerFinanceQuote(input: BuyerFinanceQuoteInput): Promise<BuyerFinanceQuoteResult> {
+    const { buyerId, purchaseAmount } = input;
+    const partPayment = input.partPayment ?? 0;
+
+    const score = await this.buyerScore(buyerId);
+
+    const productConfigurations =
+      await productConfigurationService.getProductConfigurations();
+    const configurationById = new Map(
+      productConfigurations.map((productConfiguration) => [
+        productConfiguration.id,
+        productConfiguration,
+      ])
+    );
+
+    const products: BuyerFinanceQuoteProductOutcome[] = [];
+
+    for (const scored of score.products) {
+      const productConfiguration = configurationById.get(scored.productConfigurationId);
+
+      const productDetails = {
+        productConfigurationId: scored.productConfigurationId,
+        code: scored.code,
+        productName: scored.productName,
+        tenure: scored.tenure,
+        availableSpendingPower: scored.availableSpendingPower,
+        spendingPowerStatus: scored.status,
+        spendingPowerMessage: scored.message,
+      };
+
+      // A buyer with no spending power for a product cannot finance on it at all, so
+      // report that as the reason rather than running the finance checks
+      if (scored.status === "failed") {
+        products.push({
+          status: "failed",
+          purchaseAmount,
+          partPayment,
+          financeAmount: purchaseAmount - partPayment,
+          productType: scored.productType,
+          message: scored.message,
+          ...productDetails,
+        });
+        continue;
+      }
+
+      const finance = await this.calculateFinanceByProduct({
+        productType: scored.productType!,
+        tenor: scored.tenure as Tenor | MonthlyFlexTenor,
+        purchaseAmount,
+        partPayment,
+        spendingCapacity: scored.availableSpendingPower,
+        ...(productConfiguration && {
+          rate: productConfiguration.rate,
+          minSp: productConfiguration.minimumFinance,
+          maxSp: productConfiguration.maximumFinance,
+        }),
+      });
+
+      products.push({ ...finance, ...productDetails });
+    }
+
+    return {
+      buyerId,
+      purchaseAmount,
+      partPayment,
+      parameters: score.parameters,
+      products,
+    };
   }
 }
 
