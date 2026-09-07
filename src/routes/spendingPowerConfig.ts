@@ -135,6 +135,40 @@ router.get(
 
 /**
  * @swagger
+ * /api/v1/spending-power-config/risk-tiers/by-score:
+ *   get:
+ *     summary: Get risk tier for a supplied score
+ *     tags: [Spending Power Config]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: score
+ *         required: true
+ *         schema:
+ *           type: number
+ *           example: 85
+ *       - in: query
+ *         name: configId
+ *         schema:
+ *           type: string
+ *           default: default
+ *     responses:
+ *       200:
+ *         description: Matching risk tier retrieved successfully
+ *       400:
+ *         description: Invalid or missing score
+ *       404:
+ *         description: No risk tier found for score
+ */
+router.get(
+  "/risk-tiers/by-score",
+  authenticateJWT,
+  spendingPowerConfigController.getRiskTierByScore.bind(spendingPowerConfigController)
+);
+
+/**
+ * @swagger
  * /api/v1/spending-power-config/risk-tiers:
  *   post:
  *     summary: Create a risk adjustment tier
@@ -320,6 +354,40 @@ router.get(
   "/behaviour-tiers",
   authenticateJWT,
   spendingPowerConfigController.listBehaviourTiers.bind(spendingPowerConfigController)
+);
+
+/**
+ * @swagger
+ * /api/v1/spending-power-config/behaviour-tiers/by-score:
+ *   get:
+ *     summary: Get behaviour tier for a supplied behavioural score
+ *     tags: [Spending Power Config]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: score
+ *         required: true
+ *         schema:
+ *           type: number
+ *           example: 72
+ *       - in: query
+ *         name: configId
+ *         schema:
+ *           type: string
+ *           default: default
+ *     responses:
+ *       200:
+ *         description: Matching behaviour tier retrieved successfully
+ *       400:
+ *         description: Invalid or missing score
+ *       404:
+ *         description: No behaviour tier found for score
+ */
+router.get(
+  "/behaviour-tiers/by-score",
+  authenticateJWT,
+  spendingPowerConfigController.getBehaviourTierByScore.bind(spendingPowerConfigController)
 );
 
 /**

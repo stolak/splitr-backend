@@ -1,6 +1,7 @@
 import prisma from "../utils/prisma";
 
 const DEFAULT_CONFIG_ID = "default";
+const SPENDING_POWER_CONFIG_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 export interface UpsertSpendingPowerConfigInput {
   allocationPercentage?: number;
@@ -43,6 +44,36 @@ export interface UpdateBehaviourTierInput {
   treatment?: string;
 }
 
+type CachedConfig = {
+  data: any;
+  expiresAt: number;
+};
+
+const configCacheById = new Map<string, CachedConfig>();
+
+function getCachedConfig(configId: string) {
+  const entry = configCacheById.get(configId);
+  if (entry && Date.now() < entry.expiresAt) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setCachedConfig(configId: string, data: any) {
+  configCacheById.set(configId, {
+    data,
+    expiresAt: Date.now() + SPENDING_POWER_CONFIG_CACHE_TTL_MS,
+  });
+}
+
+function clearSpendingPowerConfigCache(configId?: string) {
+  if (configId) {
+    configCacheById.delete(configId);
+    return;
+  }
+  configCacheById.clear();
+}
+
 export class SpendingPowerConfigService {
   private toConfigResponse(record: any) {
     return {
@@ -80,7 +111,15 @@ export class SpendingPowerConfigService {
     }
   }
 
-  async getConfig(configId: string = DEFAULT_CONFIG_ID) {
+  private parseScore(score: number | string, label: string) {
+    const parsed = typeof score === "string" ? Number(score) : score;
+    if (!Number.isFinite(parsed)) {
+      throw new Error(`${label} must be a valid number`);
+    }
+    return parsed;
+  }
+
+  private async loadConfigFromDb(configId: string) {
     const record = await prisma.spendingPowerConfig.findUnique({
       where: { id: configId },
       include: {
@@ -93,7 +132,18 @@ export class SpendingPowerConfigService {
       return null;
     }
 
-    return this.toConfigResponse(record);
+    const mapped = this.toConfigResponse(record);
+    setCachedConfig(configId, mapped);
+    return mapped;
+  }
+
+  async getConfig(configId: string = DEFAULT_CONFIG_ID) {
+    const cached = getCachedConfig(configId);
+    if (cached) {
+      return cached;
+    }
+
+    return this.loadConfigFromDb(configId);
   }
 
   async upsertConfig(
@@ -139,7 +189,9 @@ export class SpendingPowerConfigService {
       },
     });
 
-    return this.toConfigResponse(record);
+    const mapped = this.toConfigResponse(record);
+    setCachedConfig(configId, mapped);
+    return mapped;
   }
 
   async deleteConfig(configId: string = DEFAULT_CONFIG_ID) {
@@ -155,18 +207,18 @@ export class SpendingPowerConfigService {
       where: { id: configId },
     });
 
+    clearSpendingPowerConfigCache(configId);
     return { id: configId };
   }
 
   // ==================== RISK TIERS ====================
 
   async listRiskTiers(configId: string = DEFAULT_CONFIG_ID) {
-    const tiers = await prisma.spendingPowerRiskTier.findMany({
-      where: { configId },
-      orderBy: { minScore: "desc" },
-    });
-
-    return tiers.map((tier) => this.toRiskTierResponse(tier));
+    const config = await this.getConfig(configId);
+    if (!config) {
+      throw new Error(`Spending power config '${configId}' not found`);
+    }
+    return config.riskTiers;
   }
 
   async getRiskTierById(id: string) {
@@ -179,6 +231,30 @@ export class SpendingPowerConfigService {
     }
 
     return this.toRiskTierResponse(tier);
+  }
+
+  /**
+   * Resolve the risk tier whose [minScore, maxScore] range contains the supplied score.
+   * Tier lists are served from the in-memory config cache.
+   */
+  async getRiskTierByScore(score: number | string, configId: string = DEFAULT_CONFIG_ID) {
+    const parsedScore = this.parseScore(score, "score");
+    const config = await this.getConfig(configId);
+
+    if (!config) {
+      throw new Error(`Spending power config '${configId}' not found`);
+    }
+
+    const tier = config.riskTiers.find(
+      (item: { minScore: number; maxScore: number }) =>
+        parsedScore >= item.minScore && parsedScore <= item.maxScore
+    );
+
+    if (!tier) {
+      throw new Error(`No risk tier found for score: ${parsedScore}`);
+    }
+
+    return tier;
   }
 
   async createRiskTier(input: CreateRiskTierInput) {
@@ -206,6 +282,7 @@ export class SpendingPowerConfigService {
       },
     });
 
+    clearSpendingPowerConfigCache(configId);
     return this.toRiskTierResponse(tier);
   }
 
@@ -243,6 +320,7 @@ export class SpendingPowerConfigService {
       },
     });
 
+    clearSpendingPowerConfigCache(existing.configId);
     return this.toRiskTierResponse(tier);
   }
 
@@ -256,18 +334,18 @@ export class SpendingPowerConfigService {
     }
 
     await prisma.spendingPowerRiskTier.delete({ where: { id } });
+    clearSpendingPowerConfigCache(existing.configId);
     return { id };
   }
 
   // ==================== BEHAVIOUR TIERS ====================
 
   async listBehaviourTiers(configId: string = DEFAULT_CONFIG_ID) {
-    const tiers = await prisma.spendingPowerBehaviourTier.findMany({
-      where: { configId },
-      orderBy: { minScore: "desc" },
-    });
-
-    return tiers.map((tier) => this.toBehaviourTierResponse(tier));
+    const config = await this.getConfig(configId);
+    if (!config) {
+      throw new Error(`Spending power config '${configId}' not found`);
+    }
+    return config.behaviourTiers;
   }
 
   async getBehaviourTierById(id: string) {
@@ -280,6 +358,30 @@ export class SpendingPowerConfigService {
     }
 
     return this.toBehaviourTierResponse(tier);
+  }
+
+  /**
+   * Resolve the behaviour tier whose [minScore, maxScore] range contains the supplied score.
+   * Tier lists are served from the in-memory config cache.
+   */
+  async getBehaviourTierByScore(score: number | string, configId: string = DEFAULT_CONFIG_ID) {
+    const parsedScore = this.parseScore(score, "behavioural score");
+    const config = await this.getConfig(configId);
+
+    if (!config) {
+      throw new Error(`Spending power config '${configId}' not found`);
+    }
+
+    const tier = config.behaviourTiers.find(
+      (item: { minScore: number; maxScore: number }) =>
+        parsedScore >= item.minScore && parsedScore <= item.maxScore
+    );
+
+    if (!tier) {
+      throw new Error(`No behaviour tier found for score: ${parsedScore}`);
+    }
+
+    return tier;
   }
 
   async createBehaviourTier(input: CreateBehaviourTierInput) {
@@ -299,6 +401,7 @@ export class SpendingPowerConfigService {
       },
     });
 
+    clearSpendingPowerConfigCache(configId);
     return this.toBehaviourTierResponse(tier);
   }
 
@@ -328,6 +431,7 @@ export class SpendingPowerConfigService {
       },
     });
 
+    clearSpendingPowerConfigCache(existing.configId);
     return this.toBehaviourTierResponse(tier);
   }
 
@@ -341,6 +445,7 @@ export class SpendingPowerConfigService {
     }
 
     await prisma.spendingPowerBehaviourTier.delete({ where: { id } });
+    clearSpendingPowerConfigCache(existing.configId);
     return { id };
   }
 

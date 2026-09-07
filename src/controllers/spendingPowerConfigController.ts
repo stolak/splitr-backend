@@ -4,7 +4,9 @@ import { spendingPowerConfigService } from "../services/spendingPowerConfigServi
 function statusFromError(message: string): number {
   if (
     message.includes("not found") ||
-    message.includes("Not found")
+    message.includes("Not found") ||
+    message.includes("No risk tier found") ||
+    message.includes("No behaviour tier found")
   ) {
     return 404;
   }
@@ -84,6 +86,32 @@ export class SpendingPowerConfigController {
       const configId = (req.query.configId as string) || "default";
       const tiers = await spendingPowerConfigService.listRiskTiers(configId);
       return res.status(200).json({ success: true, data: tiers });
+    } catch (error: any) {
+      const message = error.message || "Internal server error";
+      return res.status(statusFromError(message)).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  async getRiskTierByScore(req: Request, res: Response) {
+    try {
+      const score = (req.query.score ?? req.params.score) as string;
+      const configId = (req.query.configId as string) || "default";
+
+      if (score === undefined || score === null || score === "") {
+        return res.status(400).json({
+          success: false,
+          message: "score is required",
+        });
+      }
+
+      const tier = await spendingPowerConfigService.getRiskTierByScore(
+        score,
+        configId
+      );
+      return res.status(200).json({ success: true, data: tier });
     } catch (error: any) {
       const message = error.message || "Internal server error";
       return res.status(statusFromError(message)).json({
@@ -201,6 +229,32 @@ export class SpendingPowerConfigController {
       const configId = (req.query.configId as string) || "default";
       const tiers = await spendingPowerConfigService.listBehaviourTiers(configId);
       return res.status(200).json({ success: true, data: tiers });
+    } catch (error: any) {
+      const message = error.message || "Internal server error";
+      return res.status(statusFromError(message)).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  async getBehaviourTierByScore(req: Request, res: Response) {
+    try {
+      const score = (req.query.score ?? req.params.score) as string;
+      const configId = (req.query.configId as string) || "default";
+
+      if (score === undefined || score === null || score === "") {
+        return res.status(400).json({
+          success: false,
+          message: "score is required",
+        });
+      }
+
+      const tier = await spendingPowerConfigService.getBehaviourTierByScore(
+        score,
+        configId
+      );
+      return res.status(200).json({ success: true, data: tier });
     } catch (error: any) {
       const message = error.message || "Internal server error";
       return res.status(statusFromError(message)).json({
