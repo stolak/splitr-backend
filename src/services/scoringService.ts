@@ -457,13 +457,17 @@ export interface AvailableSpendingPowerInput {
   productMax?: number;
 }
 
-export interface AvailableSpendingPowerMonthlyFlexInput
-  extends Omit<AvailableSpendingPowerInput, "tenure"> {
+export interface AvailableSpendingPowerMonthlyFlexInput extends Omit<
+  AvailableSpendingPowerInput,
+  "tenure"
+> {
   tenure: MonthlyFlexTenor;
 }
 
-export interface AvailableSpendingPowerByProductInput
-  extends Omit<AvailableSpendingPowerInput, "tenure"> {
+export interface AvailableSpendingPowerByProductInput extends Omit<
+  AvailableSpendingPowerInput,
+  "tenure"
+> {
   productType: FinancingProductType;
   /** 4 or 6 for BI_WEEKLY; 3 to 12 for MONTHLY_FLEX */
   tenure: Tenor | MonthlyFlexTenor;
@@ -489,6 +493,37 @@ export interface AvailableSpendingPowerResult {
   productType?: FinancingProductType;
 
   message: string;
+}
+
+/** The buyer-level affordability metrics every product is scored against */
+export interface BuyerScoreParameters {
+  disposableIncome: number;
+  affordabilityAllocationRate: number;
+  riskMultiplier: number;
+  behaviourMultiplier: number;
+  totalPlatformExposure: number;
+}
+
+/** Stand-in metrics used until the buyer's own figures are resolved from `buyerId` */
+export const PLACEHOLDER_BUYER_SCORE_PARAMETERS: BuyerScoreParameters = {
+  disposableIncome: 1500,
+  affordabilityAllocationRate: 0.25,
+  riskMultiplier: 1.25,
+  behaviourMultiplier: 1.15,
+  totalPlatformExposure: 600,
+};
+
+export interface BuyerScoreProductOutcome extends AvailableSpendingPowerResult {
+  productConfigurationId: string;
+  code: string;
+  productName: string;
+  tenure: number;
+}
+
+export interface BuyerScoreResult {
+  buyerId: string;
+  parameters: BuyerScoreParameters;
+  products: BuyerScoreProductOutcome[];
 }
 
 export interface FinanceResult {
@@ -1835,13 +1870,6 @@ export class ScoringService {
     const factor = Math.pow(1 + rate, months);
     return (principal * rate * factor) / (factor - 1);
   }
-  // principalFromMonthlyRepayment(monthlyRepayment: number, rate: number, months: number): number {
-  //   if (rate === 0) return monthlyRepayment * months;
-
-  //   const factor = Math.pow(1 + rate, months);
-
-  //   return (monthlyRepayment * (factor - 1)) / (rate * factor);
-  // }
 
   principalFromMonthlyRepayment(monthlyRepayment: number, rate: number, months: number): number {
     if (rate === 0) return monthlyRepayment * months;
@@ -2045,10 +2073,7 @@ export class ScoringService {
       input.rate === undefined || input.minSp === undefined || input.maxSp === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
-          "BI_WEEKLY",
-          tenor
-        )
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure("BI_WEEKLY", tenor)
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2315,7 +2340,7 @@ export class ScoringService {
     // minSp <= fA <= maxSp
     // `rate` is a percentage, so it is converted to a decimal for the amortization formula
     const pi = this.monthlyRepayment(fA, (rate * 0.01) / 12, tenor);
-    const tp = fA * (1 + rate * 0.01);
+    const tp = pi * tenor;
 
     const installments: Installment[] = [{ installmentNumber: 1, amount: pP + pi }];
 
@@ -2665,6 +2690,58 @@ export class ScoringService {
       productRate: 0,
       message: "productType must be either BI_WEEKLY or MONTHLY_FLEX.",
     };
+  }
+
+  /**
+   * Score a buyer against every configured product.
+   *
+   * The affordability metrics are still placeholders; once the buyer's income insight,
+   * credit bureau and exposure records are wired up, resolve them from `buyerId` and
+   * pass them in as `parameters`.
+   */
+  async buyerScore(
+    buyerId: string,
+    parameters: BuyerScoreParameters = PLACEHOLDER_BUYER_SCORE_PARAMETERS
+  ): Promise<BuyerScoreResult> {
+    if (!buyerId) {
+      throw new Error("buyerId is required");
+    }
+
+    const productConfigurations = await productConfigurationService.getProductConfigurations();
+
+    const products: BuyerScoreProductOutcome[] = [];
+
+    for (const productConfiguration of productConfigurations) {
+      // The product's own terms are passed in, so no further configuration lookup runs
+      const shared = {
+        ...parameters,
+        productRate: productConfiguration.rate,
+        productMini: productConfiguration.minimumFinance,
+        productMax: productConfiguration.maximumFinance,
+      };
+
+      const result =
+        productConfiguration.productType === "BI_WEEKLY"
+          ? await this.calculateAvailableSpendingPower({
+              ...shared,
+              tenure: productConfiguration.tenure as Tenor,
+            })
+          : await this.calculateAvailableSpendingPowerMonthlyFlex({
+              ...shared,
+              tenure: productConfiguration.tenure as MonthlyFlexTenor,
+            });
+
+      products.push({
+        ...result,
+        productConfigurationId: productConfiguration.id,
+        productType: productConfiguration.productType,
+        code: productConfiguration.code,
+        productName: productConfiguration.productName,
+        tenure: productConfiguration.tenure,
+      });
+    }
+
+    return { buyerId, parameters, products };
   }
 }
 

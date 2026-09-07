@@ -19,6 +19,98 @@ import {
 
 /**
  * @swagger
+ * /api/v1/scoring/buyer-score/{buyerId}:
+ *   get:
+ *     summary: Score a buyer against every configured product
+ *     description: >
+ *       Runs the available spending power calculation for the buyer against every product
+ *       configuration, routing each product through the calculation that matches its
+ *       productType (BI_WEEKLY or MONTHLY_FLEX) and using that product's own rate,
+ *       minimumFinance and maximumFinance. Every product's outcome is returned, whether it
+ *       passed or failed, so the caller can see which products the buyer qualifies for.
+ *       The affordability metrics are currently placeholders and are echoed back under
+ *       `parameters`; they will be derived from the buyer's records once those are wired up.
+ *     tags: [Scoring]
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: buyerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Buyer scored against all products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     buyerId:
+ *                       type: string
+ *                     parameters:
+ *                       type: object
+ *                       properties:
+ *                         disposableIncome:
+ *                           type: number
+ *                         affordabilityAllocationRate:
+ *                           type: number
+ *                         riskMultiplier:
+ *                           type: number
+ *                         behaviourMultiplier:
+ *                           type: number
+ *                         totalPlatformExposure:
+ *                           type: number
+ *                     products:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           productConfigurationId:
+ *                             type: string
+ *                           productType:
+ *                             type: string
+ *                             enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                           code:
+ *                             type: string
+ *                           productName:
+ *                             type: string
+ *                           tenure:
+ *                             type: integer
+ *                           status:
+ *                             type: string
+ *                             enum: [passed, failed]
+ *                           availableSpendingPower:
+ *                             type: number
+ *                           baseProductAffordability:
+ *                             type: number
+ *                           affordableAfterRiskEffect:
+ *                             type: number
+ *                           weeklyAffordability:
+ *                             type: number
+ *                           biWeeklyAffordability:
+ *                             type: number
+ *                           productMini:
+ *                             type: number
+ *                           productMax:
+ *                             type: number
+ *                           productRate:
+ *                             type: number
+ *                           message:
+ *                             type: string
+ *       400:
+ *         description: buyerId is required
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
  * /api/v1/scoring/finance/by-product/calculate:
  *   post:
  *     summary: Finance calculation for either product type
@@ -2719,6 +2811,33 @@ export class ScoringController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to calculate finance",
+      });
+    }
+  }
+
+  async buyerScore(req: Request, res: Response) {
+    try {
+      const { buyerId } = req.params;
+
+      if (!buyerId || !buyerId.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "buyerId is required",
+        });
+      }
+
+      const result = await scoreService.buyerScore(buyerId.trim());
+
+      return res.status(200).json({
+        success: true,
+        message: "Buyer scored against all product configurations successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("Error scoring buyer:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to score buyer",
       });
     }
   }
