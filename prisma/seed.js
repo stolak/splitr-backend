@@ -1156,6 +1156,7 @@ async function main() {
     console.log("\n🛍️ Seeding product configurations...");
     const productConfigurations = [
       {
+        productType: "BI_WEEKLY",
         code: "PAY_IN_4",
         productName: "Pay in 4",
         tenure: 4,
@@ -1164,6 +1165,7 @@ async function main() {
         rate: 0,
       },
       {
+        productType: "BI_WEEKLY",
         code: "PAY_IN_6",
         productName: "Pay in 6",
         tenure: 6,
@@ -1172,6 +1174,7 @@ async function main() {
         rate: 5.0,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_3",
         productName: "Monthly Flex - 3 months",
         tenure: 3,
@@ -1180,6 +1183,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_4",
         productName: "Monthly Flex - 4 months",
         tenure: 4,
@@ -1188,6 +1192,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_5",
         productName: "Monthly Flex - 5 months",
         tenure: 5,
@@ -1196,6 +1201,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_6",
         productName: "Monthly Flex - 6 months",
         tenure: 6,
@@ -1204,6 +1210,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_7",
         productName: "Monthly Flex - 7 months",
         tenure: 7,
@@ -1212,6 +1219,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_8",
         productName: "Monthly Flex - 8 months",
         tenure: 8,
@@ -1220,6 +1228,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_9",
         productName: "Monthly Flex - 9 months",
         tenure: 9,
@@ -1228,6 +1237,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_10",
         productName: "Monthly Flex - 10 months",
         tenure: 10,
@@ -1236,6 +1246,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_11",
         productName: "Monthly Flex - 11 months",
         tenure: 11,
@@ -1244,6 +1255,7 @@ async function main() {
         rate: 12.99,
       },
       {
+        productType: "MONTHLY_FLEX",
         code: "MONTHLY_FLEX_12",
         productName: "Monthly Flex - 12 months",
         tenure: 12,
@@ -1257,6 +1269,7 @@ async function main() {
       await prisma.productConfiguration.upsert({
         where: { code: product.code },
         update: {
+          productType: product.productType,
           productName: product.productName,
           tenure: product.tenure,
           minimumFinance: product.minimumFinance,
@@ -1345,9 +1358,8 @@ async function main() {
     console.log("  - Risk tiers: A+, A, B, C, D");
     console.log("  - Behaviour tiers: A+, A, B, C, D");
     console.log("\n🛍️ Product Configurations:");
-    console.log("  - PAY_IN_4: 4 installments | ₦500 – ₦5,000 | 0%");
-    console.log("  - PAY_IN_6: 6 installments | ₦500 – ₦7,500 | 2.5%");
-    console.log("  - MONTHLY_FLEX_3 / _6 / _12: ₦500 – ₦7,500 | 12.99%");
+    console.log("  - BI_WEEKLY: PAY_IN_4 (tenure 4), PAY_IN_6 (tenure 6)");
+    console.log("  - MONTHLY_FLEX: MONTHLY_FLEX_3 through MONTHLY_FLEX_12 (tenure 3–12)");
   } catch (error) {
     console.error("❌ Error during seeding:", error);
     throw error;

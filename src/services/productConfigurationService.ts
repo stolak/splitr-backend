@@ -1,7 +1,11 @@
+import { ProductType } from "@prisma/client";
 import prisma from "../utils/prisma";
+
+export const PRODUCT_TYPE_VALUES: ProductType[] = ["BI_WEEKLY", "MONTHLY_FLEX"];
 
 export interface ProductConfigurationData {
   id: string;
+  productType: ProductType;
   code: string;
   productName: string;
   tenure: number;
@@ -13,6 +17,7 @@ export interface ProductConfigurationData {
 }
 
 export interface ProductConfigurationInput {
+  productType?: ProductType;
   code?: string;
   productName?: string;
   tenure?: number;
@@ -74,7 +79,7 @@ export class ProductConfigurationService {
       }
 
       const productConfigurations = await prisma.productConfiguration.findMany({
-        orderBy: [{ productName: "asc" }, { tenure: "asc" }],
+        orderBy: [{ productType: "asc" }, { tenure: "asc" }],
       });
 
       const data = productConfigurations.map((productConfiguration) =>
@@ -121,6 +126,47 @@ export class ProductConfigurationService {
   }
 
   /**
+   * Get every product configuration for a product type, resolved from the cached list
+   */
+  async getProductConfigurationsByType(
+    productType: ProductType
+  ): Promise<ProductConfigurationData[]> {
+    try {
+      const productConfigurations = await this.getProductConfigurations();
+      return productConfigurations.filter(
+        (productConfiguration) => productConfiguration.productType === productType
+      );
+    } catch (error) {
+      console.error("Error fetching product configurations:", error);
+      throw new Error("Failed to fetch product configurations");
+    }
+  }
+
+  /**
+   * Get the product configuration for a product type and tenure, resolved from the
+   * cached list. This is the canonical way to look up the terms that apply to a
+   * financing request.
+   */
+  async getProductConfigurationByTypeAndTenure(
+    productType: ProductType,
+    tenure: number
+  ): Promise<ProductConfigurationData | null> {
+    try {
+      const productConfigurations = await this.getProductConfigurations();
+      return (
+        productConfigurations.find(
+          (productConfiguration) =>
+            productConfiguration.productType === productType &&
+            productConfiguration.tenure === tenure
+        ) ?? null
+      );
+    } catch (error) {
+      console.error("Error fetching product configuration:", error);
+      throw new Error("Failed to fetch product configuration");
+    }
+  }
+
+  /**
    * Update specific product configuration fields
    */
   async updateProductConfiguration(
@@ -139,6 +185,14 @@ export class ProductConfigurationService {
       // Prepare update data with only provided fields
       const updateData: any = {};
 
+      if (data.productType !== undefined) {
+        if (!PRODUCT_TYPE_VALUES.includes(data.productType)) {
+          throw new Error(
+            `productType must be one of ${PRODUCT_TYPE_VALUES.join(", ")}`
+          );
+        }
+        updateData.productType = data.productType;
+      }
       if (data.code !== undefined) {
         updateData.code = data.code;
       }
@@ -176,6 +230,24 @@ export class ProductConfigurationService {
 
         if (duplicate) {
           throw new Error(`Product configuration with code ${data.code} already exists`);
+        }
+      }
+
+      // Financing requests are resolved by product type and tenure, so that pair has to
+      // stay unique even though the database only enforces uniqueness on `code`
+      const productType = updateData.productType ?? existing.productType;
+      const tenure = updateData.tenure ?? existing.tenure;
+
+      if (productType !== existing.productType || tenure !== existing.tenure) {
+        const conflicting = await prisma.productConfiguration.findFirst({
+          where: { productType, tenure, id: { not: id } },
+        });
+
+        if (conflicting) {
+          throw new Error(
+            `Product configuration ${conflicting.code} already covers ${productType} ` +
+              `with a tenure of ${tenure}`
+          );
         }
       }
 

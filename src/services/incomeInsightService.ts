@@ -24,6 +24,41 @@ export interface UpdateIncomeInsightInput {
   rawInsight?: Prisma.InputJsonValue | null;
 }
 
+const INCOME_INSIGHTS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+type IncomeInsightsCacheEntry = {
+  data: any[];
+  expiresAt: number;
+};
+
+const incomeInsightsCacheByBuyer = new Map<string, IncomeInsightsCacheEntry>();
+
+function setIncomeInsightsCache(buyerId: string, data: any[]): void {
+  incomeInsightsCacheByBuyer.set(buyerId, {
+    data,
+    expiresAt: Date.now() + INCOME_INSIGHTS_CACHE_TTL_MS,
+  });
+}
+
+function clearIncomeInsightsCache(buyerId: string): void {
+  incomeInsightsCacheByBuyer.delete(buyerId);
+}
+
+function getCachedIncomeInsights(buyerId: string): any[] | null {
+  const cached = incomeInsightsCacheByBuyer.get(buyerId);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() < cached.expiresAt) {
+    return cached.data;
+  }
+
+  incomeInsightsCacheByBuyer.delete(buyerId);
+  return null;
+}
+
 export class IncomeInsightService {
   private toResponse(record: any) {
     return {
@@ -87,6 +122,8 @@ export class IncomeInsightService {
       },
     });
 
+    clearIncomeInsightsCache(input.buyerId);
+
     return this.toResponse(record);
   }
 
@@ -106,13 +143,26 @@ export class IncomeInsightService {
     return records.map((record) => this.toResponse(record));
   }
 
+  /**
+   * Get every income insight for a buyer.
+   * Served from an in-memory cache for 30 minutes; the buyer's entry is cleared whenever
+   * one of their insights is created, updated or deleted.
+   */
   async getByBuyerId(buyerId: string) {
+    const cached = getCachedIncomeInsights(buyerId);
+    if (cached) {
+      return cached;
+    }
+
     await this.ensureBuyerExists(buyerId);
     const records = await prisma.incomeInsight.findMany({
       where: { buyerId },
       orderBy: { createdAt: "desc" },
     });
-    return records.map((record) => this.toResponse(record));
+
+    const data = records.map((record) => this.toResponse(record));
+    setIncomeInsightsCache(buyerId, data);
+    return data;
   }
 
   async update(id: string, input: UpdateIncomeInsightInput) {
@@ -150,6 +200,8 @@ export class IncomeInsightService {
       },
     });
 
+    clearIncomeInsightsCache(existing.buyerId);
+
     return this.toResponse(record);
   }
 
@@ -160,6 +212,9 @@ export class IncomeInsightService {
     }
 
     await prisma.incomeInsight.delete({ where: { id } });
+
+    clearIncomeInsightsCache(existing.buyerId);
+
     return { id };
   }
 }

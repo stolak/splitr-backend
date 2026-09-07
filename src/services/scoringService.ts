@@ -439,12 +439,6 @@ export interface FinanceByProductInput extends Omit<FinanceInput, "tenor"> {
   tenor: Tenor | MonthlyFlexTenor;
 }
 
-/** Product configuration codes backing each Pay-in-N tenor */
-export const PAY_IN_PRODUCT_CODE_BY_TENOR: Record<Tenor, string> = {
-  4: "PAY_IN_4",
-  6: "PAY_IN_6",
-};
-
 export interface AvailableSpendingPowerInput {
   tenure: Tenor;
   disposableIncome: number;
@@ -463,13 +457,17 @@ export interface AvailableSpendingPowerInput {
   productMax?: number;
 }
 
-export interface AvailableSpendingPowerMonthlyFlexInput
-  extends Omit<AvailableSpendingPowerInput, "tenure"> {
+export interface AvailableSpendingPowerMonthlyFlexInput extends Omit<
+  AvailableSpendingPowerInput,
+  "tenure"
+> {
   tenure: MonthlyFlexTenor;
 }
 
-export interface AvailableSpendingPowerByProductInput
-  extends Omit<AvailableSpendingPowerInput, "tenure"> {
+export interface AvailableSpendingPowerByProductInput extends Omit<
+  AvailableSpendingPowerInput,
+  "tenure"
+> {
   productType: FinancingProductType;
   /** 4 or 6 for BI_WEEKLY; 3 to 12 for MONTHLY_FLEX */
   tenure: Tenor | MonthlyFlexTenor;
@@ -497,19 +495,62 @@ export interface AvailableSpendingPowerResult {
   message: string;
 }
 
-/** Product configuration codes backing each Monthly Flex tenor */
-export const MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR: Record<MonthlyFlexTenor, string> = {
-  3: "MONTHLY_FLEX_3",
-  4: "MONTHLY_FLEX_4",
-  5: "MONTHLY_FLEX_5",
-  6: "MONTHLY_FLEX_6",
-  7: "MONTHLY_FLEX_7",
-  8: "MONTHLY_FLEX_8",
-  9: "MONTHLY_FLEX_9",
-  10: "MONTHLY_FLEX_10",
-  11: "MONTHLY_FLEX_11",
-  12: "MONTHLY_FLEX_12",
+/** The buyer-level affordability metrics every product is scored against */
+export interface BuyerScoreParameters {
+  disposableIncome: number;
+  affordabilityAllocationRate: number;
+  riskMultiplier: number;
+  behaviourMultiplier: number;
+  totalPlatformExposure: number;
+}
+
+/** Stand-in metrics used until the buyer's own figures are resolved from `buyerId` */
+export const PLACEHOLDER_BUYER_SCORE_PARAMETERS: BuyerScoreParameters = {
+  disposableIncome: 1500,
+  affordabilityAllocationRate: 0.25,
+  riskMultiplier: 1.25,
+  behaviourMultiplier: 1.15,
+  totalPlatformExposure: 600,
 };
+
+export interface BuyerScoreProductOutcome extends AvailableSpendingPowerResult {
+  productConfigurationId: string;
+  code: string;
+  productName: string;
+  tenure: number;
+}
+
+export interface BuyerScoreResult {
+  buyerId: string;
+  parameters: BuyerScoreParameters;
+  products: BuyerScoreProductOutcome[];
+}
+
+export interface BuyerFinanceQuoteInput {
+  buyerId: string;
+  purchaseAmount: number;
+  partPayment?: number;
+}
+
+export interface BuyerFinanceQuoteProductOutcome extends FinanceResult {
+  productConfigurationId: string;
+  code: string;
+  productName: string;
+  tenure: number;
+
+  /** The spending power this product was checked against */
+  availableSpendingPower: number;
+  spendingPowerStatus: "passed" | "failed";
+  spendingPowerMessage: string;
+}
+
+export interface BuyerFinanceQuoteResult {
+  buyerId: string;
+  purchaseAmount: number;
+  partPayment: number;
+  parameters: BuyerScoreParameters;
+  products: BuyerFinanceQuoteProductOutcome[];
+}
 
 export interface FinanceResult {
   status: "passed" | "failed";
@@ -1855,13 +1896,6 @@ export class ScoringService {
     const factor = Math.pow(1 + rate, months);
     return (principal * rate * factor) / (factor - 1);
   }
-  // principalFromMonthlyRepayment(monthlyRepayment: number, rate: number, months: number): number {
-  //   if (rate === 0) return monthlyRepayment * months;
-
-  //   const factor = Math.pow(1 + rate, months);
-
-  //   return (monthlyRepayment * (factor - 1)) / (rate * factor);
-  // }
 
   principalFromMonthlyRepayment(monthlyRepayment: number, rate: number, months: number): number {
     if (rate === 0) return monthlyRepayment * months;
@@ -2060,13 +2094,12 @@ export class ScoringService {
       };
     }
 
-    // rate, minSp and maxSp fall back to the product configuration for this tenor
-    const productCode = PAY_IN_PRODUCT_CODE_BY_TENOR[tenor];
+    // rate, minSp and maxSp fall back to the BI_WEEKLY product configuration for this tenor
     const needsProductConfiguration =
       input.rate === undefined || input.minSp === undefined || input.maxSp === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure("BI_WEEKLY", tenor)
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2076,8 +2109,8 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so rate, minSp and maxSp could not be resolved.`,
+          `Transaction failed. No BI_WEEKLY product configuration found for a tenor of ` +
+          `${tenor}, so rate, minSp and maxSp could not be resolved.`,
       };
     }
 
@@ -2230,13 +2263,15 @@ export class ScoringService {
       };
     }
 
-    // rate, minSp and maxSp fall back to the product configuration for this tenor
-    const productCode = MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR[tenor];
+    // rate, minSp and maxSp fall back to the MONTHLY_FLEX configuration for this tenor
     const needsProductConfiguration =
       input.rate === undefined || input.minSp === undefined || input.maxSp === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          "MONTHLY_FLEX",
+          tenor
+        )
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2246,8 +2281,8 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so rate, minSp and maxSp could not be resolved.`,
+          `Transaction failed. No MONTHLY_FLEX product configuration found for a tenor ` +
+          `of ${tenor}, so rate, minSp and maxSp could not be resolved.`,
       };
     }
 
@@ -2331,7 +2366,7 @@ export class ScoringService {
     // minSp <= fA <= maxSp
     // `rate` is a percentage, so it is converted to a decimal for the amortization formula
     const pi = this.monthlyRepayment(fA, (rate * 0.01) / 12, tenor);
-    const tp = fA * (1 + rate * 0.01);
+    const tp = pi * tenor;
 
     const installments: Installment[] = [{ installmentNumber: 1, amount: pP + pi }];
 
@@ -2422,13 +2457,15 @@ export class ScoringService {
       };
     }
 
-    // productMini and productMax fall back to the product configuration for this tenure
-    const productCode = PAY_IN_PRODUCT_CODE_BY_TENOR[tenure];
+    // productMini and productMax fall back to the BI_WEEKLY configuration for this tenure
     const needsProductConfiguration =
       input.productMini === undefined || input.productMax === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          "BI_WEEKLY",
+          tenure
+        )
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2436,8 +2473,8 @@ export class ScoringService {
         status: "failed",
         ...zeroedAffordability,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so productMini and productMax could not be resolved.`,
+          `Transaction failed. No BI_WEEKLY product configuration found for a tenure of ` +
+          `${tenure}, so productMini and productMax could not be resolved.`,
       };
     }
 
@@ -2541,15 +2578,17 @@ export class ScoringService {
       };
     }
 
-    // productRate, productMini and productMax fall back to the product configuration
-    const productCode = MONTHLY_FLEX_PRODUCT_CODE_BY_TENOR[tenure];
+    // productRate, productMini and productMax fall back to the MONTHLY_FLEX configuration
     const needsProductConfiguration =
       input.productRate === undefined ||
       input.productMini === undefined ||
       input.productMax === undefined;
 
     const productConfiguration = needsProductConfiguration
-      ? await productConfigurationService.getProductConfigurationByCode(productCode)
+      ? await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          "MONTHLY_FLEX",
+          tenure
+        )
       : null;
 
     if (needsProductConfiguration && !productConfiguration) {
@@ -2557,8 +2596,8 @@ export class ScoringService {
         status: "failed",
         ...zeroedAffordability,
         message:
-          `Transaction failed. No product configuration found for code ${productCode}, ` +
-          `so productRate, productMini and productMax could not be resolved.`,
+          `Transaction failed. No MONTHLY_FLEX product configuration found for a tenure ` +
+          `of ${tenure}, so productRate, productMini and productMax could not be resolved.`,
       };
     }
 
@@ -2676,6 +2715,135 @@ export class ScoringService {
       productMax: 0,
       productRate: 0,
       message: "productType must be either BI_WEEKLY or MONTHLY_FLEX.",
+    };
+  }
+
+  /**
+   * Score a buyer against every configured product.
+   *
+   * The affordability metrics are still placeholders; once the buyer's income insight,
+   * credit bureau and exposure records are wired up, resolve them from `buyerId` and
+   * pass them in as `parameters`.
+   */
+  async buyerScore(
+    buyerId: string,
+    parameters: BuyerScoreParameters = PLACEHOLDER_BUYER_SCORE_PARAMETERS
+  ): Promise<BuyerScoreResult> {
+    if (!buyerId) {
+      throw new Error("buyerId is required");
+    }
+
+    const productConfigurations = await productConfigurationService.getProductConfigurations();
+
+    const products: BuyerScoreProductOutcome[] = [];
+
+    for (const productConfiguration of productConfigurations) {
+      // The product's own terms are passed in, so no further configuration lookup runs
+      const shared = {
+        ...parameters,
+        productRate: productConfiguration.rate,
+        productMini: productConfiguration.minimumFinance,
+        productMax: productConfiguration.maximumFinance,
+      };
+
+      const result =
+        productConfiguration.productType === "BI_WEEKLY"
+          ? await this.calculateAvailableSpendingPower({
+              ...shared,
+              tenure: productConfiguration.tenure as Tenor,
+            })
+          : await this.calculateAvailableSpendingPowerMonthlyFlex({
+              ...shared,
+              tenure: productConfiguration.tenure as MonthlyFlexTenor,
+            });
+
+      products.push({
+        ...result,
+        productConfigurationId: productConfiguration.id,
+        productType: productConfiguration.productType,
+        code: productConfiguration.code,
+        productName: productConfiguration.productName,
+        tenure: productConfiguration.tenure,
+      });
+    }
+
+    return { buyerId, parameters, products };
+  }
+
+  /**
+   * Quote a purchase against every configured product for a buyer.
+   *
+   * Each product's available spending power comes from `buyerScore`, and is then fed to
+   * `calculateFinanceByProduct` as the spending capacity so the finance check is made
+   * against what this buyer can actually take on for that product.
+   */
+  async buyerFinanceQuote(input: BuyerFinanceQuoteInput): Promise<BuyerFinanceQuoteResult> {
+    const { buyerId, purchaseAmount } = input;
+    const partPayment = input.partPayment ?? 0;
+
+    const score = await this.buyerScore(buyerId);
+
+    const productConfigurations =
+      await productConfigurationService.getProductConfigurations();
+    const configurationById = new Map(
+      productConfigurations.map((productConfiguration) => [
+        productConfiguration.id,
+        productConfiguration,
+      ])
+    );
+
+    const products: BuyerFinanceQuoteProductOutcome[] = [];
+
+    for (const scored of score.products) {
+      const productConfiguration = configurationById.get(scored.productConfigurationId);
+
+      const productDetails = {
+        productConfigurationId: scored.productConfigurationId,
+        code: scored.code,
+        productName: scored.productName,
+        tenure: scored.tenure,
+        availableSpendingPower: scored.availableSpendingPower,
+        spendingPowerStatus: scored.status,
+        spendingPowerMessage: scored.message,
+      };
+
+      // A buyer with no spending power for a product cannot finance on it at all, so
+      // report that as the reason rather than running the finance checks
+      if (scored.status === "failed") {
+        products.push({
+          status: "failed",
+          purchaseAmount,
+          partPayment,
+          financeAmount: purchaseAmount - partPayment,
+          productType: scored.productType,
+          message: scored.message,
+          ...productDetails,
+        });
+        continue;
+      }
+
+      const finance = await this.calculateFinanceByProduct({
+        productType: scored.productType!,
+        tenor: scored.tenure as Tenor | MonthlyFlexTenor,
+        purchaseAmount,
+        partPayment,
+        spendingCapacity: scored.availableSpendingPower,
+        ...(productConfiguration && {
+          rate: productConfiguration.rate,
+          minSp: productConfiguration.minimumFinance,
+          maxSp: productConfiguration.maximumFinance,
+        }),
+      });
+
+      products.push({ ...finance, ...productDetails });
+    }
+
+    return {
+      buyerId,
+      purchaseAmount,
+      partPayment,
+      parameters: score.parameters,
+      products,
     };
   }
 }

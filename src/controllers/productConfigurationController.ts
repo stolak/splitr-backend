@@ -1,15 +1,39 @@
 import { Request, Response } from 'express';
+import { ProductType } from '@prisma/client';
 import {
   productConfigurationService,
   ProductConfigurationInput,
+  PRODUCT_TYPE_VALUES,
 } from '../services/productConfigurationService';
 
 export class ProductConfigurationController {
   /**
-   * Get all product configurations
+   * Get all product configurations, optionally filtered by product type
    */
   async getProductConfigurations(req: Request, res: Response) {
     try {
+      const { productType } = req.query;
+
+      if (productType !== undefined) {
+        const normalised = String(productType).trim().toUpperCase().replace(/-/g, '_');
+
+        if (!PRODUCT_TYPE_VALUES.includes(normalised as ProductType)) {
+          return res.status(400).json({
+            success: false,
+            message: `productType must be one of ${PRODUCT_TYPE_VALUES.join(', ')}`,
+          });
+        }
+
+        const filtered = await productConfigurationService.getProductConfigurationsByType(
+          normalised as ProductType
+        );
+
+        return res.status(200).json({
+          success: true,
+          data: filtered,
+        });
+      }
+
       const productConfigurations =
         await productConfigurationService.getProductConfigurations();
 
@@ -87,6 +111,57 @@ export class ProductConfigurationController {
   }
 
   /**
+   * Get the product configuration for a product type and tenure
+   */
+  async getProductConfigurationByTypeAndTenure(req: Request, res: Response) {
+    try {
+      const { productType, tenure } = req.params;
+
+      const normalised = productType.trim().toUpperCase().replace(/-/g, '_');
+
+      if (!PRODUCT_TYPE_VALUES.includes(normalised as ProductType)) {
+        return res.status(400).json({
+          success: false,
+          message: `productType must be one of ${PRODUCT_TYPE_VALUES.join(', ')}`,
+        });
+      }
+
+      const parsedTenure = Number(tenure);
+
+      if (!Number.isInteger(parsedTenure) || parsedTenure <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'tenure must be an integer greater than zero',
+        });
+      }
+
+      const productConfiguration =
+        await productConfigurationService.getProductConfigurationByTypeAndTenure(
+          normalised as ProductType,
+          parsedTenure
+        );
+
+      if (!productConfiguration) {
+        return res.status(404).json({
+          success: false,
+          message: 'Product configuration not found',
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        data: productConfiguration,
+      });
+    } catch (error: any) {
+      console.error('Error getting product configuration:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Internal server error',
+      });
+    }
+  }
+
+  /**
    * Update specific product configuration fields
    */
   async updateProductConfiguration(req: Request, res: Response) {
@@ -98,6 +173,16 @@ export class ProductConfigurationController {
         return res.status(400).json({
           success: false,
           message: 'No fields provided for update',
+        });
+      }
+
+      if (
+        data.productType !== undefined &&
+        !PRODUCT_TYPE_VALUES.includes(data.productType)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `productType must be one of ${PRODUCT_TYPE_VALUES.join(', ')}`,
         });
       }
 
@@ -167,7 +252,9 @@ export class ProductConfigurationController {
         message.includes('not found')
           ? 404
           : message.includes('already exists') ||
+            message.includes('already covers') ||
             message.includes('cannot be greater than') ||
+            message.includes('must be one of') ||
             message.includes('No valid fields')
           ? 400
           : 500;
