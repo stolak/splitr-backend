@@ -1087,7 +1087,6 @@ export class InvoiceService {
       accountDetails.data?.data?.customer?.id || ""
     );
     if (!customer.success) {
-      console.log("customer error", customer.error);
       throw new Error("Customer not found");
     }
     const { phone, address, identification_no, identification_type, bvn } = customer.data?.data;
@@ -1991,7 +1990,6 @@ export class InvoiceService {
       purchaseAmount: Number(invoice.amount),
       partPayment: downPaymentAmount,
     });
-    console.log("Buyer finance quote for product:", JSON.stringify(buyerFinanceQuote, null, 2));
     if (buyerFinanceQuote.product.status === "failed") {
       // return failed response
       return {

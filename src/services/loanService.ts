@@ -285,7 +285,6 @@ export class LoanService {
       if (installments && installments.length > 0) {
         const cycleType = product?.productType === "BI_WEEKLY" ? "BiWeekly" : "Monthly";
         const today = new Date(loanStartDate);
-        console.log("I am executing the installment record");
 
         // First installment is due immediately: start and end are today
         const [firstInstallment, ...remainingInstallments] = installments;
@@ -306,9 +305,8 @@ export class LoanService {
 
         // Subsequent installments begin on the next product-type interval from today
         // (BI_WEEKLY → +14 days, MONTHLY_FLEX → +1 month) and continue on that cadence
-        console.log(cycleType);
+
         let nextcycle = new Date(today);
-        console.log(nextcycle);
         for (const installment of remainingInstallments) {
           const expectedPayment = Number(installment.amount);
           const cycleEnd = getDayBeforeNextCycleByInstallmentType(
@@ -331,9 +329,6 @@ export class LoanService {
 
         expectedBalance = expectedBalanceCursor;
       } else {
-        console.log("input.installmentType", input.installmentType);
-
-        console.log("I skip the installment recrd");
         const installmentType = input.installmentType ?? LoanInstallmentType.Monthly;
         let nextcycle = getNextCycleByInstallmentType(
           new Date(loanStartDate).toISOString(),
