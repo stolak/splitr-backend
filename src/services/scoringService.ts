@@ -538,10 +538,14 @@ export interface BuyerFinanceQuoteProductOutcome extends FinanceResult {
   productName: string;
   tenure: number;
 
+  /** Product configuration rate used for this quote */
+  productRate?: number;
+
   /** The spending power this product was checked against */
   availableSpendingPower: number;
   spendingPowerStatus: "passed" | "failed";
   spendingPowerMessage: string;
+  productType: FinancingProductType;
 }
 
 export interface BuyerFinanceQuoteResult {
@@ -550,6 +554,24 @@ export interface BuyerFinanceQuoteResult {
   partPayment: number;
   parameters: BuyerScoreParameters;
   products: BuyerFinanceQuoteProductOutcome[];
+}
+
+export interface BuyerProductFinanceQuoteInput {
+  buyerId: string;
+  productType: FinancingProductType;
+  tenure: number;
+  purchaseAmount: number;
+  partPayment?: number;
+}
+
+export interface BuyerProductFinanceQuoteResult {
+  buyerId: string;
+  productType: FinancingProductType;
+  tenure: number;
+  purchaseAmount: number;
+  partPayment: number;
+  parameters: BuyerScoreParameters;
+  product: BuyerFinanceQuoteProductOutcome;
 }
 
 export interface FinanceResult {
@@ -2783,8 +2805,7 @@ export class ScoringService {
 
     const score = await this.buyerScore(buyerId);
 
-    const productConfigurations =
-      await productConfigurationService.getProductConfigurations();
+    const productConfigurations = await productConfigurationService.getProductConfigurations();
     const configurationById = new Map(
       productConfigurations.map((productConfiguration) => [
         productConfiguration.id,
@@ -2815,7 +2836,7 @@ export class ScoringService {
           purchaseAmount,
           partPayment,
           financeAmount: purchaseAmount - partPayment,
-          productType: scored.productType,
+          productType: scored.productType as FinancingProductType,
           message: scored.message,
           ...productDetails,
         });
@@ -2835,7 +2856,11 @@ export class ScoringService {
         }),
       });
 
-      products.push({ ...finance, ...productDetails });
+      products.push({
+        ...finance,
+        ...productDetails,
+        productType: scored.productType as FinancingProductType,
+      });
     }
 
     return {
@@ -2844,6 +2869,154 @@ export class ScoringService {
       partPayment,
       parameters: score.parameters,
       products,
+    };
+  }
+
+  /**
+   * Score a buyer against a single product configuration identified by productType + tenure.
+   */
+  async buyerScoreForProduct(
+    buyerId: string,
+    productType: FinancingProductType,
+    tenure: number,
+    parameters: BuyerScoreParameters = PLACEHOLDER_BUYER_SCORE_PARAMETERS
+  ): Promise<BuyerScoreProductOutcome> {
+    if (!buyerId) {
+      throw new Error("buyerId is required");
+    }
+    if (productType !== "BI_WEEKLY" && productType !== "MONTHLY_FLEX") {
+      throw new Error("productType must be either BI_WEEKLY or MONTHLY_FLEX");
+    }
+    if (!Number.isInteger(tenure)) {
+      throw new Error("tenure must be an integer");
+    }
+    if (productType === "BI_WEEKLY" && tenure !== 4 && tenure !== 6) {
+      throw new Error("tenure must be either 4 or 6 for BI_WEEKLY");
+    }
+    if (productType === "MONTHLY_FLEX" && (tenure < 3 || tenure > 12)) {
+      throw new Error("tenure must be between 3 and 12 for MONTHLY_FLEX");
+    }
+
+    const productConfiguration =
+      await productConfigurationService.getProductConfigurationByTypeAndTenure(productType, tenure);
+
+    if (!productConfiguration) {
+      throw new Error(
+        `No product configuration found for productType ${productType} and tenure ${tenure}`
+      );
+    }
+
+    const shared = {
+      ...parameters,
+      productRate: productConfiguration.rate,
+      productMini: productConfiguration.minimumFinance,
+      productMax: productConfiguration.maximumFinance,
+    };
+
+    const result =
+      productConfiguration.productType === "BI_WEEKLY"
+        ? await this.calculateAvailableSpendingPower({
+            ...shared,
+            tenure: productConfiguration.tenure as Tenor,
+          })
+        : await this.calculateAvailableSpendingPowerMonthlyFlex({
+            ...shared,
+            tenure: productConfiguration.tenure as MonthlyFlexTenor,
+          });
+
+    return {
+      ...result,
+      productConfigurationId: productConfiguration.id,
+      productType: productConfiguration.productType,
+      code: productConfiguration.code,
+      productName: productConfiguration.productName,
+      tenure: productConfiguration.tenure,
+    };
+  }
+
+  /**
+   * Quote a purchase against one product for a buyer.
+   * Spending power is resolved for the chosen productType + tenure, then used as
+   * spending capacity for the finance calculation.
+   */
+  async buyerFinanceQuoteForProduct(
+    input: BuyerProductFinanceQuoteInput
+  ): Promise<BuyerProductFinanceQuoteResult> {
+    const { buyerId, productType, tenure, purchaseAmount } = input;
+    const partPayment = input.partPayment ?? 0;
+
+    if (!buyerId) {
+      throw new Error("buyerId is required");
+    }
+    if (!Number.isFinite(purchaseAmount) || purchaseAmount <= 0) {
+      throw new Error("purchaseAmount must be a number greater than zero");
+    }
+    if (!Number.isFinite(partPayment) || partPayment < 0) {
+      throw new Error("partPayment must be a number of zero or more");
+    }
+    if (partPayment > purchaseAmount) {
+      throw new Error("partPayment cannot be greater than purchaseAmount");
+    }
+
+    const financeAmount = purchaseAmount - partPayment;
+    const scored = await this.buyerScoreForProduct(buyerId, productType, tenure);
+    const parameters = PLACEHOLDER_BUYER_SCORE_PARAMETERS;
+
+    const productConfiguration =
+      await productConfigurationService.getProductConfigurationByTypeAndTenure(productType, tenure);
+
+    const productDetails = {
+      productConfigurationId: scored.productConfigurationId,
+      code: scored.code,
+      productName: scored.productName,
+      tenure: scored.tenure,
+      availableSpendingPower: scored.availableSpendingPower,
+      spendingPowerStatus: scored.status,
+      spendingPowerMessage: scored.message,
+      productRate: productConfiguration?.rate,
+    };
+
+    if (scored.status === "failed") {
+      return {
+        buyerId,
+        productType,
+        tenure,
+        purchaseAmount,
+        partPayment,
+        parameters,
+        product: {
+          status: "failed",
+          purchaseAmount,
+          partPayment,
+          financeAmount,
+          productType,
+          message: scored.message,
+          ...productDetails,
+        },
+      };
+    }
+
+    const finance = await this.calculateFinanceByProduct({
+      productType,
+      tenor: tenure as Tenor | MonthlyFlexTenor,
+      purchaseAmount,
+      partPayment,
+      spendingCapacity: scored.availableSpendingPower,
+      ...(productConfiguration && {
+        rate: productConfiguration.rate,
+        minSp: productConfiguration.minimumFinance,
+        maxSp: productConfiguration.maximumFinance,
+      }),
+    });
+
+    return {
+      buyerId,
+      productType,
+      tenure,
+      purchaseAmount,
+      partPayment,
+      parameters,
+      product: { ...finance, ...productDetails, productType: productType as FinancingProductType },
     };
   }
 }

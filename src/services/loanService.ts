@@ -30,6 +30,7 @@ import {
   mandateDebitService,
   UpdateMandateDebitInput,
 } from "../services/mandateDebitService";
+import { BuyerFinanceQuoteProductOutcome } from "./scoringService";
 
 const revenueService = new RevenueService();
 const accountDetailsService = new AccountDetailsService();
@@ -58,6 +59,7 @@ export interface CreateLoanInput {
   loanDocumentVerified?: DocumentStatus;
   invoiceId?: string;
   installmentType?: LoanInstallmentType;
+  product?: BuyerFinanceQuoteProductOutcome;
 }
 
 export interface UpdateLoanInput {

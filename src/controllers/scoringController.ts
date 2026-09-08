@@ -131,6 +131,151 @@ import {
  */
 /**
  * @swagger
+ * /api/v1/scoring/buyer-finance-quote/by-product:
+ *   post:
+ *     summary: Quote a purchase against one product for a buyer
+ *     description: >
+ *       Resolves the buyer's available spending power for the single product configuration
+ *       matching productType and tenure, then runs the finance calculation for that product
+ *       with the spending power as spending capacity. Returns one product outcome (not a list).
+ *       If spending power already fails for that product, finance checks are skipped and the
+ *       spending power reason is returned. financeAmount on the product outcome is derived as
+ *       purchaseAmount - partPayment.
+ *     tags: [Scoring]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - buyerId
+ *               - tenure
+ *               - productType
+ *               - purchaseAmount
+ *             properties:
+ *               buyerId:
+ *                 type: string
+ *                 example: "550e8400-e29b-41d4-a716-446655440000"
+ *               tenure:
+ *                 type: integer
+ *                 description: >
+ *                   Product tenure. Must be 4 or 6 for BI_WEEKLY, or 3–12 for MONTHLY_FLEX.
+ *                 example: 6
+ *               productType:
+ *                 type: string
+ *                 enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                 example: BI_WEEKLY
+ *               purchaseAmount:
+ *                 type: number
+ *                 description: Total purchase amount
+ *                 example: 1200
+ *               partPayment:
+ *                 type: number
+ *                 description: Optional upfront payment; defaults to 0
+ *                 example: 200
+ *     responses:
+ *       200:
+ *         description: Purchase quoted against the selected product
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     buyerId:
+ *                       type: string
+ *                     productType:
+ *                       type: string
+ *                       enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                     tenure:
+ *                       type: integer
+ *                     purchaseAmount:
+ *                       type: number
+ *                     partPayment:
+ *                       type: number
+ *                     parameters:
+ *                       type: object
+ *                       description: The affordability metrics the spending power was derived from
+ *                       properties:
+ *                         disposableIncome:
+ *                           type: number
+ *                         affordabilityAllocationRate:
+ *                           type: number
+ *                         riskMultiplier:
+ *                           type: number
+ *                         behaviourMultiplier:
+ *                           type: number
+ *                         totalPlatformExposure:
+ *                           type: number
+ *                     product:
+ *                       type: object
+ *                       properties:
+ *                         productConfigurationId:
+ *                           type: string
+ *                         productType:
+ *                           type: string
+ *                           enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                         code:
+ *                           type: string
+ *                         productName:
+ *                           type: string
+ *                         tenure:
+ *                           type: integer
+ *                         status:
+ *                           type: string
+ *                           enum: [passed, failed]
+ *                         availableSpendingPower:
+ *                           type: number
+ *                         spendingPowerStatus:
+ *                           type: string
+ *                           enum: [passed, failed]
+ *                         spendingPowerMessage:
+ *                           type: string
+ *                         purchaseAmount:
+ *                           type: number
+ *                         partPayment:
+ *                           type: number
+ *                         financeAmount:
+ *                           type: number
+ *                           description: Derived as purchaseAmount - partPayment
+ *                         totalRepayment:
+ *                           type: number
+ *                         periodicInstallment:
+ *                           type: number
+ *                         installments:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               installmentNumber:
+ *                                 type: integer
+ *                               amount:
+ *                                 type: number
+ *                         minimumPartPaymentRequired:
+ *                           type: number
+ *                         maximumPartPaymentAllowed:
+ *                           type: number
+ *                         additionalPartPaymentRequired:
+ *                           type: number
+ *                         partPaymentAdjustmentPossible:
+ *                           type: boolean
+ *                         message:
+ *                           type: string
+ *       400:
+ *         description: Invalid request body or no matching product configuration
+ *       500:
+ *         description: Internal server error
+ */
+/**
+ * @swagger
  * /api/v1/scoring/buyer-score/{buyerId}:
  *   get:
  *     summary: Score a buyer against every configured product
@@ -3009,6 +3154,106 @@ export class ScoringController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to quote buyer finance",
+      });
+    }
+  }
+
+  async buyerFinanceQuoteForProduct(req: Request, res: Response) {
+    try {
+      const { buyerId, tenure, productType, purchaseAmount, partPayment } = req.body ?? {};
+
+      if (typeof buyerId !== "string" || !buyerId.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "buyerId is required",
+        });
+      }
+
+      const normalisedProductType =
+        typeof productType === "string"
+          ? productType.trim().toUpperCase().replace(/-/g, "_")
+          : undefined;
+
+      if (
+        normalisedProductType !== "BI_WEEKLY" &&
+        normalisedProductType !== "MONTHLY_FLEX"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "productType is required and must be either BI_WEEKLY or MONTHLY_FLEX",
+        });
+      }
+
+      if (typeof tenure !== "number" || !Number.isInteger(tenure)) {
+        return res.status(400).json({
+          success: false,
+          message: "tenure is required and must be an integer",
+        });
+      }
+
+      if (normalisedProductType === "BI_WEEKLY" && tenure !== 4 && tenure !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: "tenure must be either 4 or 6 for BI_WEEKLY",
+        });
+      }
+
+      if (normalisedProductType === "MONTHLY_FLEX" && (tenure < 3 || tenure > 12)) {
+        return res.status(400).json({
+          success: false,
+          message: "tenure must be between 3 and 12 for MONTHLY_FLEX",
+        });
+      }
+
+      if (
+        typeof purchaseAmount !== "number" ||
+        !Number.isFinite(purchaseAmount) ||
+        purchaseAmount <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "purchaseAmount is required and must be a number greater than zero",
+        });
+      }
+
+      if (
+        partPayment !== undefined &&
+        (typeof partPayment !== "number" || !Number.isFinite(partPayment) || partPayment < 0)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "partPayment must be a number of zero or more when provided",
+        });
+      }
+
+      if (partPayment !== undefined && partPayment > purchaseAmount) {
+        return res.status(400).json({
+          success: false,
+          message: "partPayment cannot be greater than purchaseAmount",
+        });
+      }
+
+      const result = await scoreService.buyerFinanceQuoteForProduct({
+        buyerId: buyerId.trim(),
+        productType: normalisedProductType,
+        tenure,
+        purchaseAmount,
+        ...(partPayment !== undefined && { partPayment }),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.product.message,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("Error quoting buyer finance for product:", error);
+      const message = error.message || "Failed to quote buyer finance for product";
+      const status =
+        /not found|must be|required|greater than/i.test(message) ? 400 : 500;
+      return res.status(status).json({
+        success: false,
+        message,
       });
     }
   }

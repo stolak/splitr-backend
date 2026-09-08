@@ -20,6 +20,10 @@ router.post("/finance/by-product/calculate", scoringController.calculateFinanceB
 router.get("/buyer-score/:buyerId", scoringController.buyerScore);
 router.post("/buyer-finance-quote", scoringController.buyerFinanceQuote);
 router.post(
+  "/buyer-finance-quote/by-product",
+  scoringController.buyerFinanceQuoteForProduct
+);
+router.post(
   "/available-spending-power/calculate",
   scoringController.calculateAvailableSpendingPower
 );

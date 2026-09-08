@@ -13,6 +13,7 @@ import {
   LoanInstallmentType,
   TransactionType,
   RevenueStatus,
+  ProductType,
 } from "@prisma/client";
 import { loanService } from "./loanService";
 import { LoanSettingService } from "./loanSettingService";
@@ -28,6 +29,7 @@ import { buyerService } from "./buyerService";
 import { paystackMerchantTransferRecipientService } from "./paystackMerchantTransferRecipientService";
 import { paystackTransferService } from "./paystackTransferService";
 import { paystackService } from "./paystackService";
+import { scoreService } from "./scoringService";
 export const FIRST_INSTALLMENT_NOW = process.env.FIRST_INSTALLMENT_NOW === "true";
 const loanSettingService = new LoanSettingService();
 const merchantTransactionService = new MerchantTransactionService();
@@ -1935,6 +1937,134 @@ export class InvoiceService {
       throw new Error(error.message || "Failed to rollback refund status");
     }
   }
+
+  //TODO: Implement this
+  async approveAndCreateLoanInvoiceFinance(
+    id: string,
+    productType: ProductType,
+    loanTenure: number,
+    downPaymentAmount: number,
+    installmentType: LoanInstallmentType,
+    buyerId: string
+  ) {
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: buyerId },
+    });
+    if (!buyer) {
+      throw new Error("Buyer not found");
+    }
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: id },
+    });
+    if (!invoice) {
+      throw new Error("Invoice not found");
+    }
+    const loanAmount = Number(invoice.amount) - downPaymentAmount;
+
+    // Todo verify the payment was successful
+
+    const updateData = {
+      status: InvoiceStatus.Paid,
+      buyerId,
+      customerName: `${buyer.firstName ?? ""} ${buyer.lastName ?? ""}`.trim(),
+      customerEmail: buyer.email,
+      customerPhoneNumber: buyer.phoneNumber ?? invoice.customerPhoneNumber,
+      productType: productType,
+    };
+
+    // Verify the buyer qualifies based on spending power and finance for the chosen product
+    const buyerFinanceQuote = await scoreService.buyerFinanceQuoteForProduct({
+      buyerId,
+      productType,
+      tenure: loanTenure,
+      purchaseAmount: Number(invoice.amount),
+      partPayment: downPaymentAmount,
+    });
+    console.log("Buyer finance quote for product:", JSON.stringify(buyerFinanceQuote, null, 2));
+    if (buyerFinanceQuote.product.status === "failed") {
+      // return failed response
+      return {
+        success: false,
+        message: buyerFinanceQuote.product.message,
+      };
+    }
+    const product = buyerFinanceQuote.product;
+    if (!product) {
+      throw new Error("Product not found");
+    }
+    if (product.status === "failed") {
+      throw new Error(product.message);
+    }
+    const updatedInvoice = await prisma.invoice.update({
+      where: { id: id },
+      data: updateData,
+      include: {
+        items: true,
+      },
+    });
+
+    // create invoice mandate
+    //generate short alphanumeric referenceId (max 24 characters)
+    const referenceId = generateShortReferenceId();
+    const loanResult = await loanService.createLoan({
+      buyerId: buyerId,
+      invoiceId: id,
+      loanAmount: product.financeAmount,
+      loanTenure: product.tenure,
+      loanStartDate: new Date(),
+      loanStatus: LoanStatus.Active,
+      loanType: LoanType.Personal,
+      loanInterestRate: product.productRate ?? Number(INTERST_RATE),
+      loanPurpose: "Loan",
+      purchaseAmount: Number(invoice.amount),
+      downPaymentAmount: downPaymentAmount,
+      merchantId: invoice.merchantId ?? undefined,
+      referenceNumber: referenceId,
+      installmentType: installmentType,
+      monthlyRepayment: product.periodicInstallment,
+      product: product,
+    });
+
+    if (!loanResult.success) {
+      throw new Error(loanResult.error || "Failed to create loan");
+    }
+    // if FIRST_INSTALLMENT_NOW is true, Make the first installment payment now
+    //TODO: Implement this
+    // if (FIRST_INSTALLMENT_NOW) {
+    //   await this.makeFirstInstallmentPayment(loanResult.data?.id as string);
+    // }
+
+    // credit merchant wallet with the invoice amount
+    // TODO: Implement this
+    await merchantTransactionService.createMerchantTransaction({
+      merchantId: invoice.merchantId ?? "",
+      invoiceRef: invoice.id,
+      credit: Number(invoice.amount),
+      debit: 0,
+      transactionType: MerchantTransactionType.InvoiceCredit,
+      description: "Loan invoice created and paid",
+      status: TransactionStatus.Completed,
+      transactionDate: new Date(),
+    });
+    await revenueService.createRevenue({
+      merchantId: invoice.merchantId ?? "",
+      credit: Number(invoice.amount),
+      debit: 0,
+      type: RevenueType.Settlement,
+      description: "Loan invoice created and paid",
+      referenceIds: [invoice.id],
+      transactionDate: new Date(),
+    });
+    return {
+      success: true,
+      message: "Loan invoice created successfully",
+      data: {
+        invoice: updatedInvoice,
+        loan: loanResult.data,
+      },
+    };
+  }
+
   async approveAndCreateLoanInvoiceSplitr(
     id: string,
     installmentType: LoanInstallmentType,
