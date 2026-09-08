@@ -92,6 +92,8 @@ export interface CreateLoanScheduleInput {
   actualPayment?: number;
   expectedBalance?: number;
   expectedClosingBalance?: number;
+  status?: LoanScheduleStatus;
+  isExecuted?: boolean;
 }
 
 export interface UpdateLoanScheduleInput {
@@ -274,41 +276,98 @@ export class LoanService {
         },
       });
 
-      // Create loan schedules
-      const installmentType = input.installmentType ?? LoanInstallmentType.Monthly;
+      // Create loan schedules from product installments when available;
+      // otherwise fall back to tenure-based equal repayment cycles.
+      const product = input.product;
+      const installments = product?.installments;
       let expectedBalance = input.loanAmount;
-      let nextcycle = getNextCycleByInstallmentType(
-        new Date(loanStartDate).toISOString(),
-        installmentType
-      );
-      for (let i = 1; i <= input.loanTenure; i++) {
-        const cycleEnd =
-          installmentType === LoanInstallmentType.OneTime
-            ? (loanEndDate ?? nextcycle)
-            : getDayBeforeNextCycleByInstallmentType(
-                new Date(nextcycle).toISOString(),
-                installmentType
-              );
 
+      if (installments && installments.length > 0) {
+        const cycleType = product?.productType === "BI_WEEKLY" ? "BiWeekly" : "Monthly";
+        const today = new Date(loanStartDate);
+        console.log("I am executing the installment record");
+
+        // First installment is due immediately: start and end are today
+        const [firstInstallment, ...remainingInstallments] = installments;
+        const firstPayment = Number(firstInstallment.amount);
+        let expectedBalanceCursor = product?.financeAmount;
         this.createLoanSchedule({
           loanId: loan.id,
-          start: nextcycle,
-          end: cycleEnd,
-          expectedPayment: Number(input.monthlyRepayment),
-          expectedBalance: expectedBalance,
-          expectedClosingBalance:
-            expectedBalance +
-            Number(loan.loanInterestRate) * 0.01 * expectedBalance -
-            Number(input.monthlyRepayment),
+          start: today,
+          end: today,
+          status: LoanScheduleStatus.Closed,
+          actualPayment: firstPayment - Number(product?.partPayment),
+          expectedPayment: firstPayment - Number(product?.partPayment),
+          expectedBalance: expectedBalanceCursor,
+          isExecuted: true,
+          expectedClosingBalance: expectedBalanceCursor - Number(product?.periodicInstallment),
         });
-        nextcycle = getNextCycleByInstallmentType(
-          new Date(nextcycle).toISOString(),
+        expectedBalanceCursor = expectedBalanceCursor - Number(product?.periodicInstallment);
+
+        // Subsequent installments begin on the next product-type interval from today
+        // (BI_WEEKLY → +14 days, MONTHLY_FLEX → +1 month) and continue on that cadence
+        console.log(cycleType);
+        let nextcycle = new Date(today);
+        console.log(nextcycle);
+        for (const installment of remainingInstallments) {
+          const expectedPayment = Number(installment.amount);
+          const cycleEnd = getDayBeforeNextCycleByInstallmentType(
+            new Date(nextcycle).toISOString(),
+            cycleType
+          );
+
+          this.createLoanSchedule({
+            loanId: loan.id,
+            start: nextcycle,
+            end: cycleEnd,
+            expectedPayment,
+            expectedBalance: expectedBalanceCursor,
+            expectedClosingBalance: expectedBalanceCursor - Number(product?.periodicInstallment),
+          });
+
+          nextcycle = getNextCycleByInstallmentType(new Date(nextcycle).toISOString(), cycleType);
+          expectedBalanceCursor = expectedBalanceCursor - Number(product?.periodicInstallment);
+        }
+
+        expectedBalance = expectedBalanceCursor;
+      } else {
+        console.log("input.installmentType", input.installmentType);
+
+        console.log("I skip the installment recrd");
+        const installmentType = input.installmentType ?? LoanInstallmentType.Monthly;
+        let nextcycle = getNextCycleByInstallmentType(
+          new Date(loanStartDate).toISOString(),
           installmentType
         );
-        expectedBalance =
-          expectedBalance +
-          Number(loan.loanInterestRate) * 0.01 * expectedBalance -
-          Number(input.monthlyRepayment);
+        for (let i = 1; i <= input.loanTenure; i++) {
+          const cycleEnd =
+            installmentType === LoanInstallmentType.OneTime
+              ? (loanEndDate ?? nextcycle)
+              : getDayBeforeNextCycleByInstallmentType(
+                  new Date(nextcycle).toISOString(),
+                  installmentType
+                );
+
+          this.createLoanSchedule({
+            loanId: loan.id,
+            start: nextcycle,
+            end: cycleEnd,
+            expectedPayment: Number(input.monthlyRepayment),
+            expectedBalance: expectedBalance,
+            expectedClosingBalance:
+              expectedBalance +
+              Number(loan.loanInterestRate) * 0.01 * expectedBalance -
+              Number(input.monthlyRepayment),
+          });
+          nextcycle = getNextCycleByInstallmentType(
+            new Date(nextcycle).toISOString(),
+            installmentType
+          );
+          expectedBalance =
+            expectedBalance +
+            Number(loan.loanInterestRate) * 0.01 * expectedBalance -
+            Number(input.monthlyRepayment);
+        }
       }
       if (input.loanStatus === LoanStatus.Active) {
         await this.createLoanTransaction({
@@ -740,6 +799,8 @@ export class LoanService {
           actualPayment: input.actualPayment,
           expectedBalance: input.expectedBalance || 0,
           expectedClosingBalance: input.expectedClosingBalance || 0,
+          isExecuted: input.isExecuted || false,
+          status: input.status || LoanScheduleStatus.Open,
         },
         include: {
           loan: {

@@ -1944,9 +1944,12 @@ export class InvoiceService {
     productType: ProductType,
     loanTenure: number,
     downPaymentAmount: number,
-    installmentType: LoanInstallmentType,
     buyerId: string
   ) {
+    const installmentType =
+      productType === ProductType.MONTHLY_FLEX
+        ? LoanInstallmentType.Monthly
+        : LoanInstallmentType.BiWeekly;
     const buyer = await prisma.buyer.findUnique({
       where: { id: buyerId },
     });
@@ -1955,6 +1958,13 @@ export class InvoiceService {
     }
     const invoice = await prisma.invoice.findUnique({
       where: { id: id },
+      select: {
+        id: true,
+        amount: true,
+        merchantId: true,
+        customerPhoneNumber: true,
+        status: true,
+      },
     });
     if (!invoice) {
       throw new Error("Invoice not found");
@@ -1970,6 +1980,7 @@ export class InvoiceService {
       customerEmail: buyer.email,
       customerPhoneNumber: buyer.phoneNumber ?? invoice.customerPhoneNumber,
       productType: productType,
+      installmentType: installmentType,
     };
 
     // Verify the buyer qualifies based on spending power and finance for the chosen product

@@ -54,6 +54,13 @@ router.post(
   invoiceController.approveAndCreateLoanSplitr,
 );
 
+// Approve invoice and create loan (product finance quote flow)
+router.post(
+  '/:id/approve-and-create-loan-finance',
+  authenticateJWT,
+  invoiceController.approveAndCreateLoanFinance,
+);
+
 // Validate post-transaction (mandate + direct debit) for invoice
 router.get(
   '/:id/post-transaction-validation',

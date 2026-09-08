@@ -1,7 +1,13 @@
-import { Request, Response } from 'express';
-import { invoiceService, CreateInvoiceInput, UpdateInvoiceInput } from '../services/invoiceService';
+import { Request, Response } from "express";
+import { invoiceService, CreateInvoiceInput, UpdateInvoiceInput } from "../services/invoiceService";
 
-import { InvoiceStatus, InvoiceType, LoanReturnStatus } from '@prisma/client';
+import {
+  InvoiceStatus,
+  InvoiceType,
+  LoanInstallmentType,
+  LoanReturnStatus,
+  ProductType,
+} from "@prisma/client";
 
 /**
  * @swagger
@@ -568,6 +574,79 @@ import { InvoiceStatus, InvoiceType, LoanReturnStatus } from '@prisma/client';
  *         description: Internal server error
  */
 
+/**
+ * @swagger
+ * /api/v1/invoices/{id}/approve-and-create-loan-finance:
+ *   post:
+ *     summary: Approve invoice and create loan using product finance quote
+ *     description: |
+ *       Scores the authenticated buyer against the chosen productType and tenure,
+ *       verifies they qualify for the purchase, marks the invoice as paid, and creates
+ *       a loan with schedules derived from the finance quote installments.
+ *     tags: [Invoice]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Invoice ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - productType
+ *               - loanTenure
+ *               - downPaymentAmount
+ *             properties:
+ *               productType:
+ *                 type: string
+ *                 enum: [BI_WEEKLY, MONTHLY_FLEX]
+ *                 example: BI_WEEKLY
+ *               loanTenure:
+ *                 type: integer
+ *                 description: >
+ *                   Product tenure. Must be 4 or 6 for BI_WEEKLY, or 3–12 for MONTHLY_FLEX.
+ *                 example: 6
+ *               downPaymentAmount:
+ *                 type: number
+ *                 description: Part payment / down payment amount
+ *                 example: 200
+ *     responses:
+ *       200:
+ *         description: Invoice approved and loan created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     invoice:
+ *                       type: object
+ *                     loan:
+ *                       type: object
+ *       400:
+ *         description: Validation failed, buyer does not qualify, or loan creation failed
+ *       401:
+ *         description: Unauthorized - Buyer not authenticated
+ *       404:
+ *         description: Invoice or buyer not found
+ *       500:
+ *         description: Internal server error
+ */
+
 export class InvoiceController {
   /**
    * Create a new invoice with items
@@ -580,28 +659,28 @@ export class InvoiceController {
       if (!input.customerName || !input.customerEmail || !input.customerPhoneNumber) {
         return res.status(400).json({
           success: false,
-          message: 'Customer name, email, and phone number are required',
+          message: "Customer name, email, and phone number are required",
         });
       }
 
       if (!input.dueDate) {
         return res.status(400).json({
           success: false,
-          message: 'Due date is required',
+          message: "Due date is required",
         });
       }
 
       if (!input.merchantId && !req.user?.merchantId) {
         return res.status(400).json({
           success: false,
-          message: 'Merchant ID is required',
+          message: "Merchant ID is required",
         });
       }
 
       if (!input.items || input.items.length === 0) {
         return res.status(400).json({
           success: false,
-          message: 'Invoice must have at least one item',
+          message: "Invoice must have at least one item",
         });
       }
       const result = await invoiceService.createInvoice({
@@ -609,18 +688,16 @@ export class InvoiceController {
         merchantId: input.merchantId ?? req.user?.merchantId,
       });
 
-
-
       return res.status(201).json({
         success: true,
-        message: 'Invoice created successfully',
+        message: "Invoice created successfully",
         data: result,
       });
     } catch (error: any) {
-      console.error('Error creating invoice:', error);
+      console.error("Error creating invoice:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to create invoice',
+        message: error.message || "Failed to create invoice",
       });
     }
   }
@@ -653,10 +730,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error fetching invoices:', error);
+      console.error("Error fetching invoices:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch invoices',
+        message: error.message || "Failed to fetch invoices",
       });
     }
   }
@@ -678,10 +755,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error fetching invoice:', error);
+      console.error("Error fetching invoice:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch invoice',
+        message: error.message || "Failed to fetch invoice",
       });
     }
   }
@@ -703,10 +780,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error fetching invoice:', error);
+      console.error("Error fetching invoice:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch invoice',
+        message: error.message || "Failed to fetch invoice",
       });
     }
   }
@@ -721,7 +798,7 @@ export class InvoiceController {
 
       const result = await invoiceService.getInvoicesByMerchantId(
         merchantId,
-        status as InvoiceStatus | undefined,
+        status as InvoiceStatus | undefined
       );
 
       if (!result.success) {
@@ -733,10 +810,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error fetching merchant invoices:', error);
+      console.error("Error fetching merchant invoices:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch merchant invoices',
+        message: error.message || "Failed to fetch merchant invoices",
       });
     }
   }
@@ -751,7 +828,7 @@ export class InvoiceController {
 
       const result = await invoiceService.getInvoicesByBuyerId(
         buyerId,
-        status as InvoiceStatus | undefined,
+        status as InvoiceStatus | undefined
       );
 
       if (!result.success) {
@@ -763,10 +840,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error fetching buyer invoices:', error);
+      console.error("Error fetching buyer invoices:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch buyer invoices',
+        message: error.message || "Failed to fetch buyer invoices",
       });
     }
   }
@@ -781,13 +858,13 @@ export class InvoiceController {
       if (!req.user?.email) {
         return res.status(401).json({
           success: false,
-          message: 'User email not found. Please log in.',
+          message: "User email not found. Please log in.",
         });
       }
 
       const result = await invoiceService.getInvoicesByCustomerEmail(
         req.user.email,
-        status as InvoiceStatus | undefined,
+        status as InvoiceStatus | undefined
       );
 
       if (!result.success) {
@@ -799,10 +876,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error fetching invoices by email:', error);
+      console.error("Error fetching invoices by email:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch invoices by email',
+        message: error.message || "Failed to fetch invoices by email",
       });
     }
   }
@@ -836,10 +913,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error updating invoice:', error);
+      console.error("Error updating invoice:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to update invoice',
+        message: error.message || "Failed to update invoice",
       });
     }
   }
@@ -855,7 +932,7 @@ export class InvoiceController {
       if (!status || !Object.values(InvoiceStatus).includes(status)) {
         return res.status(400).json({
           success: false,
-          message: 'Valid status is required (Pending, Paid, or Cancelled)',
+          message: "Valid status is required (Pending, Paid, or Cancelled)",
         });
       }
 
@@ -870,10 +947,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error updating invoice status:', error);
+      console.error("Error updating invoice status:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to update invoice status',
+        message: error.message || "Failed to update invoice status",
       });
     }
   }
@@ -895,10 +972,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error deleting invoice:', error);
+      console.error("Error deleting invoice:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to delete invoice',
+        message: error.message || "Failed to delete invoice",
       });
     }
   }
@@ -920,10 +997,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error calculating invoice total:', error);
+      console.error("Error calculating invoice total:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate invoice total',
+        message: error.message || "Failed to calculate invoice total",
       });
     }
   }
@@ -945,10 +1022,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error fetching merchant stats:', error);
+      console.error("Error fetching merchant stats:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch merchant statistics',
+        message: error.message || "Failed to fetch merchant statistics",
       });
     }
   }
@@ -966,14 +1043,14 @@ export class InvoiceController {
       if (!loanTenure || !downPaymentAmount) {
         return res.status(400).json({
           success: false,
-          message: 'loanTenure and downPaymentAmount are required',
+          message: "loanTenure and downPaymentAmount are required",
         });
       }
 
       if (!buyerId) {
         return res.status(401).json({
           success: false,
-          message: 'Buyer ID not found. Please log in as a buyer.',
+          message: "Buyer ID not found. Please log in as a buyer.",
         });
       }
 
@@ -982,7 +1059,7 @@ export class InvoiceController {
         loanTenure,
         downPaymentAmount,
         buyerId,
-        Boolean(regenerateMandate),
+        Boolean(regenerateMandate)
       );
 
       if (!result.success) {
@@ -995,10 +1072,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error approving invoice and creating loan:', error);
+      console.error("Error approving invoice and creating loan:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to approve invoice and create loan',
+        message: error.message || "Failed to approve invoice and create loan",
       });
     }
   }
@@ -1011,10 +1088,11 @@ export class InvoiceController {
       const { id } = req.params;
       const { buyerId, installmentType, loanTenure, downPaymentAmount, loanAmount } = req.body;
 
-      if (!buyerId || !installmentType || !loanTenure || downPaymentAmount === undefined || !loanAmount) {
+      if (!buyerId || !loanTenure || downPaymentAmount === undefined || !loanAmount) {
         return res.status(400).json({
           success: false,
-          message: 'buyerId, installmentType, loanTenure, downPaymentAmount, and loanAmount are required',
+          message:
+            "buyerId, installmentType, loanTenure, downPaymentAmount, and loanAmount are required",
         });
       }
 
@@ -1024,7 +1102,7 @@ export class InvoiceController {
         Number(loanTenure),
         Number(downPaymentAmount),
         Number(loanAmount),
-        buyerId,
+        buyerId
       );
 
       if (!result.success) {
@@ -1033,13 +1111,98 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      const message = error.message || 'Failed to approve invoice and create loan';
+      const message = error.message || "Failed to approve invoice and create loan";
 
-      if (message === 'Buyer not found' || message === 'Invoice not found') {
+      if (message === "Buyer not found" || message === "Invoice not found") {
         return res.status(404).json({ success: false, message });
       }
 
-      console.error('Error approving invoice and creating loan (Splitr):', error);
+      console.error("Error approving invoice and creating loan (Splitr):", error);
+      return res.status(500).json({ success: false, message });
+    }
+  }
+
+  /**
+   * Approve invoice and create loan using product finance quote
+   */
+  async approveAndCreateLoanFinance(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { productType, loanTenure, downPaymentAmount } = req.body ?? {};
+      const buyerId = req.user?.buyerId;
+
+      if (!buyerId) {
+        return res.status(401).json({
+          success: false,
+          message: "Buyer ID not found. Please log in as a buyer.",
+        });
+      }
+
+      const normalisedProductType =
+        typeof productType === "string"
+          ? productType.trim().toUpperCase().replace(/-/g, "_")
+          : undefined;
+
+      if (normalisedProductType !== "BI_WEEKLY" && normalisedProductType !== "MONTHLY_FLEX") {
+        return res.status(400).json({
+          success: false,
+          message: "productType is required and must be either BI_WEEKLY or MONTHLY_FLEX",
+        });
+      }
+
+      if (typeof loanTenure !== "number" || !Number.isInteger(loanTenure) || loanTenure <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "loanTenure is required and must be a positive integer",
+        });
+      }
+
+      if (normalisedProductType === "BI_WEEKLY" && loanTenure !== 4 && loanTenure !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: "loanTenure must be either 4 or 6 for BI_WEEKLY",
+        });
+      }
+
+      if (normalisedProductType === "MONTHLY_FLEX" && (loanTenure < 3 || loanTenure > 12)) {
+        return res.status(400).json({
+          success: false,
+          message: "loanTenure must be between 3 and 12 for MONTHLY_FLEX",
+        });
+      }
+
+      if (
+        typeof downPaymentAmount !== "number" ||
+        !Number.isFinite(downPaymentAmount) ||
+        downPaymentAmount < 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "downPaymentAmount is required and must be a number of zero or more",
+        });
+      }
+
+      const result = await invoiceService.approveAndCreateLoanInvoiceFinance(
+        id,
+        normalisedProductType as ProductType,
+        loanTenure,
+        downPaymentAmount,
+        buyerId
+      );
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      const message = error.message || "Failed to approve invoice and create loan";
+
+      if (message === "Buyer not found" || message === "Invoice not found") {
+        return res.status(404).json({ success: false, message });
+      }
+
+      console.error("Error approving invoice and creating loan (finance):", error);
       return res.status(500).json({ success: false, message });
     }
   }
@@ -1131,7 +1294,7 @@ export class InvoiceController {
       if (!referenceId && !invoiceId) {
         return res.status(400).json({
           success: false,
-          message: 'Either referenceId or invoiceId is required',
+          message: "Either referenceId or invoiceId is required",
         });
       }
 
@@ -1147,13 +1310,13 @@ export class InvoiceController {
 
       return res.status(200).json({
         success: true,
-        message: 'Mandate validated successfully',
+        message: "Mandate validated successfully",
         data: result,
       });
     } catch (error: any) {
       return res.status(400).json({
         success: false,
-        message: error.message || 'Failed to validate mandate',
+        message: error.message || "Failed to validate mandate",
         error: error.message,
       });
     }
@@ -1261,7 +1424,7 @@ export class InvoiceController {
       if (!id) {
         return res.status(400).json({
           success: false,
-          message: 'Invoice ID is required',
+          message: "Invoice ID is required",
         });
       }
 
@@ -1269,10 +1432,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error initiating upfront payment:', error);
+      console.error("Error initiating upfront payment:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to initiate upfront payment',
+        message: error.message || "Failed to initiate upfront payment",
         error: error.message,
       });
     }
@@ -1355,7 +1518,7 @@ export class InvoiceController {
       if (!invoiceId && !referenceId) {
         return res.status(400).json({
           success: false,
-          message: 'Either invoiceId or referenceId is required',
+          message: "Either invoiceId or referenceId is required",
         });
       }
 
@@ -1374,10 +1537,10 @@ export class InvoiceController {
 
       return res.status(200).json(result);
     } catch (error: any) {
-      console.error('Error validating mandate and creating loan:', error);
+      console.error("Error validating mandate and creating loan:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to validate mandate and create loan',
+        message: error.message || "Failed to validate mandate and create loan",
         error: error.message,
       });
     }
@@ -1454,12 +1617,12 @@ export class InvoiceController {
       if (!id) {
         return res.status(400).json({
           success: false,
-          message: 'Invoice ID is required',
+          message: "Invoice ID is required",
         });
       }
       const {
         postTransactionValidationService,
-      } = require('../services/postTransactionValidationService');
+      } = require("../services/postTransactionValidationService");
       const result = await postTransactionValidationService.validateInvoicePostTransaction(id);
       if (!result.success) {
         return res.status(400).json(result);
@@ -1468,7 +1631,7 @@ export class InvoiceController {
     } catch (error: any) {
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to validate post-transaction status',
+        message: error.message || "Failed to validate post-transaction status",
       });
     }
   }
@@ -1487,7 +1650,7 @@ export class InvoiceController {
    *             type: object
    *             required:
    *               - approvalDate
- *               - loanStartDate
+   *               - loanStartDate
    *             properties:
    *               downpayment:
    *                 type: number
@@ -1499,10 +1662,10 @@ export class InvoiceController {
    *                 type: string
    *                 format: date-time
    *                 example: "2026-05-01T00:00:00.000Z"
- *               loanStartDate:
- *                 type: string
- *                 format: date-time
- *                 example: "2026-04-10T00:00:00.000Z"
+   *               loanStartDate:
+   *                 type: string
+   *                 format: date-time
+   *                 example: "2026-04-10T00:00:00.000Z"
    *               currentBalance:
    *                 type: number
    *                 default: 0
@@ -1548,7 +1711,7 @@ export class InvoiceController {
    *                     approvalDate:
    *                       type: string
    *                       format: date-time
- *                     loanStartDate:
+   *                     loanStartDate:
    *                       type: string
    *                       format: date-time
    *                     totalDeductions:
@@ -1573,7 +1736,7 @@ export class InvoiceController {
       if (!approvalDate || !loanStartDate) {
         return res.status(400).json({
           success: false,
-          message: 'approvalDate and loanStartDate are required',
+          message: "approvalDate and loanStartDate are required",
         });
       }
 
@@ -1595,7 +1758,7 @@ export class InvoiceController {
     } catch (error: any) {
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate refund',
+        message: error.message || "Failed to calculate refund",
       });
     }
   }
@@ -1684,7 +1847,7 @@ export class InvoiceController {
    *                         approvalDate:
    *                           type: string
    *                           format: date-time
- *                         loanStartDate:
+   *                         loanStartDate:
    *                           type: string
    *                           format: date-time
    *                         totalDeductions:
@@ -1703,14 +1866,14 @@ export class InvoiceController {
       if (!id) {
         return res.status(400).json({
           success: false,
-          message: 'Invoice ID is required',
+          message: "Invoice ID is required",
         });
       }
 
       const result = await invoiceService.calculateRefundForInvoice(id);
 
       if (!result.success) {
-        const statusCode = /not found/i.test(result.message || '') ? 404 : 400;
+        const statusCode = /not found/i.test(result.message || "") ? 404 : 400;
         return res.status(statusCode).json(result);
       }
 
@@ -1718,7 +1881,7 @@ export class InvoiceController {
     } catch (error: any) {
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to calculate refund for invoice',
+        message: error.message || "Failed to calculate refund for invoice",
       });
     }
   }
@@ -1790,14 +1953,14 @@ export class InvoiceController {
       if (!id) {
         return res.status(400).json({
           success: false,
-          message: 'Invoice ID is required',
+          message: "Invoice ID is required",
         });
       }
 
       if (!bankCode || !accountNumber) {
         return res.status(400).json({
           success: false,
-          message: 'bankCode and accountNumber are required',
+          message: "bankCode and accountNumber are required",
         });
       }
 
@@ -1808,7 +1971,7 @@ export class InvoiceController {
       });
 
       if (!result.success) {
-        const statusCode = /not found/i.test(result.message || '') ? 404 : 400;
+        const statusCode = /not found/i.test(result.message || "") ? 404 : 400;
         return res.status(statusCode).json(result);
       }
 
@@ -1816,7 +1979,7 @@ export class InvoiceController {
     } catch (error: any) {
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to process buyer fund withdrawal',
+        message: error.message || "Failed to process buyer fund withdrawal",
       });
     }
   }
