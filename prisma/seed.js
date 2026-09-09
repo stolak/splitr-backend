@@ -1178,7 +1178,7 @@ async function main() {
         code: "MONTHLY_FLEX_3",
         productName: "Monthly Flex - 3 months",
         tenure: 3,
-        minimumFinance: 200,
+        minimumFinance: 150,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1187,7 +1187,7 @@ async function main() {
         code: "MONTHLY_FLEX_4",
         productName: "Monthly Flex - 4 months",
         tenure: 4,
-        minimumFinance: 250,
+        minimumFinance: 200,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1196,7 +1196,7 @@ async function main() {
         code: "MONTHLY_FLEX_5",
         productName: "Monthly Flex - 5 months",
         tenure: 5,
-        minimumFinance: 300,
+        minimumFinance: 250,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1205,7 +1205,7 @@ async function main() {
         code: "MONTHLY_FLEX_6",
         productName: "Monthly Flex - 6 months",
         tenure: 6,
-        minimumFinance: 350,
+        minimumFinance: 300,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1214,7 +1214,7 @@ async function main() {
         code: "MONTHLY_FLEX_7",
         productName: "Monthly Flex - 7 months",
         tenure: 7,
-        minimumFinance: 400,
+        minimumFinance: 350,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1223,7 +1223,7 @@ async function main() {
         code: "MONTHLY_FLEX_8",
         productName: "Monthly Flex - 8 months",
         tenure: 8,
-        minimumFinance: 450,
+        minimumFinance: 400,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1232,7 +1232,7 @@ async function main() {
         code: "MONTHLY_FLEX_9",
         productName: "Monthly Flex - 9 months",
         tenure: 9,
-        minimumFinance: 500,
+        minimumFinance: 450,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1241,7 +1241,7 @@ async function main() {
         code: "MONTHLY_FLEX_10",
         productName: "Monthly Flex - 10 months",
         tenure: 10,
-        minimumFinance: 550,
+        minimumFinance: 500,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1250,7 +1250,7 @@ async function main() {
         code: "MONTHLY_FLEX_11",
         productName: "Monthly Flex - 11 months",
         tenure: 11,
-        minimumFinance: 600,
+        minimumFinance: 550,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1259,7 +1259,7 @@ async function main() {
         code: "MONTHLY_FLEX_12",
         productName: "Monthly Flex - 12 months",
         tenure: 12,
-        minimumFinance: 650,
+        minimumFinance: 600,
         maximumFinance: 15000,
         rate: 12.99,
       },
@@ -1281,6 +1281,63 @@ async function main() {
     }
 
     console.log("✅ Product configurations seeded successfully");
+
+    // Seed invoice categories
+    const invoiceCategories = [
+      {
+        name: "Health",
+        description: "Medical, pharmacy, and wellness purchases",
+        multiplier: 0.9,
+      },
+      {
+        name: "Education",
+        description: "Tuition, courses, and learning materials",
+        multiplier: 0.95,
+      },
+      {
+        name: "Furniture",
+        description: "Home and office furniture",
+        multiplier: 1.0,
+      },
+      {
+        name: "Electronics",
+        description: "Consumer electronics and gadgets",
+        multiplier: 1.05,
+      },
+      {
+        name: "Travelling",
+        description: "Travel, flights, hotels, and tourism",
+        multiplier: 1.1,
+      },
+      {
+        name: "Fashion",
+        description: "Clothing, accessories, and apparel",
+        multiplier: 1.1,
+      },
+      {
+        name: "Automotive",
+        description: "Vehicle parts, services, and accessories",
+        multiplier: 1.15,
+      },
+      {
+        name: "Services",
+        description: "General professional and personal services",
+        multiplier: 1.0,
+      },
+    ];
+
+    for (const category of invoiceCategories) {
+      await prisma.invoiceCategory.upsert({
+        where: { name: category.name },
+        update: {
+          description: category.description,
+          multiplier: category.multiplier,
+        },
+        create: category,
+      });
+    }
+
+    console.log("✅ Invoice categories seeded successfully");
 
     console.log("\n🎉 Database seeding completed successfully!");
     console.log("\n📋 Sample Data Created:");
@@ -1360,6 +1417,9 @@ async function main() {
     console.log("\n🛍️ Product Configurations:");
     console.log("  - BI_WEEKLY: PAY_IN_4 (tenure 4), PAY_IN_6 (tenure 6)");
     console.log("  - MONTHLY_FLEX: MONTHLY_FLEX_3 through MONTHLY_FLEX_12 (tenure 3–12)");
+    console.log("\n🏷️ Invoice Categories:");
+    console.log("  - Health (0.9), Education (0.95), Furniture (1.0), Services (1.0)");
+    console.log("  - Electronics (1.05), Travelling (1.1), Fashion (1.1), Automotive (1.15)");
   } catch (error) {
     console.error("❌ Error during seeding:", error);
     throw error;

@@ -586,6 +586,11 @@ export interface FinanceResult {
 
   message: string;
 
+  /** Short end-user facing availability headline for this plan */
+  availability: string;
+  /** Detailed end-user facing explanation (avoid the phrase "spending power") */
+  availabilityMessage: string;
+
   /** Which calculation produced this result, set when routed by product type */
   productType?: FinancingProductType;
 
@@ -2032,14 +2037,148 @@ export class ScoringService {
    * while the financed amount stays at or above `minSp`, which is what makes the
    * adjustment impossible when the spending capacity sits below the product floor.
    */
+  private formatFinanceMoney(amount: number): string {
+    const rounded = Math.round(amount * 100) / 100;
+    if (Number.isInteger(rounded)) {
+      return `$${rounded}`;
+    }
+    return `$${rounded.toFixed(2)}`;
+  }
+
+  private financePlanLabel(productType: FinancingProductType, tenor: number): string {
+    if (productType === "BI_WEEKLY") {
+      return `Pay in ${tenor}`;
+    }
+    return `${tenor}-month Monthly Flex`;
+  }
+
+  private financePlanShortLabel(productType: FinancingProductType, tenor: number): string {
+    if (productType === "BI_WEEKLY") {
+      return `Pay in ${tenor} plan`;
+    }
+    return `${tenor}-month plan`;
+  }
+
+  private buildFinanceAvailability(params: {
+    productType: FinancingProductType;
+    tenor: number;
+    purchaseAmount: number;
+    financeAmount: number;
+    minSp?: number;
+    maxSp?: number;
+    spendingCapacity?: number;
+    reason:
+      | "passed"
+      | "purchase_below_min"
+      | "finance_below_min"
+      | "finance_above_max"
+      | "capacity_below_min"
+      | "capacity_exceeded_adjustable"
+      | "invalid";
+    invalidMessage?: string;
+  }): Pick<FinanceResult, "availability" | "availabilityMessage"> {
+    const {
+      productType,
+      tenor,
+      purchaseAmount,
+      financeAmount,
+      minSp,
+      maxSp,
+      spendingCapacity,
+      reason,
+      invalidMessage,
+    } = params;
+
+    const label = this.financePlanLabel(productType, tenor);
+    const shortLabel = this.financePlanShortLabel(productType, tenor);
+    const money = (value: number) => this.formatFinanceMoney(value);
+
+    switch (reason) {
+      case "passed": {
+        return {
+          availability: `${label} is available.`,
+          availabilityMessage:
+            spendingCapacity !== undefined
+              ? `Your ${money(financeAmount)} financing amount meets this plan’s minimum and is within the amount available for this plan.`
+              : `Your ${money(financeAmount)} financing amount meets the minimum required for this plan.`,
+        };
+      }
+      case "purchase_below_min":
+        return {
+          availability: `${label} isn’t available for this purchase.`,
+          availabilityMessage:
+            `It requires a minimum Financing Amount of ${money(minSp ?? 0)}, ` +
+            `but your purchase amount is ${money(purchaseAmount)}.`,
+        };
+      case "finance_below_min": {
+        const maximumPartPayment = Math.max(0, purchaseAmount - (minSp ?? 0));
+        if (maximumPartPayment <= 0) {
+          return {
+            availability: `Finance ${money(minSp ?? 0)} to use this ${shortLabel}.`,
+            availabilityMessage:
+              `This plan requires a minimum Financing Amount of ${money(minSp ?? 0)}, ` +
+              `so the full purchase amount would need to be financed.`,
+          };
+        }
+        return {
+          availability: `Finance at least ${money(minSp ?? 0)} to use this ${shortLabel}.`,
+          availabilityMessage:
+            `You’re currently financing ${money(financeAmount)}. ` +
+            `Reduce your Part Payment to ${money(maximumPartPayment)} or less to make this option available.`,
+        };
+      }
+      case "finance_above_max":
+        return {
+          availability: `${label} isn’t available for this purchase.`,
+          availabilityMessage:
+            `The maximum amount available to finance with this plan is ${money(maxSp ?? 0)}. ` +
+            `Increase your Part Payment so the financed amount is within that limit.`,
+        };
+      case "capacity_below_min":
+        return {
+          availability: `${label} isn’t available for this purchase.`,
+          availabilityMessage:
+            `The maximum amount available to finance with this plan is ${money(spendingCapacity ?? 0)}, ` +
+            `which is below its ${money(minSp ?? 0)} minimum financing amount.`,
+        };
+      case "capacity_exceeded_adjustable": {
+        const requiredPartPayment = Math.max(0, purchaseAmount - (spendingCapacity ?? 0));
+        return {
+          availability: `${label} isn’t available for this purchase.`,
+          availabilityMessage:
+            `The maximum amount available to finance with this plan is ${money(spendingCapacity ?? 0)}. ` +
+            `Increase your Part Payment to at least ${money(requiredPartPayment)} to make this option available.`,
+        };
+      }
+      case "invalid":
+      default:
+        return {
+          availability: `${label} isn’t available for this purchase.`,
+          availabilityMessage:
+            invalidMessage ??
+            `This plan isn’t available for the current purchase details.`,
+        };
+    }
+  }
+
   private buildSpendingCapacityFailure(params: {
     purchaseAmount: number;
     partPayment: number;
     financeAmount: number;
     minSp: number;
     spendingCapacity: number;
+    productType: FinancingProductType;
+    tenor: number;
   }): FinanceResult {
-    const { purchaseAmount, partPayment, financeAmount, minSp, spendingCapacity } = params;
+    const {
+      purchaseAmount,
+      partPayment,
+      financeAmount,
+      minSp,
+      spendingCapacity,
+      productType,
+      tenor,
+    } = params;
 
     const requiredPartPayment = Math.max(0, purchaseAmount - spendingCapacity);
     const maximumPartPaymentAllowed = Math.max(0, purchaseAmount - minSp);
@@ -2048,6 +2187,18 @@ export class ScoringService {
     const preamble =
       `Transaction failed. The finance amount of ${financeAmount.toFixed(2)} cannot be ` +
       `greater than your spending capacity of ${spendingCapacity.toFixed(2)}.`;
+
+    const availabilityFields = this.buildFinanceAvailability({
+      productType,
+      tenor,
+      purchaseAmount,
+      financeAmount,
+      minSp,
+      spendingCapacity,
+      reason: partPaymentAdjustmentPossible
+        ? "capacity_exceeded_adjustable"
+        : "capacity_below_min",
+    });
 
     return {
       status: "failed",
@@ -2059,6 +2210,7 @@ export class ScoringService {
       maximumPartPaymentAllowed,
       additionalPartPaymentRequired: Math.max(0, requiredPartPayment - partPayment),
       partPaymentAdjustmentPossible,
+      ...availabilityFields,
       message: partPaymentAdjustmentPossible
         ? `${preamble} Increase your part payment to at least ` +
           `${requiredPartPayment.toFixed(2)} (an additional ` +
@@ -2072,9 +2224,22 @@ export class ScoringService {
   }
 
   async calculateFinance(input: FinanceInput): Promise<FinanceResult> {
+    const productType: FinancingProductType = "BI_WEEKLY";
     const { purchaseAmount: pA, tenor } = input;
-
     const pP = input.partPayment ?? 0;
+
+    const availabilityFor = (
+      reason: Parameters<ScoringService["buildFinanceAvailability"]>[0]["reason"],
+      extras: Partial<Parameters<ScoringService["buildFinanceAvailability"]>[0]> = {}
+    ) =>
+      this.buildFinanceAvailability({
+        productType,
+        tenor: Number.isFinite(tenor) ? tenor : 0,
+        purchaseAmount: pA,
+        financeAmount: Math.max(0, pA - pP),
+        reason,
+        ...extras,
+      });
 
     if (pA <= 0) {
       return {
@@ -2083,6 +2248,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: 0,
         message: "The purchase amount must be greater than zero.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "The purchase amount must be greater than zero.",
+        }),
       };
     }
 
@@ -2093,6 +2261,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA,
         message: "Part payment cannot be negative.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "Part payment cannot be negative.",
+        }),
       };
     }
 
@@ -2103,6 +2274,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: 0,
         message: "Part payment cannot be greater than the purchase amount.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "Part payment cannot be greater than the purchase amount.",
+        }),
       };
     }
 
@@ -2113,6 +2287,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message: "Tenor must be either 4 or 6 installments.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "Tenor must be either 4 or 6 installments.",
+        }),
       };
     }
 
@@ -2133,6 +2310,10 @@ export class ScoringService {
         message:
           `Transaction failed. No BI_WEEKLY product configuration found for a tenor of ` +
           `${tenor}, so rate, minSp and maxSp could not be resolved.`,
+        ...availabilityFor("invalid", {
+          invalidMessage:
+            `No Pay in ${tenor} product configuration was found for this purchase.`,
+        }),
       };
     }
 
@@ -2147,10 +2328,16 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message: "The minimum spending power cannot be greater than the maximum spending power.",
+        ...availabilityFor("invalid", {
+          minSp,
+          maxSp,
+          invalidMessage:
+            "This plan’s minimum financing amount cannot be greater than its maximum financing amount.",
+        }),
       };
     }
 
-    // The purchase itself must reach the minimum spending power
+    // The purchase itself must reach the minimum financing amount
     if (pA < minSp) {
       return {
         status: "failed",
@@ -2160,12 +2347,13 @@ export class ScoringService {
         message:
           `Transaction failed. The purchase amount of ${pA.toFixed(2)} ` +
           `is below the minimum spending power of ${minSp.toFixed(2)}.`,
+        ...availabilityFor("purchase_below_min", { minSp, maxSp }),
       };
     }
 
     const fA = pA - pP;
 
-    // Too little part payment: financed amount exceeds the spending power ceiling
+    // Too little part payment: financed amount exceeds the product ceiling
     if (fA > maxSp) {
       const minimumPartPayment = pA - maxSp;
 
@@ -2180,10 +2368,11 @@ export class ScoringService {
           `${minimumPartPayment.toFixed(2)} for the financed amount to be ` +
           `within the allowed range. The maximum finance amount is ` +
           `${maxSp.toFixed(2)}.`,
+        ...availabilityFor("finance_above_max", { minSp, maxSp, financeAmount: fA }),
       };
     }
 
-    // Too much part payment: financed amount falls below the spending power floor
+    // Too much part payment: financed amount falls below the product floor
     if (fA < minSp) {
       const maximumPartPayment = Math.max(0, pA - minSp);
 
@@ -2197,6 +2386,7 @@ export class ScoringService {
           `Transaction failed. The maximum part payment you can make is ` +
           `${maximumPartPayment.toFixed(2)}. ` +
           `The financed amount must be at least ${minSp.toFixed(2)}.`,
+        ...availabilityFor("finance_below_min", { minSp, maxSp, financeAmount: fA }),
       };
     }
 
@@ -2210,6 +2400,8 @@ export class ScoringService {
         financeAmount: fA,
         minSp,
         spendingCapacity,
+        productType,
+        tenor,
       });
     }
 
@@ -2232,6 +2424,12 @@ export class ScoringService {
       periodicInstallment: pi,
       installments,
       message: "Transaction passed. The finance amount is within the allowed range.",
+      ...availabilityFor("passed", {
+        minSp,
+        maxSp,
+        spendingCapacity,
+        financeAmount: fA,
+      }),
     };
   }
 
@@ -2241,9 +2439,22 @@ export class ScoringService {
    * `monthlyRepayment` rather than a flat division of the total repayment.
    */
   async calculateFinanceForMonthlyFlex(input: MonthlyFlexFinanceInput): Promise<FinanceResult> {
+    const productType: FinancingProductType = "MONTHLY_FLEX";
     const { purchaseAmount: pA, tenor } = input;
-
     const pP = input.partPayment ?? 0;
+
+    const availabilityFor = (
+      reason: Parameters<ScoringService["buildFinanceAvailability"]>[0]["reason"],
+      extras: Partial<Parameters<ScoringService["buildFinanceAvailability"]>[0]> = {}
+    ) =>
+      this.buildFinanceAvailability({
+        productType,
+        tenor: Number.isFinite(tenor) ? tenor : 0,
+        purchaseAmount: pA,
+        financeAmount: Math.max(0, pA - pP),
+        reason,
+        ...extras,
+      });
 
     if (pA <= 0) {
       return {
@@ -2252,6 +2463,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: 0,
         message: "The purchase amount must be greater than zero.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "The purchase amount must be greater than zero.",
+        }),
       };
     }
 
@@ -2262,6 +2476,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA,
         message: "Part payment cannot be negative.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "Part payment cannot be negative.",
+        }),
       };
     }
 
@@ -2272,6 +2489,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: 0,
         message: "Part payment cannot be greater than the purchase amount.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "Part payment cannot be greater than the purchase amount.",
+        }),
       };
     }
 
@@ -2282,6 +2502,9 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message: "Tenor must be a whole number of months between 3 and 12.",
+        ...availabilityFor("invalid", {
+          invalidMessage: "Tenor must be a whole number of months between 3 and 12.",
+        }),
       };
     }
 
@@ -2305,6 +2528,10 @@ export class ScoringService {
         message:
           `Transaction failed. No MONTHLY_FLEX product configuration found for a tenor ` +
           `of ${tenor}, so rate, minSp and maxSp could not be resolved.`,
+        ...availabilityFor("invalid", {
+          invalidMessage:
+            `No ${tenor}-month Monthly Flex product configuration was found for this purchase.`,
+        }),
       };
     }
 
@@ -2319,10 +2546,16 @@ export class ScoringService {
         partPayment: pP,
         financeAmount: pA - pP,
         message: "The minimum spending power cannot be greater than the maximum spending power.",
+        ...availabilityFor("invalid", {
+          minSp,
+          maxSp,
+          invalidMessage:
+            "This plan’s minimum financing amount cannot be greater than its maximum financing amount.",
+        }),
       };
     }
 
-    // The purchase itself must reach the minimum spending power
+    // The purchase itself must reach the minimum financing amount
     if (pA < minSp) {
       return {
         status: "failed",
@@ -2332,12 +2565,13 @@ export class ScoringService {
         message:
           `Transaction failed. The purchase amount of ${pA.toFixed(2)} ` +
           `is below the minimum spending power of ${minSp.toFixed(2)}.`,
+        ...availabilityFor("purchase_below_min", { minSp, maxSp }),
       };
     }
 
     const fA = pA - pP;
 
-    // Too little part payment: financed amount exceeds the spending power ceiling
+    // Too little part payment: financed amount exceeds the product ceiling
     if (fA > maxSp) {
       const minimumPartPayment = pA - maxSp;
 
@@ -2352,10 +2586,11 @@ export class ScoringService {
           `${minimumPartPayment.toFixed(2)} for the financed amount to be ` +
           `within the allowed range. The maximum finance amount is ` +
           `${maxSp.toFixed(2)}.`,
+        ...availabilityFor("finance_above_max", { minSp, maxSp, financeAmount: fA }),
       };
     }
 
-    // Too much part payment: financed amount falls below the spending power floor
+    // Too much part payment: financed amount falls below the product floor
     if (fA < minSp) {
       const maximumPartPayment = Math.max(0, pA - minSp);
 
@@ -2369,6 +2604,7 @@ export class ScoringService {
           `Transaction failed. The maximum part payment you can make is ` +
           `${maximumPartPayment.toFixed(2)}. ` +
           `The financed amount must be at least ${minSp.toFixed(2)}.`,
+        ...availabilityFor("finance_below_min", { minSp, maxSp, financeAmount: fA }),
       };
     }
 
@@ -2382,6 +2618,8 @@ export class ScoringService {
         financeAmount: fA,
         minSp,
         spendingCapacity,
+        productType,
+        tenor,
       });
     }
 
@@ -2405,6 +2643,12 @@ export class ScoringService {
       periodicInstallment: pi,
       installments,
       message: "Transaction passed. The finance amount is within the allowed range.",
+      ...availabilityFor("passed", {
+        minSp,
+        maxSp,
+        spendingCapacity,
+        financeAmount: fA,
+      }),
     };
   }
 
@@ -2437,6 +2681,8 @@ export class ScoringService {
       partPayment: input.partPayment ?? 0,
       financeAmount: 0,
       message: "productType must be either BI_WEEKLY or MONTHLY_FLEX.",
+      availability: "This plan isn’t available for this purchase.",
+      availabilityMessage: "productType must be either BI_WEEKLY or MONTHLY_FLEX.",
     };
   }
 
@@ -2831,13 +3077,31 @@ export class ScoringService {
       // A buyer with no spending power for a product cannot finance on it at all, so
       // report that as the reason rather than running the finance checks
       if (scored.status === "failed") {
+        const financeAmount = purchaseAmount - partPayment;
+        const productType = scored.productType as FinancingProductType;
+        const availabilityFields = this.buildFinanceAvailability({
+          productType,
+          tenor: scored.tenure,
+          purchaseAmount,
+          financeAmount,
+          minSp: scored.productMini,
+          spendingCapacity: scored.availableSpendingPower,
+          reason:
+            scored.availableSpendingPower < scored.productMini
+              ? "capacity_below_min"
+              : "invalid",
+          invalidMessage:
+            `${this.financePlanLabel(productType, scored.tenure)} isn’t available for this purchase.`,
+        });
+
         products.push({
           status: "failed",
           purchaseAmount,
           partPayment,
-          financeAmount: purchaseAmount - partPayment,
-          productType: scored.productType as FinancingProductType,
+          financeAmount,
+          productType,
           message: scored.message,
+          ...availabilityFields,
           ...productDetails,
         });
         continue;
@@ -2977,6 +3241,21 @@ export class ScoringService {
     };
 
     if (scored.status === "failed") {
+      const availabilityFields = this.buildFinanceAvailability({
+        productType,
+        tenor: tenure,
+        purchaseAmount,
+        financeAmount,
+        minSp: scored.productMini,
+        spendingCapacity: scored.availableSpendingPower,
+        reason:
+          scored.availableSpendingPower < scored.productMini
+            ? "capacity_below_min"
+            : "invalid",
+        invalidMessage:
+          `${this.financePlanLabel(productType, tenure)} isn’t available for this purchase.`,
+      });
+
       return {
         buyerId,
         productType,
@@ -2991,6 +3270,7 @@ export class ScoringService {
           financeAmount,
           productType,
           message: scored.message,
+          ...availabilityFields,
           ...productDetails,
         },
       };

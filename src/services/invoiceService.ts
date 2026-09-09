@@ -76,6 +76,7 @@ export interface CreateInvoiceInput {
   amount: number;
   buyerId?: string;
   merchantId: string;
+  categoryId?: string;
   items: CreateItemInput[];
   status?: InvoiceStatus;
   type?: InvoiceType;
@@ -89,6 +90,7 @@ export interface UpdateInvoiceInput {
   note?: string;
   amount?: number;
   buyerId?: string;
+  categoryId?: string | null;
   status?: InvoiceStatus;
   type?: InvoiceType;
   items?: UpdateItemInput[];
@@ -117,10 +119,18 @@ const invoiceSelect = {
   amount: true,
   buyerId: true,
   merchantId: true,
+  categoryId: true,
   status: true,
   type: true,
   createdAt: true,
   updatedAt: true,
+} as const;
+
+const invoiceCategorySelect = {
+  id: true,
+  name: true,
+  description: true,
+  multiplier: true,
 } as const;
 
 const itemSelect = {
@@ -164,6 +174,17 @@ export class InvoiceService {
         }
       }
 
+      // Validate category if provided
+      if (input.categoryId) {
+        const category = await prisma.invoiceCategory.findUnique({
+          where: { id: input.categoryId },
+        });
+
+        if (!category) {
+          throw new Error("Invoice category not found");
+        }
+      }
+
       // Validate items
       if (!input.items || input.items.length === 0) {
         throw new Error("Invoice must have at least one item");
@@ -184,6 +205,7 @@ export class InvoiceService {
           amount: amount,
           buyerId: input.buyerId,
           merchantId: input.merchantId,
+          categoryId: input.categoryId,
           status: input.status || InvoiceStatus.Pending,
           type: input.type || InvoiceType.Purchase,
           items: {
@@ -196,6 +218,9 @@ export class InvoiceService {
         },
         include: {
           items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
           buyer: {
             select: {
               id: true,
@@ -287,6 +312,9 @@ export class InvoiceService {
         where: { id },
         include: {
           items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
           buyer: {
             select: {
               id: true,
@@ -343,6 +371,9 @@ export class InvoiceService {
         where: { splitrId },
         include: {
           items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
           buyer: {
             select: {
               id: true,
@@ -430,6 +461,9 @@ export class InvoiceService {
           take: limit,
           include: {
             items: true,
+            category: {
+              select: invoiceCategorySelect,
+            },
             buyer: {
               select: {
                 id: true,
@@ -494,6 +528,9 @@ export class InvoiceService {
         where,
         include: {
           items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
           buyer: {
             select: {
               id: true,
@@ -539,6 +576,9 @@ export class InvoiceService {
         where,
         include: {
           items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
           merchant: {
             select: {
               id: true,
@@ -584,6 +624,9 @@ export class InvoiceService {
         where,
         include: {
           items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
           merchant: {
             select: {
               id: true,
@@ -798,6 +841,17 @@ export class InvoiceService {
         }
       }
 
+      // Validate category if provided (null clears the relation)
+      if (input.categoryId) {
+        const category = await prisma.invoiceCategory.findUnique({
+          where: { id: input.categoryId },
+        });
+
+        if (!category) {
+          throw new Error("Invoice category not found");
+        }
+      }
+
       const updateData: any = {};
       if (input.customerName !== undefined) updateData.customerName = input.customerName;
       if (input.customerEmail !== undefined) updateData.customerEmail = input.customerEmail;
@@ -807,6 +861,7 @@ export class InvoiceService {
       if (input.note !== undefined) updateData.note = input.note;
       if (input.amount !== undefined) updateData.amount = input.amount;
       if (input.buyerId !== undefined) updateData.buyerId = input.buyerId;
+      if (input.categoryId !== undefined) updateData.categoryId = input.categoryId;
       if (input.status !== undefined) updateData.status = input.status;
       if (input.type !== undefined) updateData.type = input.type;
       if (input.returnStatus !== undefined) updateData.returnStatus = input.returnStatus;
@@ -832,6 +887,9 @@ export class InvoiceService {
         data: updateData,
         include: {
           items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
           buyer: {
             select: {
               id: true,

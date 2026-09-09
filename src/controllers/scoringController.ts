@@ -124,6 +124,12 @@ import {
  *                             type: boolean
  *                           message:
  *                             type: string
+ *                           availability:
+ *                             type: string
+ *                             example: "Pay in 6 is available."
+ *                           availabilityMessage:
+ *                             type: string
+ *                             example: "Your $350 financing amount meets this plan’s minimum and is within the amount available for this plan."
  *       400:
  *         description: Invalid request body
  *       500:
@@ -269,6 +275,12 @@ import {
  *                           type: boolean
  *                         message:
  *                           type: string
+ *                         availability:
+ *                           type: string
+ *                           example: "3-month Monthly Flex is available."
+ *                         availabilityMessage:
+ *                           type: string
+ *                           example: "Your $350 financing amount meets this plan’s minimum and is within the amount available for this plan."
  *       400:
  *         description: Invalid request body or no matching product configuration
  *       500:
@@ -431,7 +443,9 @@ import {
  *                 example: 800
  *     responses:
  *       200:
- *         description: Finance calculation completed (status is passed or failed)
+ *         description: >
+ *           Finance calculation completed (status is passed or failed). Response also includes
+ *           availability and availabilityMessage for end-user facing plan messaging.
  *       400:
  *         description: Invalid request body
  *       500:
@@ -736,7 +750,9 @@ import {
  *                 example: 800
  *     responses:
  *       200:
- *         description: Finance calculation completed (status is passed or failed)
+ *         description: >
+ *           Finance calculation completed (status is passed or failed). Response also includes
+ *           availability and availabilityMessage for end-user facing plan messaging.
  *       400:
  *         description: Invalid request body
  *       500:
@@ -806,7 +822,9 @@ import {
  *                 example: 800
  *     responses:
  *       200:
- *         description: Finance calculation completed (status is passed or failed)
+ *         description: >
+ *           Finance calculation completed (status is passed or failed). Response also includes
+ *           availability and availabilityMessage for end-user facing plan messaging.
  *       400:
  *         description: Invalid request body
  *       500:

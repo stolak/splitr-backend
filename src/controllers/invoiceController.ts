@@ -59,6 +59,9 @@ import {
  *                 description: Optional buyer ID
  *               merchantId:
  *                 type: string
+ *               categoryId:
+ *                 type: string
+ *                 description: Optional invoice category ID
  *               status:
  *                 type: string
  *                 enum: [Pending, Paid, Cancelled]
@@ -278,6 +281,12 @@ import {
  *                 type: number
  *               buyerId:
  *                 type: string
+ *               categoryId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: >
+ *                   Optional invoice category ID. Pass a valid category id to assign,
+ *                   or null to clear the category on the invoice.
  *               status:
  *                 type: string
  *                 enum: [Pending, Paid, Cancelled]
@@ -327,7 +336,7 @@ import {
  *       200:
  *         description: Invoice updated
  *       400:
- *         description: Invalid request (e.g. invoice or buyer not found)
+ *         description: Invalid request (e.g. invoice, buyer, or category not found)
  *       500:
  *         description: Internal server error
  */

@@ -785,8 +785,8 @@ model ScoringInputSnapshot {
 }
 
 model Invoice {
-  id                  String    @id @default(uuid())
-  splitrId            String    @unique @db.VarChar(30)
+  id                  String           @id @default(uuid())
+  splitrId            String           @unique @db.VarChar(30)
   customerName        String
   customerEmail       String
   customerPhoneNumber String
@@ -794,9 +794,11 @@ model Invoice {
   note                String?
   amount              Decimal
   buyerId             String?
-  buyer               Buyer?    @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  buyer               Buyer?           @relation(fields: [buyerId], references: [id], onDelete: SetNull)
   merchantId          String?
-  merchant            Merchant? @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  merchant            Merchant?        @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  categoryId          String?
+  category            InvoiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   items                Item[]
   status               InvoiceStatus         @default(Pending)
@@ -824,6 +826,18 @@ model Invoice {
   returnApprovedDate  DateTime?
 
   @@map("invoice")
+}
+
+model InvoiceCategory {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  multiplier  Decimal   @db.Decimal(10, 4)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  invoices    Invoice[]
+
+  @@map("invoice_category")
 }
 
 model MandateDebit {
