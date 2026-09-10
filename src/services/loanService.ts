@@ -281,14 +281,17 @@ export class LoanService {
       const product = input.product;
       const installments = product?.installments;
       let expectedBalance = input.loanAmount;
-
+      let partPayment = 0;
+      let periodicInstallment = 0;
       if (installments && installments.length > 0) {
         const cycleType = product?.productType === "BI_WEEKLY" ? "BiWeekly" : "Monthly";
         const today = new Date(loanStartDate);
 
+        periodicInstallment = Number(product?.periodicInstallment);
         // First installment is due immediately: start and end are today
         const [firstInstallment, ...remainingInstallments] = installments;
         const firstPayment = Number(firstInstallment.amount);
+        partPayment = Number(firstInstallment.amount) - Number(product?.partPayment);
         let expectedBalanceCursor = product?.financeAmount;
         this.createLoanSchedule({
           loanId: loan.id,
@@ -374,9 +377,32 @@ export class LoanService {
           transactionDate: new Date(),
           description: "Initial Loan disbursement",
         });
+        const interestAmount =
+          input.installmentType === LoanInstallmentType.Monthly
+            ? Number(input.loanAmount) * Number(loan.loanInterestRate) * 0.01
+            : periodicInstallment - Number(input.loanAmount) / input.loanTenure;
+        const principalAmount = input.loanAmount - interestAmount;
+        this.createLoanTransaction({
+          loanId: loan.id,
+          transactionType: TransactionType.interest,
+          transactionStatus: TransactionStatus.Completed,
+          creditAmount: 0,
+          debitAmount: interestAmount,
+          transactionDate: new Date(),
+          description: "Initial Loan interest repayment",
+        });
+        this.createLoanTransaction({
+          loanId: loan.id,
+          transactionType: TransactionType.principal,
+          transactionStatus: TransactionStatus.Completed,
+          creditAmount: 0,
+          debitAmount: principalAmount,
+          transactionDate: new Date(),
+          description: "Initial Loan principal repayment",
+        });
       }
 
-      return { success: true, data: loan };
+      return { success: true, data: loan, partPayment, periodicInstallment };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
