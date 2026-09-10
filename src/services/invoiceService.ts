@@ -2089,6 +2089,7 @@ export class InvoiceService {
       referenceNumber: referenceId,
       installmentType: installmentType,
       monthlyRepayment: product.periodicInstallment,
+      productId: product.productConfigurationId,
       product: product,
     });
 

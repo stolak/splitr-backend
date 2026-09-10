@@ -105,6 +105,19 @@ const router = Router();
  *                 enum: [Pending, Approved, Rejected]
  *                 description: Document verification status
  *                 example: Pending
+ *               invoiceId:
+ *                 type: string
+ *                 description: Optional invoice ID to link this loan to
+ *                 example: "invoice-uuid-123"
+ *               installmentType:
+ *                 type: string
+ *                 enum: [Weekly, BiWeekly, Monthly, BiMonthly, Quarterly, BiQuarterly, HalfYearly, BiHalfYearly, Yearly]
+ *                 description: Loan installment schedule type
+ *                 example: Monthly
+ *               productId:
+ *                 type: string
+ *                 description: Optional ProductConfiguration ID linked to this loan
+ *                 example: "product-config-uuid-123"
  *     responses:
  *       201:
  *         description: Loan created successfully
@@ -421,6 +434,15 @@ router.get('/counts/grouped-by-day', authenticateJWT, loanController.getLoansCou
  *                   example: true
  *                 data:
  *                   type: object
+ *                   properties:
+ *                     productId:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Linked ProductConfiguration ID
+ *                     product:
+ *                       type: object
+ *                       nullable: true
+ *                       description: Linked ProductConfiguration summary
  *       404:
  *         description: Loan not found
  *       500:
@@ -807,6 +829,31 @@ router.get('/splitr-id/:splitrId', authenticateJWT, loanController.getLoanByspli
  *                       type: number
  *                     monthCompleted:
  *                       type: number
+ *                     productId:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Linked ProductConfiguration ID
+ *                     product:
+ *                       type: object
+ *                       nullable: true
+ *                       description: Linked ProductConfiguration summary
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         productType:
+ *                           type: string
+ *                         code:
+ *                           type: string
+ *                         productName:
+ *                           type: string
+ *                         tenure:
+ *                           type: number
+ *                         minimumFinance:
+ *                           type: number
+ *                         maximumFinance:
+ *                           type: number
+ *                         rate:
+ *                           type: number
  *                     buyer:
  *                       type: object
  *                     merchant:
@@ -900,6 +947,16 @@ router.get('/invoice/:invoiceId', authenticateJWT, loanController.getLoanByInvoi
  *               loanDocumentVerified:
  *                 type: string
  *                 enum: [Pending, Approved, Rejected]
+ *               invoiceId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Invoice ID to link (or null to unlink)
+ *                 example: "invoice-uuid-123"
+ *               productId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: ProductConfiguration ID (or null to clear)
+ *                 example: "product-config-uuid-123"
  *     responses:
  *       200:
  *         description: Loan updated successfully

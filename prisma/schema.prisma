@@ -481,17 +481,17 @@ model TimeOutSetting {
 }
 
 model Loan {
-  id                  String              @id @default(uuid())
-  splitrId            String              @unique @db.VarChar(30)
+  id                  String                @id @default(uuid())
+  splitrId            String                @unique @db.VarChar(30)
   buyerId             String
-  buyer               Buyer               @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  invoiceId           String?             @unique
-  invoice             Invoice?            @relation("InvoiceLoan", fields: [invoiceId], references: [id], onDelete: SetNull)
+  buyer               Buyer                 @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  invoiceId           String?               @unique
+  invoice             Invoice?              @relation("InvoiceLoan", fields: [invoiceId], references: [id], onDelete: SetNull)
   loanAmount          Decimal
   purchaseAmount      Decimal?
   downPaymentAmount   Decimal?
   merchantId          String?
-  merchant            Merchant?           @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  merchant            Merchant?             @relation(fields: [merchantId], references: [id], onDelete: SetNull)
   referenceNumber     String?
   adminCharge         Decimal?
   insurance           Decimal?
@@ -502,7 +502,9 @@ model Loan {
   loanEndDate         DateTime?
   loanStatus          LoanStatus
   loanType            LoanType
-  loanInstallmentType LoanInstallmentType @default(Monthly)
+  loanInstallmentType LoanInstallmentType   @default(Monthly)
+  productId           String?
+  product             ProductConfiguration? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   returnStatus        LoanReturnStatus? @default(Active)
   returnAmount        Decimal?
@@ -1278,6 +1280,7 @@ model ProductConfiguration {
   rate           Decimal     @db.Decimal(10, 4) // rate as a percentage, e.g. 2.5 for 2.5%
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+  loans          Loan[]
 
   @@index([code])
   @@map("product_configuration")

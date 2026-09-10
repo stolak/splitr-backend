@@ -59,6 +59,9 @@ export interface CreateLoanInput {
   loanDocumentVerified?: DocumentStatus;
   invoiceId?: string;
   installmentType?: LoanInstallmentType;
+  /** FK to ProductConfiguration */
+  productId?: string;
+  /** Finance quote outcome used to build installment schedules (not persisted as-is) */
   product?: BuyerFinanceQuoteProductOutcome;
 }
 
@@ -81,7 +84,19 @@ export interface UpdateLoanInput {
   loanDocument?: string;
   loanDocumentVerified?: DocumentStatus;
   invoiceId?: string | null;
+  productId?: string | null;
 }
+
+const loanProductConfigurationSelect = {
+  id: true,
+  productType: true,
+  code: true,
+  productName: true,
+  tenure: true,
+  minimumFinance: true,
+  maximumFinance: true,
+  rate: true,
+} as const;
 
 // LoanSchedule interfaces
 export interface CreateLoanScheduleInput {
@@ -235,6 +250,17 @@ export class LoanService {
           throw new Error("Invoice already linked to another loan");
         }
       }
+
+      const productId = input.productId ?? input.product?.productConfigurationId;
+      if (productId) {
+        const productConfiguration = await prisma.productConfiguration.findUnique({
+          where: { id: productId },
+        });
+        if (!productConfiguration) {
+          throw new Error("Product configuration not found");
+        }
+      }
+
       // Convert dates to Date objects if they're strings
       const loanStartDate = new Date(input.loanStartDate);
       const loanEndDate = input.loanEndDate ? new Date(input.loanEndDate) : undefined;
@@ -262,6 +288,7 @@ export class LoanService {
           loanPurpose: input.loanPurpose,
           loanDocument: input.loanDocument,
           loanDocumentVerified: input.loanDocumentVerified || DocumentStatus.Pending,
+          productId,
         },
         include: {
           buyer: {
@@ -272,6 +299,9 @@ export class LoanService {
               lastName: true,
               email: true,
             },
+          },
+          product: {
+            select: loanProductConfigurationSelect,
           },
         },
       });
@@ -434,6 +464,9 @@ export class LoanService {
               businessEmail: true,
             },
           },
+          product: {
+            select: loanProductConfigurationSelect,
+          },
           loanSchedules: {
             orderBy: { start: "asc" },
           },
@@ -499,6 +532,9 @@ export class LoanService {
               businessEmail: true,
             },
           },
+          product: {
+            select: loanProductConfigurationSelect,
+          },
           loanSchedules: true,
           loanTransactions: true,
         },
@@ -539,6 +575,9 @@ export class LoanService {
               businessName: true,
               businessEmail: true,
             },
+          },
+          product: {
+            select: loanProductConfigurationSelect,
           },
           loanSchedules: {
             orderBy: { start: "asc" },
@@ -632,6 +671,9 @@ export class LoanService {
                 businessEmail: true,
                 businessCategory: true,
               },
+            },
+            product: {
+              select: loanProductConfigurationSelect,
             },
             loanSchedules: {
               orderBy: { start: "asc" },
@@ -727,6 +769,16 @@ export class LoanService {
         throw new Error("Invoice already linked to another loan");
       }
     }
+
+    if (input.productId) {
+      const productConfiguration = await prisma.productConfiguration.findUnique({
+        where: { id: input.productId },
+      });
+      if (!productConfiguration) {
+        throw new Error("Product configuration not found");
+      }
+    }
+
     try {
       const loan = await prisma.loan.update({
         where: { id: loanId },
@@ -740,6 +792,9 @@ export class LoanService {
               businessName: true,
               businessEmail: true,
             },
+          },
+          product: {
+            select: loanProductConfigurationSelect,
           },
         },
       });

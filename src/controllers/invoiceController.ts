@@ -646,6 +646,31 @@ import {
  *                       type: object
  *                     loan:
  *                       type: object
+ *                       description: Created loan including productId and nested product configuration
+ *                       properties:
+ *                         productId:
+ *                           type: string
+ *                           nullable: true
+ *                         product:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                             productType:
+ *                               type: string
+ *                             code:
+ *                               type: string
+ *                             productName:
+ *                               type: string
+ *                             tenure:
+ *                               type: number
+ *                             minimumFinance:
+ *                               type: number
+ *                             maximumFinance:
+ *                               type: number
+ *                             rate:
+ *                               type: number
  *       400:
  *         description: Validation failed, buyer does not qualify, or loan creation failed
  *       401:
