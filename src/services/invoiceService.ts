@@ -1036,6 +1036,10 @@ export class InvoiceService {
         throw new Error("Invoice not found");
       }
 
+      if (existingInvoice.status !== InvoiceStatus.Pending) {
+        throw new Error("Only invoices with Pending status can be deleted");
+      }
+
       await prisma.invoice.delete({
         where: { id },
       });
