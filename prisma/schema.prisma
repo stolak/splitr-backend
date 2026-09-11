@@ -873,8 +873,8 @@ model InvoiceMandate {
   loanId           String?
   loan             Loan?         @relation("LoanMandate", fields: [loanId], references: [id], onDelete: SetNull)
   monoMandateId    String?
-  monoAccountId    String
-  monoCustomerId   String
+  monoAccountId    String?
+  monoCustomerId   String?
   buyerId          String
   buyer            Buyer         @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   referenceId      String
@@ -891,25 +891,38 @@ model InvoiceMandate {
 }
 
 model DirectPay {
-  id             String          @id @default(uuid())
-  invoiceId      String
-  invoice        Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  mandateId      String?
-  mandate        InvoiceMandate? @relation(fields: [mandateId], references: [id], onDelete: SetNull)
-  type           DirectPayType   @default(Other)
-  amount         Decimal
-  status         DirectPayStatus @default(Pending)
-  buyerId        String
-  buyer          Buyer           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  reference      String          @unique
-  monoUrl        String?
-  monoAccountId  String
-  monoCustomerId String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  isActive       Boolean         @default(true)
+  id                              String           @id @default(uuid())
+  invoiceId                       String
+  invoice                         Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  mandateId                       String?
+  mandate                         InvoiceMandate?  @relation(fields: [mandateId], references: [id], onDelete: SetNull)
+  type                            DirectPayType    @default(Other)
+  amount                          Decimal
+  status                          DirectPayStatus  @default(Pending)
+  buyerId                         String
+  buyer                           Buyer            @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  reference                       String           @unique
+  monoUrl                         String?
+  monoAccountId                   String?
+  monoCustomerId                  String?
+  createdAt                       DateTime         @default(now())
+  updatedAt                       DateTime         @updatedAt
+  isActive                        Boolean          @default(true)
+  stripePaymentIntentId           String?
+  stripePaymentIntentStatus       String?
+  stripePaymentIntentClientSecret String?
+  paymentMedium                   PaymentProvider?
 
   @@map("direct_pay")
+}
+
+enum PaymentProvider {
+  Stripe
+  Mono
+  Paystack
+  Flutterwave
+  Razorpay
+  Other
 }
 
 enum DirectPayType {

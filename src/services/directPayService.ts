@@ -1,4 +1,4 @@
-import { DirectPayStatus, DirectPayType } from '@prisma/client';
+import { DirectPayStatus, DirectPayType, PaymentProvider } from '@prisma/client';
 import axios from 'axios';
 import prisma from '../utils/prisma';
 
@@ -13,8 +13,13 @@ export interface CreateDirectPayInput {
   buyerId: string;
   reference: string;
   monoUrl?: string;
-  monoAccountId: string;
-  monoCustomerId: string;
+  monoAccountId?: string;
+  monoCustomerId?: string;
+  stripePaymentIntentId?: string;
+  stripePaymentIntentStatus?: string;
+  stripePaymentIntentClientSecret?: string;
+  paymentMedium?: PaymentProvider;
+  isActive?: boolean;
 }
 
 export interface UpdateDirectPayInput {
@@ -26,8 +31,13 @@ export interface UpdateDirectPayInput {
   buyerId?: string;
   reference?: string;
   monoUrl?: string;
-  monoAccountId?: string;
-  monoCustomerId?: string;
+  monoAccountId?: string | null;
+  monoCustomerId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripePaymentIntentStatus?: string | null;
+  stripePaymentIntentClientSecret?: string | null;
+  paymentMedium?: PaymentProvider | null;
+  isActive?: boolean;
 }
 export interface Customer {
   email: string;
@@ -64,6 +74,11 @@ const directPaySelect = {
   monoUrl: true,
   monoAccountId: true,
   monoCustomerId: true,
+  stripePaymentIntentId: true,
+  stripePaymentIntentStatus: true,
+  stripePaymentIntentClientSecret: true,
+  paymentMedium: true,
+  isActive: true,
   createdAt: true,
   updatedAt: true,
   invoice: {
@@ -106,12 +121,18 @@ export class DirectPayService {
     const {
       invoiceId,
       buyerId,
-      monoAccountId,
-      monoCustomerId,
       type = DirectPayType.Other,
       reference,
       amount,
     } = input;
+
+    const paymentMedium =
+      input.paymentMedium ??
+      (input.stripePaymentIntentId
+        ? PaymentProvider.Stripe
+        : input.monoAccountId || input.monoCustomerId || input.monoUrl
+          ? PaymentProvider.Mono
+          : undefined);
 
     // Validate required fields
     if (!invoiceId) {
@@ -120,17 +141,24 @@ export class DirectPayService {
     if (!buyerId) {
       throw new Error('Buyer ID is required');
     }
-    if (!monoAccountId) {
-      throw new Error('Mono account ID is required');
-    }
-    if (!monoCustomerId) {
-      throw new Error('Mono customer ID is required');
-    }
     if (!reference) {
       throw new Error('Reference is required');
     }
     if (!amount || amount <= 0) {
       throw new Error('Valid amount is required');
+    }
+
+    if (paymentMedium === PaymentProvider.Mono) {
+      if (!input.monoAccountId) {
+        throw new Error('Mono account ID is required for Mono payments');
+      }
+      if (!input.monoCustomerId) {
+        throw new Error('Mono customer ID is required for Mono payments');
+      }
+    }
+
+    if (paymentMedium === PaymentProvider.Stripe && !input.stripePaymentIntentId) {
+      throw new Error('Stripe payment intent ID is required for Stripe payments');
     }
 
     // Verify invoice exists
@@ -178,8 +206,13 @@ export class DirectPayService {
         buyerId,
         reference,
         monoUrl: input.monoUrl || null,
-        monoAccountId,
-        monoCustomerId,
+        monoAccountId: input.monoAccountId || null,
+        monoCustomerId: input.monoCustomerId || null,
+        stripePaymentIntentId: input.stripePaymentIntentId || null,
+        stripePaymentIntentStatus: input.stripePaymentIntentStatus || null,
+        stripePaymentIntentClientSecret: input.stripePaymentIntentClientSecret || null,
+        paymentMedium: paymentMedium || null,
+        isActive: input.isActive ?? true,
       },
       select: directPaySelect,
     });
@@ -211,6 +244,7 @@ export class DirectPayService {
     mandateId?: string;
     buyerId?: string;
     status?: DirectPayStatus;
+    paymentMedium?: PaymentProvider;
     page?: number;
     limit?: number;
   }) {
@@ -231,6 +265,9 @@ export class DirectPayService {
     }
     if (filters?.status) {
       where.status = filters.status;
+    }
+    if (filters?.paymentMedium) {
+      where.paymentMedium = filters.paymentMedium;
     }
 
     const [directPays, total] = await Promise.all([
@@ -322,7 +359,7 @@ export class DirectPayService {
     //set all pending direct pays for the mandate to inactive
     await prisma.directPay.updateMany({
       where: { mandateId, isActive: true, status: DirectPayStatus.Pending },
-      data: { status: DirectPayStatus.Cancelled },
+      data: { status: DirectPayStatus.Cancelled, isActive: false },
     });
 
     return { success: true, message: 'Direct pay regenerated successfully' };
@@ -412,14 +449,31 @@ export class DirectPayService {
         ...(input.mandateId !== undefined && {
           mandateId: input.mandateId || null,
         }),
-
+        ...(input.type && { type: input.type }),
         ...(input.amount && { amount: input.amount }),
         ...(input.status && { status: input.status }),
         ...(input.buyerId && { buyerId: input.buyerId }),
         ...(input.reference && { reference: input.reference }),
         ...(input.monoUrl !== undefined && { monoUrl: input.monoUrl || null }),
-        ...(input.monoAccountId && { monoAccountId: input.monoAccountId }),
-        ...(input.monoCustomerId && { monoCustomerId: input.monoCustomerId }),
+        ...(input.monoAccountId !== undefined && {
+          monoAccountId: input.monoAccountId || null,
+        }),
+        ...(input.monoCustomerId !== undefined && {
+          monoCustomerId: input.monoCustomerId || null,
+        }),
+        ...(input.stripePaymentIntentId !== undefined && {
+          stripePaymentIntentId: input.stripePaymentIntentId || null,
+        }),
+        ...(input.stripePaymentIntentStatus !== undefined && {
+          stripePaymentIntentStatus: input.stripePaymentIntentStatus || null,
+        }),
+        ...(input.stripePaymentIntentClientSecret !== undefined && {
+          stripePaymentIntentClientSecret: input.stripePaymentIntentClientSecret || null,
+        }),
+        ...(input.paymentMedium !== undefined && {
+          paymentMedium: input.paymentMedium,
+        }),
+        ...(input.isActive !== undefined && { isActive: input.isActive }),
       },
       select: directPaySelect,
     });

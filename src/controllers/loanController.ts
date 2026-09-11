@@ -677,6 +677,56 @@ export class LoanController {
   }
 
   /**
+   * Initiate loan repayment with Stripe PaymentIntent
+   */
+  async initiateLoanRepaymentStripe(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { amount } = req.body;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Loan ID is required",
+        });
+      }
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Valid repayment amount is required and must be greater than 0",
+        });
+      }
+
+      const result = await loanService.initiateLoanRepaymentStripe(id, amount);
+
+      if (!result || !result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result?.error || "Failed to initiate Stripe loan repayment",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Stripe loan repayment initiated successfully",
+        data: {
+          loanId: id,
+          amount,
+          ...result.data,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error initiating Stripe loan repayment:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
+    }
+  }
+
+  /**
    * Validate and complete loan repayment
    */
   async validateLoanRepayment(req: Request, res: Response) {

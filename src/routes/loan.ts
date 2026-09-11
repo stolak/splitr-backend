@@ -681,17 +681,92 @@ router.post('/:id/initiate-repayment', authenticateJWT, loanController.initiateL
 
 /**
  * @swagger
+ * /api/v1/loans/{id}/initiate-repayment-stripe:
+ *   post:
+ *     summary: Initiate loan repayment with Stripe PaymentIntent
+ *     description: |
+ *       Initiates a loan repayment by:
+ *       1. Retrieving the loan and buyer
+ *       2. Creating a Stripe PaymentIntent
+ *       3. Creating a DirectPay record with Stripe fields and paymentMedium=Stripe
+ *       4. Returning the PaymentIntent client secret for frontend confirmation
+ *     tags: [Loan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Loan ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Repayment amount in major currency units
+ *                 example: 150.5
+ *     responses:
+ *       200:
+ *         description: Stripe loan repayment initiated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     loanId:
+ *                       type: string
+ *                     amount:
+ *                       type: number
+ *                     reference:
+ *                       type: string
+ *                     paymentIntentId:
+ *                       type: string
+ *                     clientSecret:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     directPay:
+ *                       type: object
+ *                       description: Created DirectPay including stripePaymentIntent* and paymentMedium
+ *       400:
+ *         description: Bad request
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  '/:id/initiate-repayment-stripe',
+  authenticateJWT,
+  loanController.initiateLoanRepaymentStripe,
+);
+
+/**
+ * @swagger
  * /api/v1/loans/validate-repayment/{referenceId}:
  *   post:
  *     summary: Validate and complete loan repayment
  *     description: |
  *       Validates and completes a loan repayment by:
- *       1. Retrieving the direct pay record by reference ID
+ *       1. Retrieving the DirectPay record by reference ID
  *       2. Finding the associated loan via invoice ID
- *       3. Verifying the Mono direct pay transaction status
- *       4. Updating the direct pay status to Completed
+ *       3. Verifying payment via Mono or Stripe based on DirectPay.paymentMedium
+ *       4. Updating the DirectPay status to Completed
  *       5. Processing the loan repayment transaction
- *       This endpoint should be called after a user completes payment via the Mono URL from the initiate-repayment endpoint.
  *     tags: [Loan]
  *     security:
  *       - bearerAuth: []
@@ -719,19 +794,9 @@ router.post('/:id/initiate-repayment', authenticateJWT, loanController.initiateL
  *                   example: "Loan repayment validated and processed successfully"
  *                 data:
  *                   type: object
- *                   description: Mono direct pay verification response data
- *                   properties:
- *                     status:
- *                       type: string
- *                       example: "successful"
- *                     message:
- *                       type: string
- *                       example: "Payment verified successfully"
- *                     data:
- *                       type: object
- *                       description: Payment verification details
+ *                   description: Updated DirectPay record
  *       400:
- *         description: Bad request - Reference ID not found, direct pay not found, loan not found, or Mono verification failed
+ *         description: Bad request - Reference ID not found, direct pay not found, loan not found, or payment verification failed
  *         content:
  *           application/json:
  *             schema:

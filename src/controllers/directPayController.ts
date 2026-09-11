@@ -28,8 +28,6 @@ import { DirectPayStatus } from "@prisma/client";
  *             type: object
  *             required:
  *               - invoiceId
- *               - monoAccountId
- *               - monoCustomerId
  *               - buyerId
  *               - reference
  *               - amount
@@ -40,9 +38,9 @@ import { DirectPayStatus } from "@prisma/client";
  *               mandateId:
  *                 type: string
  *                 description: Optional mandate ID
- *               downPayment:
- *                 type: number
- *                 description: Optional down payment amount
+ *               type:
+ *                 type: string
+ *                 enum: [LoanRepayment, DownPayment, Other]
  *               amount:
  *                 type: number
  *                 example: 50000
@@ -65,6 +63,25 @@ import { DirectPayStatus } from "@prisma/client";
  *               monoCustomerId:
  *                 type: string
  *                 example: "cust_123456"
+ *               stripePaymentIntentId:
+ *                 type: string
+ *                 description: Stripe PaymentIntent ID
+ *                 example: "pi_abc123"
+ *               stripePaymentIntentStatus:
+ *                 type: string
+ *                 description: Stripe PaymentIntent status
+ *                 example: "requires_payment_method"
+ *               stripePaymentIntentClientSecret:
+ *                 type: string
+ *                 description: Stripe PaymentIntent client secret
+ *               paymentMedium:
+ *                 type: string
+ *                 enum: [Stripe, Mono, Paystack, Flutterwave, Razorpay, Other]
+ *                 description: Payment provider used for this direct pay
+ *                 example: Mono
+ *               isActive:
+ *                 type: boolean
+ *                 default: true
  *     responses:
  *       201:
  *         description: Direct pay created successfully
@@ -119,6 +136,12 @@ export const create = async (req: Request, res: Response) => {
  *           enum: [Pending, Processing, Completed, Failed, Cancelled]
  *         description: Filter by status
  *       - in: query
+ *         name: paymentMedium
+ *         schema:
+ *           type: string
+ *           enum: [Stripe, Mono, Paystack, Flutterwave, Razorpay, Other]
+ *         description: Filter by payment provider
+ *       - in: query
  *         name: page
  *         schema:
  *           type: integer
@@ -141,6 +164,7 @@ export const getAll = async (req: Request, res: Response) => {
       mandateId: req.query.mandateId as string | undefined,
       buyerId: req.query.buyerId as string | undefined,
       status: req.query.status as DirectPayStatus | undefined,
+      paymentMedium: req.query.paymentMedium as any,
       page: req.query.page ? parseInt(req.query.page as string) : undefined,
       limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
     };
@@ -386,9 +410,9 @@ export const getByReference = async (req: Request, res: Response) => {
  *               mandateId:
  *                 type: string
  *                 nullable: true
- *               downPayment:
- *                 type: number
- *                 nullable: true
+ *               type:
+ *                 type: string
+ *                 enum: [LoanRepayment, DownPayment, Other]
  *               amount:
  *                 type: number
  *               status:
@@ -403,8 +427,25 @@ export const getByReference = async (req: Request, res: Response) => {
  *                 nullable: true
  *               monoAccountId:
  *                 type: string
+ *                 nullable: true
  *               monoCustomerId:
  *                 type: string
+ *                 nullable: true
+ *               stripePaymentIntentId:
+ *                 type: string
+ *                 nullable: true
+ *               stripePaymentIntentStatus:
+ *                 type: string
+ *                 nullable: true
+ *               stripePaymentIntentClientSecret:
+ *                 type: string
+ *                 nullable: true
+ *               paymentMedium:
+ *                 type: string
+ *                 nullable: true
+ *                 enum: [Stripe, Mono, Paystack, Flutterwave, Razorpay, Other]
+ *               isActive:
+ *                 type: boolean
  *     responses:
  *       200:
  *         description: Direct pay updated successfully

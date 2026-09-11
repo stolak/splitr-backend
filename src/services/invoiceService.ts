@@ -7,6 +7,7 @@ import {
   TransactionStatus,
   MandateStatus,
   DirectPayStatus,
+  DirectPayType,
   RevenueType,
   LoanReturnStatus,
   PaystackTransferStatus,
@@ -14,6 +15,7 @@ import {
   TransactionType,
   RevenueStatus,
   ProductType,
+  PaymentProvider,
 } from "@prisma/client";
 import { loanService } from "./loanService";
 import { LoanSettingService } from "./loanSettingService";
@@ -1345,6 +1347,9 @@ export class InvoiceService {
     const mandateBuyerId = mandate[0].buyerId;
     const mandateMonoAccountId = mandate[0].monoAccountId;
     const mandateMonoCustomerId = mandate[0].monoCustomerId;
+    if (!mandateMonoAccountId || !mandateMonoCustomerId) {
+      throw new Error("Mono account/customer ID not found on mandate");
+    }
     const eligibilityAndScore = await loanSettingService.liveEligibilityPurchase({
       purchaseAmount: Number(invoice.amount),
       downPaymentAmount: Number(mandateDownPayment),
@@ -1416,6 +1421,8 @@ export class InvoiceService {
       monoAccountId: mandateMonoAccountId,
       monoUrl: directPay.data.data.mono_url,
       status: DirectPayStatus.Pending,
+      type: DirectPayType.DownPayment,
+      paymentMedium: PaymentProvider.Mono,
     });
     if (!directPay.success) {
       throw new Error("Failed to create direct pay");

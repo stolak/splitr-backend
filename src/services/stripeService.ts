@@ -593,6 +593,29 @@ export class StripeService {
     return {
       paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
+      status: paymentIntent.status,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+    };
+  }
+
+  /**
+   * Retrieve a PaymentIntent by ID.
+   */
+  async getPaymentIntent(paymentIntentId: string) {
+    if (!paymentIntentId) {
+      throw new Error("paymentIntentId is required");
+    }
+
+    const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+
+    return {
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntent,
     };
   }
 

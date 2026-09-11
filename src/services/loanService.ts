@@ -22,7 +22,7 @@ import { AccountDetailsService } from "./accountDetailsService";
 import { InvoiceMandateService } from "./invoiceMandateService";
 import { generateShortReferenceId } from "./invoiceService";
 import { directPayService } from "./directPayService";
-import { DirectPayStatus } from "@prisma/client";
+import { DirectPayStatus, PaymentProvider } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { buyerService } from "./buyerService";
 import {
@@ -31,6 +31,7 @@ import {
   UpdateMandateDebitInput,
 } from "../services/mandateDebitService";
 import { BuyerFinanceQuoteProductOutcome } from "./scoringService";
+import { stripeService } from "./stripeService";
 
 const revenueService = new RevenueService();
 const accountDetailsService = new AccountDetailsService();
@@ -2233,11 +2234,15 @@ export class LoanService {
         const loanData = loan.data;
         const balance = loanData.overallBalance;
         if (amount > Number(balance)) {
+          console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
           return { success: false, error: "Amount is greater than balance" };
         }
         const principalRepayment = Number(loanData.principalBalance);
         const interestRepayment = Number(loanData.interestBalance);
         const penaltyRepayment = Number(loanData.penaltyBalance);
+        console.log("PRINCIPAL REPAYMENT", principalRepayment);
+        console.log("INTEREST REPAYMENT", interestRepayment);
+        console.log("PENALTY REPAYMENT", penaltyRepayment);
         const scheduleId = loanData.loanSchedules.filter(
           (schedule) => schedule.status === LoanScheduleStatus.Open
         )[0]?.id;
@@ -2287,6 +2292,9 @@ export class LoanService {
         if (loanData) {
           const loan = await this.getLoanById(loanData.id);
           if (loan.success && loan.data) {
+            console.log("OVERALL BALANCE", Number(loan.data?.overallBalance));
+            console.log("DATE", date);
+            console.log("LOAN ID", loanData.id);
             await this.updateClosedSchedules(date, Number(loan.data?.overallBalance), loanData.id);
           }
         }
@@ -2634,6 +2642,9 @@ export class LoanService {
         const mandateBuyerId = invoiceMandate.buyerId;
         const mandateMonoAccountId = invoiceMandate.monoAccountId;
         const mandateMonoCustomerId = invoiceMandate.monoCustomerId;
+        if (!mandateMonoAccountId || !mandateMonoCustomerId) {
+          throw new Error("Mono account/customer ID not found on mandate");
+        }
         const buyer = await buyerService.getBuyerById(mandateBuyerId);
         if (!buyer) {
           throw new Error("Buyer not found");
@@ -2673,6 +2684,7 @@ export class LoanService {
           monoUrl: directPay.data.data.mono_url,
           status: DirectPayStatus.Pending,
           type: DirectPayType.LoanRepayment,
+          paymentMedium: PaymentProvider.Mono,
         });
         return { success: true, monoUrl: directPay.data.data.mono_url };
 
@@ -2682,6 +2694,61 @@ export class LoanService {
       return { success: false, error: error.message };
     }
   }
+
+  async initiateLoanRepaymentStripe(loanId: string, amount: number) {
+    const reference = generateShortReferenceId();
+    try {
+      const loan = await this.getLoanById(loanId);
+      if (!loan.success || !loan.data) {
+        return { success: false, error: loan.error || "Loan not found" };
+      }
+
+      const loanData = loan.data;
+      const invoiceId = loanData.invoiceId;
+      if (!invoiceId) {
+        return { success: false, error: "Invoice ID not found" };
+      }
+
+      const buyer = await buyerService.getBuyerById(loanData.buyerId);
+      if (!buyer) {
+        throw new Error("Buyer not found");
+      }
+
+      const formattedAmount = Number(amount.toFixed(2));
+      const amountCents = Math.round(formattedAmount * 100);
+      const paymentIntent = await stripeService.createPaymentIntent({
+        amount: amountCents,
+        description: `Loan repayment for ${loanData.buyer.firstName} ${loanData.buyer.lastName}-loanId: ${loanData.splitrId}`,
+      });
+
+      const createdDirectPay = await directPayService.createDirectPay({
+        invoiceId,
+        amount: formattedAmount,
+        buyerId: buyer.id,
+        reference,
+        status: DirectPayStatus.Pending,
+        type: DirectPayType.LoanRepayment,
+        paymentMedium: PaymentProvider.Stripe,
+        stripePaymentIntentId: paymentIntent.paymentIntentId,
+        stripePaymentIntentStatus: paymentIntent.status,
+        stripePaymentIntentClientSecret: paymentIntent.clientSecret ?? undefined,
+      });
+
+      return {
+        success: true,
+        data: {
+          directPay: createdDirectPay,
+          reference,
+          paymentIntentId: paymentIntent.paymentIntentId,
+          clientSecret: paymentIntent.clientSecret,
+          status: paymentIntent.status,
+        },
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
   async validateLoanRepayment(referenceid: string) {
     const directPay = await directPayService.getDirectPayByReference(referenceid);
 
@@ -2689,8 +2756,10 @@ export class LoanService {
       return { success: false, error: "Direct pay not found" };
     }
     if (directPay.status === DirectPayStatus.Completed) {
+      console.log("DIRECT PAY COMPLETED", directPay);
       return { success: true, data: directPay };
     }
+
     const loan = await this.getLoanByInvoiceId(directPay.invoiceId);
     if (!loan.success || !loan.data) {
       return { success: false, error: "Loan not found" };
@@ -2699,10 +2768,45 @@ export class LoanService {
     const loanId = loanData.id;
     const amount = Number(directPay.amount);
     const date = new Date();
+
+    const isStripe =
+      directPay.paymentMedium === PaymentProvider.Stripe || !!directPay.stripePaymentIntentId;
+
+    if (isStripe) {
+      if (!directPay.stripePaymentIntentId) {
+        return { success: false, error: "Stripe payment intent not found for this direct pay" };
+      }
+
+      const paymentIntent = await stripeService.getPaymentIntent(directPay.stripePaymentIntentId);
+      await directPayService.updateDirectPay(directPay.id, {
+        stripePaymentIntentStatus: paymentIntent.status,
+      });
+
+      if (paymentIntent.status !== "succeeded") {
+        return {
+          success: false,
+          error: `Stripe payment not completed. Current status: ${paymentIntent.status}`,
+        };
+      }
+
+      const updatedDirectPay = await directPayService.updateDirectPay(directPay.id, {
+        status: DirectPayStatus.Completed,
+        stripePaymentIntentStatus: paymentIntent.status,
+      });
+
+      if (!updatedDirectPay) {
+        return { success: false, error: "Failed to update direct pay" };
+      }
+      console.log("LOAN REPAYMENT", loanId, amount, date);
+      await this.loanRepayment(loanId, amount, date);
+      return { success: true, data: updatedDirectPay };
+    }
+
     const result = await directPayService.verifyMonoDirectPay(referenceid);
     if (!result.success) {
       return { success: false, error: result.error };
     }
+    console.log("MONO PAYMENT VERIFIED", result);
     //update direct pay status to completed
     if (result.data.status === "successful") {
       const updatedDirectPay = await directPayService.updateDirectPay(directPay.id, {
@@ -2714,9 +2818,9 @@ export class LoanService {
 
       await this.loanRepayment(loanId, amount, date);
       return { success: true, data: updatedDirectPay };
-    } else {
-      return { success: false, error: "Failed to validate loan repayment" };
     }
+
+    return { success: false, error: "Failed to validate loan repayment" };
   }
 }
 export const loanService = new LoanService();
