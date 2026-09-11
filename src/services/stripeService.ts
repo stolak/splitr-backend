@@ -439,7 +439,7 @@ export class StripeService {
 
     if (availableForCurrencyOnPlatform < amountCents) {
       throw new Error(
-        `Insufficient available balance. Requested ${amountCents} ${currency} cents, available ${availableForCurrencyOnPlatform} ${currency} cents.`
+        `Insufficient available balance. Requested ${amountCents * 0.01} ${currency}, available ${availableForCurrencyOnPlatform * 0.01} ${currency}.`
       );
     }
     await getStripe().transfers.create({
@@ -513,7 +513,7 @@ export class StripeService {
 
     if (availableForCurrencyOnPlatform < amountCents) {
       throw new Error(
-        `Insufficient available balance. Requested ${amountCents} ${currency} cents, available ${availableForCurrencyOnPlatform} ${currency} cents.`
+        `Insufficient available balance. Requested ${amountCents * 0.01} ${currency}, available ${availableForCurrencyOnPlatform * 0.01} ${currency}.`
       );
     }
 
