@@ -92,7 +92,8 @@ export function getDayBeforeNextCycleByInstallmentType(
   }
 
   const nextCycle = getNextCycleByInstallmentType(dateStr, installmentType);
-  return addDaysUTC(nextCycle, -1);
+  // return addDaysUTC(nextCycle, -1);
+  return nextCycle;
 }
 
 export function getNextCycle(dateStr: string): Date {
