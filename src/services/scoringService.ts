@@ -2155,8 +2155,7 @@ export class ScoringService {
         return {
           availability: `${label} isn’t available for this purchase.`,
           availabilityMessage:
-            invalidMessage ??
-            `This plan isn’t available for the current purchase details.`,
+            invalidMessage ?? `This plan isn’t available for the current purchase details.`,
         };
     }
   }
@@ -2195,9 +2194,7 @@ export class ScoringService {
       financeAmount,
       minSp,
       spendingCapacity,
-      reason: partPaymentAdjustmentPossible
-        ? "capacity_exceeded_adjustable"
-        : "capacity_below_min",
+      reason: partPaymentAdjustmentPossible ? "capacity_exceeded_adjustable" : "capacity_below_min",
     });
 
     return {
@@ -2311,8 +2308,7 @@ export class ScoringService {
           `Transaction failed. No BI_WEEKLY product configuration found for a tenor of ` +
           `${tenor}, so rate, minSp and maxSp could not be resolved.`,
         ...availabilityFor("invalid", {
-          invalidMessage:
-            `No Pay in ${tenor} product configuration was found for this purchase.`,
+          invalidMessage: `No Pay in ${tenor} product configuration was found for this purchase.`,
         }),
       };
     }
@@ -2529,8 +2525,7 @@ export class ScoringService {
           `Transaction failed. No MONTHLY_FLEX product configuration found for a tenor ` +
           `of ${tenor}, so rate, minSp and maxSp could not be resolved.`,
         ...availabilityFor("invalid", {
-          invalidMessage:
-            `No ${tenor}-month Monthly Flex product configuration was found for this purchase.`,
+          invalidMessage: `No ${tenor}-month Monthly Flex product configuration was found for this purchase.`,
         }),
       };
     }
@@ -3087,11 +3082,8 @@ export class ScoringService {
           minSp: scored.productMini,
           spendingCapacity: scored.availableSpendingPower,
           reason:
-            scored.availableSpendingPower < scored.productMini
-              ? "capacity_below_min"
-              : "invalid",
-          invalidMessage:
-            `${this.financePlanLabel(productType, scored.tenure)} isn’t available for this purchase.`,
+            scored.availableSpendingPower < scored.productMini ? "capacity_below_min" : "invalid",
+          invalidMessage: `${this.financePlanLabel(productType, scored.tenure)} isn’t available for this purchase.`,
         });
 
         products.push({
@@ -3249,11 +3241,8 @@ export class ScoringService {
         minSp: scored.productMini,
         spendingCapacity: scored.availableSpendingPower,
         reason:
-          scored.availableSpendingPower < scored.productMini
-            ? "capacity_below_min"
-            : "invalid",
-        invalidMessage:
-          `${this.financePlanLabel(productType, tenure)} isn’t available for this purchase.`,
+          scored.availableSpendingPower < scored.productMini ? "capacity_below_min" : "invalid",
+        invalidMessage: `${this.financePlanLabel(productType, tenure)} isn’t available for this purchase.`,
       });
 
       return {
@@ -3297,6 +3286,19 @@ export class ScoringService {
       partPayment,
       parameters,
       product: { ...finance, ...productDetails, productType: productType as FinancingProductType },
+    };
+  }
+  nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number) {
+    const interest = openingBalance * rate * 0.01;
+    const calculatedPrincipal = monthlyRepayment - interest;
+    const principal = Math.min(calculatedPrincipal, openingBalance);
+    const closingBalance = openingBalance - principal;
+
+    return {
+      interest,
+      principal,
+      openingBalance,
+      closingBalance,
     };
   }
 }

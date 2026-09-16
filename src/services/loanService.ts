@@ -324,6 +324,11 @@ export class LoanService {
         const firstPayment = Number(firstInstallment.amount);
         partPayment = Number(firstInstallment.amount) - Number(product?.partPayment);
         let expectedBalanceCursor = product?.financeAmount;
+        let nextSchedule = this.nextSchedule(
+          input.loanInterestRate,
+          Number(loan.loanAmount),
+          Number(input.monthlyRepayment)
+        );
         this.createLoanSchedule({
           loanId: loan.id,
           start: today,
@@ -331,11 +336,11 @@ export class LoanService {
           status: LoanScheduleStatus.Closed,
           actualPayment: firstPayment - Number(product?.partPayment),
           expectedPayment: firstPayment - Number(product?.partPayment),
-          expectedBalance: expectedBalanceCursor,
+          expectedBalance: nextSchedule.openingBalance,
           isExecuted: true,
-          expectedClosingBalance: expectedBalanceCursor - Number(product?.periodicInstallment),
+          expectedClosingBalance: nextSchedule.closingBalance,
         });
-        expectedBalanceCursor = expectedBalanceCursor - Number(product?.periodicInstallment);
+        expectedBalanceCursor = nextSchedule.closingBalance;
 
         // Subsequent installments begin on the next product-type interval from today
         // (BI_WEEKLY → +14 days, MONTHLY_FLEX → +1 month) and continue on that cadence
@@ -348,17 +353,23 @@ export class LoanService {
             cycleType
           );
 
+          nextSchedule = this.nextSchedule(
+            Number(loan.loanInterestRate),
+            expectedBalanceCursor,
+            Number(input.monthlyRepayment)
+          );
+
           this.createLoanSchedule({
             loanId: loan.id,
             start: nextcycle,
             end: cycleEnd,
             expectedPayment,
             expectedBalance: expectedBalanceCursor,
-            expectedClosingBalance: expectedBalanceCursor - Number(product?.periodicInstallment),
+            expectedClosingBalance: nextSchedule.closingBalance,
           });
 
           nextcycle = getNextCycleByInstallmentType(new Date(nextcycle).toISOString(), cycleType);
-          expectedBalanceCursor = expectedBalanceCursor - Number(product?.periodicInstallment);
+          expectedBalanceCursor = nextSchedule.closingBalance;
         }
 
         expectedBalance = expectedBalanceCursor;
@@ -408,11 +419,22 @@ export class LoanService {
           transactionDate: new Date(),
           description: "Initial Loan disbursement",
         });
+
         const interestAmount =
           input.installmentType === LoanInstallmentType.Monthly
-            ? Number(input.loanAmount) * Number(loan.loanInterestRate) * 0.01
+            ? ((Number(input.loanAmount) * Number(loan.loanInterestRate)) / 12) * 0.01
             : periodicInstallment - Number(input.loanAmount) / input.loanTenure;
-        const principalAmount = input.loanAmount - interestAmount;
+        const principalAmount = Number(input.monthlyRepayment) - interestAmount;
+
+        await this.createLoanTransaction({
+          loanId: loan.id,
+          transactionType: TransactionType.interest,
+          transactionStatus: TransactionStatus.Completed,
+          creditAmount: interestAmount,
+          debitAmount: 0,
+          transactionDate: new Date(),
+          description: "Instant Loan interest charge",
+        });
         this.createLoanTransaction({
           loanId: loan.id,
           transactionType: TransactionType.interest,
@@ -420,7 +442,7 @@ export class LoanService {
           creditAmount: 0,
           debitAmount: interestAmount,
           transactionDate: new Date(),
-          description: "Initial Loan interest repayment",
+          description: "Instant Loan interest repayment",
         });
         this.createLoanTransaction({
           loanId: loan.id,
@@ -1986,10 +2008,10 @@ export class LoanService {
     // get loan overall balance at the last executed schedule
     const lastExecutedScheduleBalance = input.loanSchedules
       ?.filter((schedule) => schedule.isExecuted)
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())[0];
+      .sort((a, b) => new Date(a.end).getTime() - new Date(b.end).getTime())[0];
 
     // get the last executed transaction loan schedule
-
+    console.log("lastExecutedScheduleBalance", lastExecutedScheduleBalance);
     const overallBalance = this.getLoanBalance(
       input.loanTransactions as unknown as GetLoanBalanceInput[]
     );
@@ -2340,6 +2362,20 @@ export class LoanService {
     return await prisma.loanTransaction.findMany({
       where: { scheduleId: scheduleId },
     });
+  }
+
+  nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number) {
+    const interest = (openingBalance * rate * 0.01) / 12;
+    const calculatedPrincipal = monthlyRepayment - interest;
+    const principal = Math.min(calculatedPrincipal, openingBalance);
+    const closingBalance = openingBalance - principal;
+
+    return {
+      interest,
+      principal,
+      openingBalance,
+      closingBalance,
+    };
   }
 
   /**

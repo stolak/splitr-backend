@@ -2037,7 +2037,6 @@ export class InvoiceService {
     if (!invoice) {
       throw new Error("Invoice not found");
     }
-    const loanAmount = Number(invoice.amount) - downPaymentAmount;
 
     // Todo verify the payment was successful
 

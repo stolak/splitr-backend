@@ -248,6 +248,68 @@ router.get('/counts/by-status', authenticateJWT, loanController.getLoanCountsByS
 
 /**
  * @swagger
+ * /api/v1/loans/next-schedule:
+ *   post:
+ *     summary: Calculate the next loan schedule split
+ *     description: |
+ *       Splits a repayment into interest and principal from the opening balance.
+ *       Interest is openingBalance * rate * 0.01. Principal is the remainder of
+ *       the monthly repayment, capped at the opening balance.
+ *     tags: [Loan]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rate
+ *               - openingBalance
+ *               - monthlyRepayment
+ *             properties:
+ *               rate:
+ *                 type: number
+ *                 description: Interest rate as a percentage (e.g. 7.5 for 7.5%)
+ *                 example: 7.5
+ *               openingBalance:
+ *                 type: number
+ *                 description: Opening principal balance
+ *                 example: 100000
+ *               monthlyRepayment:
+ *                 type: number
+ *                 description: Scheduled repayment amount
+ *                 example: 8500
+ *     responses:
+ *       200:
+ *         description: Next schedule calculated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     interest:
+ *                       type: number
+ *                     principal:
+ *                       type: number
+ *                     openingBalance:
+ *                       type: number
+ *                     closingBalance:
+ *                       type: number
+ *       400:
+ *         description: Missing or invalid inputs
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/next-schedule', loanController.nextSchedule);
+
+/**
+ * @swagger
  * /api/v1/loans/counts/by-date-range:
  *   get:
  *     summary: Get loans created within a date range

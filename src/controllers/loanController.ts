@@ -764,6 +764,54 @@ export class LoanController {
   }
 
   /**
+   * Calculate the next loan schedule split from rate, opening balance, and repayment
+   */
+  async nextSchedule(req: Request, res: Response) {
+    try {
+      const { rate, openingBalance, monthlyRepayment } = req.body ?? {};
+
+      if (rate === undefined || openingBalance === undefined || monthlyRepayment === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "rate, openingBalance, and monthlyRepayment are required",
+        });
+      }
+
+      const parsedRate = Number(rate);
+      const parsedOpeningBalance = Number(openingBalance);
+      const parsedMonthlyRepayment = Number(monthlyRepayment);
+
+      if (
+        !Number.isFinite(parsedRate) ||
+        !Number.isFinite(parsedOpeningBalance) ||
+        !Number.isFinite(parsedMonthlyRepayment)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "rate, openingBalance, and monthlyRepayment must be valid numbers",
+        });
+      }
+
+      const data = loanService.nextSchedule(
+        parsedRate,
+        parsedOpeningBalance,
+        parsedMonthlyRepayment
+      );
+
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      console.error("Error calculating next schedule:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
+    }
+  }
+
+  /**
    * Get loan counts grouped by status
    */
   async getLoanCountsByStatus(req: Request, res: Response) {
