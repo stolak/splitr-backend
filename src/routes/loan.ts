@@ -577,6 +577,83 @@ router.post('/:id/repayment', authenticateJWT, loanController.loanRepayment);
 
 /**
  * @swagger
+ * /api/v1/loans/{id}/repayment-splitr:
+ *   post:
+ *     summary: Process a Stripe-confirmed Splitr loan repayment
+ *     description: |
+ *       Verifies the Stripe PaymentIntent has succeeded and matches the repayment amount,
+ *       then allocates the payment to penalty, interest, and principal in that order.
+ *       Amount is in major currency units and is compared to the PaymentIntent amount in cents.
+ *     tags: [Loan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Loan ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - stripePaymentIntentId
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Repayment amount in major currency units
+ *                 example: 150.5
+ *               stripePaymentIntentId:
+ *                 type: string
+ *                 description: Succeeded Stripe PaymentIntent ID
+ *                 example: "pi_abc123"
+ *               paymentType:
+ *                 type: string
+ *                 enum: [partial, full, early, late]
+ *                 default: partial
+ *                 description: Repayment type
+ *               date:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Repayment date (defaults to current date)
+ *                 example: "2024-01-15T00:00:00Z"
+ *     responses:
+ *       200:
+ *         description: Loan repayment processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     loanId:
+ *                       type: string
+ *                     amount:
+ *                       type: number
+ *                     date:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Invalid input, unpaid PaymentIntent, amount mismatch, or amount exceeds balance
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/:id/repayment-splitr', authenticateJWT, loanController.loanRepaymentSplitr);
+
+/**
+ * @swagger
  * /api/v1/loans/{id}/process-repayment:
  *   post:
  *     summary: Process loan repayment with automatic Mono mandate debit

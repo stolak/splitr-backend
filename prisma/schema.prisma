@@ -262,6 +262,7 @@ model Buyer {
   plaidAccounts                     PlaidAccount[]
   stripeMandates                    StripeMandate[]
   stripeCards                       StripeCard[]
+  stripePaymentIntents              StripePaymentIntent[]
   incomeInsights                    IncomeInsight[]
   creditBureaus                     CreditBureau[]
   plaidIdentityVerificationId       String?
@@ -518,14 +519,15 @@ model Loan {
 
   loanPurpose          String
   loanDocument         String?
-  loanDocumentVerified DocumentStatus?   @default(Pending)
+  loanDocumentVerified DocumentStatus?       @default(Pending)
   loanSchedules        LoanSchedule[]
   loanTransactions     LoanTransaction[]
-  mandates             InvoiceMandate[]  @relation("LoanMandate")
+  mandates             InvoiceMandate[]      @relation("LoanMandate")
   mandateDebits        MandateDebit[]
   stripeMandates       StripeMandate[]
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  stripePaymentIntents StripePaymentIntent[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   revenues             Revenue[]
 
   @@map("loan")
@@ -625,6 +627,7 @@ model LoanTransaction {
   debitAmount       Decimal           @default(0)
   description       String
   referenceNumber   String?           @unique
+  transactReference String?
   transactionDate   DateTime
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -813,6 +816,7 @@ model Invoice {
   mandateDebits        MandateDebit[]
   directPays           DirectPay[]
   stripeMandates       StripeMandate[]
+  stripePaymentIntents StripePaymentIntent[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   revenues             Revenue[]
@@ -912,6 +916,8 @@ model DirectPay {
   stripePaymentIntentStatus       String?
   stripePaymentIntentClientSecret String?
   paymentMedium                   PaymentProvider?
+  isValueSettled                  Boolean          @default(false)
+  transactReference               String?
 
   @@map("direct_pay")
 }
@@ -1157,6 +1163,34 @@ model StripeCard {
   @@index([stripeCardId])
   @@index([stripeCardholderId])
   @@map("stripe_card")
+}
+
+model StripePaymentIntent {
+  id              String   @id @default(uuid())
+  paymentIntentId String   @unique @db.VarChar(100)
+  clientSecret    String?  @db.Text
+  amount          Int
+  currency        String   @db.VarChar(10)
+  status          String   @db.VarChar(50)
+  description     String?  @db.Text
+  purpose         String?  @db.VarChar(50)
+  reference       String?  @db.VarChar(100)
+  buyerId         String?
+  buyer           Buyer?   @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  loanId          String?
+  loan            Loan?    @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  invoiceId       String?
+  invoice         Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([buyerId])
+  @@index([loanId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([reference])
+  @@map("stripe_payment_intent")
 }
 
 model PlaidAccount {

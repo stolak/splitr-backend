@@ -57,6 +57,13 @@ export interface CreatePaymentIntentInput {
   amount: number;
   currency?: string;
   description?: string;
+  purpose?: string;
+  reference?: string;
+  buyerId?: string;
+  loanId?: string;
+  invoiceId?: string;
+  merchantId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ConfirmPaymentIntentInput {
@@ -581,16 +588,42 @@ export class StripeService {
     if (!input.amount || input.amount <= 0) {
       throw new Error("A positive amount is required");
     }
+    const currency = input.currency || STRIPE_DEFAULT_CURRENCY;
     const paymentIntent = await getStripe().paymentIntents.create({
       amount: input.amount,
-      currency: input.currency || STRIPE_DEFAULT_CURRENCY,
+      currency,
       description: input.description,
       automatic_payment_methods: {
         enabled: true,
       },
+      ...(input.metadata
+        ? {
+            metadata: Object.fromEntries(
+              Object.entries(input.metadata).map(([key, value]) => [key, String(value)])
+            ),
+          }
+        : {}),
+    });
+
+    const record = await prisma.stripePaymentIntent.create({
+      data: {
+        paymentIntentId: paymentIntent.id,
+        clientSecret: paymentIntent.client_secret,
+        amount: paymentIntent.amount,
+        currency: paymentIntent.currency,
+        status: paymentIntent.status,
+        description: input.description || paymentIntent.description || null,
+        purpose: input.purpose || null,
+        reference: input.reference || null,
+        buyerId: input.buyerId || null,
+        loanId: input.loanId || null,
+        invoiceId: input.invoiceId || null,
+        metadata: input.metadata ? (input.metadata as object) : undefined,
+      },
     });
 
     return {
+      id: record.id,
       paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
       status: paymentIntent.status,
@@ -608,6 +641,14 @@ export class StripeService {
     }
 
     const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+
+    await prisma.stripePaymentIntent.updateMany({
+      where: { paymentIntentId: paymentIntent.id },
+      data: {
+        status: paymentIntent.status,
+        clientSecret: paymentIntent.client_secret,
+      },
+    });
 
     return {
       paymentIntentId: paymentIntent.id,
@@ -630,6 +671,14 @@ export class StripeService {
     const paymentIntent = await getStripe().paymentIntents.confirm(input.paymentIntentId, {
       ...(input.paymentMethodId ? { payment_method: input.paymentMethodId } : {}),
       ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
+    });
+
+    await prisma.stripePaymentIntent.updateMany({
+      where: { paymentIntentId: paymentIntent.id },
+      data: {
+        status: paymentIntent.status,
+        clientSecret: paymentIntent.client_secret,
+      },
     });
 
     return {

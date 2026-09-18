@@ -1,5 +1,6 @@
 import { DirectPayStatus, DirectPayType, PaymentProvider } from '@prisma/client';
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 import prisma from '../utils/prisma';
 
 // ==================== INTERFACES ====================
@@ -79,6 +80,8 @@ const directPaySelect = {
   stripePaymentIntentClientSecret: true,
   paymentMedium: true,
   isActive: true,
+  isValueSettled: true,
+  transactReference: true,
   createdAt: true,
   updatedAt: true,
   invoice: {
@@ -363,6 +366,54 @@ export class DirectPayService {
     });
 
     return { success: true, message: 'Direct pay regenerated successfully' };
+  }
+
+  /**
+   * Mark a DirectPay as value-settled. Looks up by DirectPay id and/or Stripe PaymentIntent id.
+   * Throws if the record is missing or already settled.
+   */
+  async markValueSettled({
+    directPayId,
+    stripePaymentIntentId,
+    transactReference,
+  }: {
+    directPayId?: string;
+    stripePaymentIntentId?: string;
+    transactReference?: string;
+  }) {
+    if (!directPayId && !stripePaymentIntentId) {
+      throw new Error('directPayId or stripePaymentIntentId is required');
+    }
+
+    const payment = directPayId
+      ? await prisma.directPay.findUnique({ where: { id: directPayId } })
+      : await prisma.directPay.findFirst({
+          where: { stripePaymentIntentId },
+          orderBy: { createdAt: 'desc' },
+        });
+
+    if (!payment) {
+      throw new Error('Direct pay not found');
+    }
+
+    if (payment.isValueSettled) {
+      throw new Error('Payment is already settled');
+    }
+
+    const reference = transactReference || randomUUID();
+    const updated = await prisma.directPay.update({
+      where: { id: payment.id },
+      data: {
+        isValueSettled: true,
+        transactReference: reference,
+      },
+      select: directPaySelect,
+    });
+
+    return {
+      ...updated,
+      transactReference: reference,
+    };
   }
 
   /**

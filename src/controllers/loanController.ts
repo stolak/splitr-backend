@@ -574,6 +574,80 @@ export class LoanController {
   }
 
   /**
+   * Process a Stripe-confirmed Splitr loan repayment
+   */
+  async loanRepaymentSplitr(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { amount, date, stripePaymentIntentId, paymentType } = req.body;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Loan ID is required",
+        });
+      }
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid repayment amount is required",
+        });
+      }
+
+      if (!stripePaymentIntentId) {
+        return res.status(400).json({
+          success: false,
+          message: "stripePaymentIntentId is required",
+        });
+      }
+
+      const allowedPaymentTypes = ["partial", "full", "early", "late"] as const;
+      if (paymentType && !allowedPaymentTypes.includes(paymentType)) {
+        return res.status(400).json({
+          success: false,
+          message: "paymentType must be one of: partial, full, early, late",
+        });
+      }
+
+      const repaymentDate = date ? new Date(date) : new Date();
+      if (isNaN(repaymentDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid date format",
+        });
+      }
+
+      const result = await loanService.loanRepaymentSplitr({
+        loanId: id,
+        amount: Number(amount),
+        date: repaymentDate,
+        stripePaymentIntentId,
+        paymentType: paymentType || "partial",
+      });
+
+      if (!result || !result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result?.error || "Loan repayment failed",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Loan repayment processed successfully",
+        data: result.data,
+      });
+    } catch (error: any) {
+      console.error("Error processing Splitr loan repayment:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
+    }
+  }
+
+  /**
    * Process loan repayment with automatic Mono mandate debit
    */
   async processLoanRepayment(req: Request, res: Response) {

@@ -32,6 +32,7 @@ import {
 } from "../services/mandateDebitService";
 import { BuyerFinanceQuoteProductOutcome } from "./scoringService";
 import { stripeService } from "./stripeService";
+import stripe from "../routes/stripe";
 
 const revenueService = new RevenueService();
 const accountDetailsService = new AccountDetailsService();
@@ -187,6 +188,7 @@ export interface CreateLoanTransactionInput {
   transactionDate: Date;
   description: string;
   scheduleId?: string;
+  transactReference?: string;
 }
 
 export interface UpdateLoanTransactionInput {
@@ -1587,6 +1589,7 @@ export class LoanService {
           debitAmount: input.debitAmount,
           transactionDate: input.transactionDate,
           scheduleId: input.scheduleId,
+          transactReference: input.transactReference,
         },
         include: {
           loan: {
@@ -2189,7 +2192,7 @@ export class LoanService {
         for (const loanInterestSchedule of loanInterestSchedules) {
           const loan = await this.getLoanById(loanInterestSchedule.loanId);
           if (loan.success && loan.data) {
-            const balance = Number(loan.data?.overallBalance);
+            const balance = Number(loan.data?.principalBalance);
 
             await prisma.loanSchedule.update({
               where: { id: loanInterestSchedule.id },
@@ -2212,11 +2215,7 @@ export class LoanService {
               creditAmount: interest,
               debitAmount: 0,
               transactionDate: loanInterestSchedule.start,
-              description:
-                "Interest enforcement on " +
-                balance.toFixed(2) +
-                " on " +
-                loanInterestSchedule.start,
+              description: "Interest enforcement on " + balance.toFixed(2) + " on " + date,
             });
           }
         }
@@ -2322,6 +2321,148 @@ export class LoanService {
             debitAmount: principalAmount,
             transactionDate: date,
             description: "Principal repayment",
+          });
+        }
+        if (loanData) {
+          const loan = await this.getLoanById(loanData.id);
+          if (loan.success && loan.data) {
+            console.log("OVERALL BALANCE", Number(loan.data?.overallBalance));
+            console.log("DATE", date);
+            console.log("LOAN ID", loanData.id);
+            await this.updateClosedSchedules(date, Number(loan.data?.overallBalance), loanData.id);
+          }
+        }
+        await revenueService.createRevenue({
+          type: RevenueType.Repayment,
+          credit: Number(amount),
+          debit: 0,
+          parentTable: "loan",
+          description: "Loan repayment",
+          referenceIds: [loanId],
+          transactionDate: date,
+          buyerId: loanData.buyerId,
+        });
+        return { success: true, data: { loanId, amount, date } };
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+  async loanRepaymentSplitr({
+    loanId,
+    amount,
+    date = new Date(),
+    stripePaymentIntentId,
+    paymentType = "partial",
+  }: {
+    loanId: string;
+    amount: number;
+    date?: Date;
+    stripePaymentIntentId: string;
+    paymentType: "partial" | "full" | "early" | "late";
+  }) {
+    try {
+      // Check if the payment intent is succeeded
+      const stripePaymentIntent = await stripeService.getPaymentIntent(stripePaymentIntentId);
+      if (stripePaymentIntent.status !== "succeeded") {
+        return { success: false, error: "Stripe payment intent is not succeeded" };
+      }
+      const paymentAmountCents = stripePaymentIntent.amount;
+      console.log("Log payment amount cents for now", paymentAmountCents);
+      if (paymentAmountCents !== Math.round(Number(amount) * 100)) {
+        return { success: false, error: "Payment amount is not equal to the amount" };
+      }
+      // First, enforce penalties
+      console.log("Log payment type for now", paymentType);
+      await this.penaltyEnforcement(date);
+
+      const loan = await this.getLoanById(loanId);
+      if (loan.success && loan.data) {
+        const loanData = loan.data;
+        const balance = loanData.overallBalance;
+        if (amount > Number(balance)) {
+          console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
+          return { success: false, error: "Amount is greater than balance" };
+        }
+
+        const loanschedules = loanData.loanSchedules
+          .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
+          .sort((a, b) => a.end.getTime() - b.end.getTime());
+        const nextSchedule = loanschedules[0];
+        // check if date is within the next schedule
+        if (date <= nextSchedule.end && date >= nextSchedule.start) {
+          await this.interestEnforcement(nextSchedule.start);
+        }
+        if (paymentType === "early") {
+          const monthlyRepayment = Number(loanData.monthlyRepayment);
+          // find how many month repayment is available and the remaining amount
+          const remainingAmount = Number(amount) - monthlyRepayment;
+          if (remainingAmount > 0) {
+            const remainingMonths = Math.ceil(remainingAmount / monthlyRepayment);
+            for (let i = 0; i < remainingMonths; i++) {
+              await this.interestEnforcement(nextSchedule.start);
+            }
+          }
+        }
+        const principalRepayment = Number(loanData.principalBalance);
+        const interestRepayment = Number(loanData.interestBalance);
+        const penaltyRepayment = Number(loanData.penaltyBalance);
+        console.log("PRINCIPAL REPAYMENT", principalRepayment);
+        console.log("INTEREST REPAYMENT", interestRepayment);
+        console.log("PENALTY REPAYMENT", penaltyRepayment);
+
+        // generate a reference number and mark DirectPay as settled
+        const settledPayment = await directPayService.markValueSettled({
+          stripePaymentIntentId,
+        });
+        const transactReference = settledPayment.transactReference;
+        const scheduleId = loanData.loanSchedules.filter(
+          (schedule) => schedule.status === LoanScheduleStatus.Open
+        )[0]?.id;
+        let balanceAmount = Number(amount);
+        if (penaltyRepayment > 0 && balanceAmount > 0) {
+          const penaltyAmount = Math.min(balanceAmount, penaltyRepayment);
+          balanceAmount -= penaltyAmount;
+          await this.createLoanTransaction({
+            loanId: loanData.id,
+            scheduleId: scheduleId,
+            transactionType: TransactionType.penalty,
+            transactionStatus: TransactionStatus.Completed,
+            creditAmount: 0,
+            debitAmount: penaltyAmount,
+            transactionDate: date,
+            description: "Penalty repayment",
+            transactReference: transactReference,
+          });
+        }
+        if (interestRepayment > 0 && balanceAmount > 0) {
+          const interestAmount = Math.min(balanceAmount, interestRepayment);
+          balanceAmount -= interestAmount;
+          await this.createLoanTransaction({
+            loanId: loanData.id,
+            scheduleId: scheduleId,
+            transactionType: TransactionType.interest,
+            transactionStatus: TransactionStatus.Completed,
+            creditAmount: 0,
+            debitAmount: interestAmount,
+            transactionDate: date,
+            description: "Interest repayment",
+            transactReference: transactReference,
+          });
+        }
+        if (principalRepayment > 0 && balanceAmount > 0) {
+          const principalAmount = Math.min(balanceAmount, principalRepayment);
+          balanceAmount -= principalAmount;
+          await this.createLoanTransaction({
+            loanId: loanData.id,
+            scheduleId: scheduleId,
+            transactionType: TransactionType.principal,
+            transactionStatus: TransactionStatus.Completed,
+            creditAmount: 0,
+            debitAmount: principalAmount,
+            transactionDate: date,
+            description: "Principal repayment",
+            transactReference: transactReference,
           });
         }
         if (loanData) {
@@ -2768,6 +2909,17 @@ export class LoanService {
       const paymentIntent = await stripeService.createPaymentIntent({
         amount: amountCents,
         description: `Loan repayment for ${loanData.buyer.firstName} ${loanData.buyer.lastName}-loanId: ${loanData.splitrId}`,
+        purpose: "LoanRepayment",
+        reference,
+        buyerId: buyer.id,
+        loanId,
+        invoiceId,
+        metadata: {
+          loanId,
+          invoiceId,
+          reference,
+          buyerId: buyer.id,
+        },
       });
 
       const createdDirectPay = await directPayService.createDirectPay({
