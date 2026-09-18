@@ -2376,7 +2376,7 @@ export class LoanService {
       console.log("Log payment type for now", paymentType);
       await this.penaltyEnforcement(date);
 
-      const loan = await this.getLoanById(loanId);
+      let loan = await this.getLoanById(loanId);
       if (loan.success && loan.data) {
         const loanData = loan.data;
         const balance = loanData.overallBalance;
@@ -2385,22 +2385,28 @@ export class LoanService {
           return { success: false, error: "Amount is greater than balance" };
         }
 
-        const loanschedules = loanData.loanSchedules
+        const initialLoanSchedules = loanData.loanSchedules
           .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
           .sort((a, b) => a.end.getTime() - b.end.getTime());
-        const nextSchedule = loanschedules[0];
+        const nextSchedule = initialLoanSchedules[0];
         // check if date is within the next schedule
         if (date <= nextSchedule.end && date >= nextSchedule.start) {
           await this.interestEnforcement(nextSchedule.start);
         }
+        loan = await this.getLoanById(loanId);
+        const loanschedules = loanData.loanSchedules
+          .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
+          .sort((a, b) => a.end.getTime() - b.end.getTime());
+
         if (paymentType === "early") {
+          const scheduleDifference = initialLoanSchedules.length - loanschedules.length;
           const monthlyRepayment = Number(loanData.monthlyRepayment);
           // find how many month repayment is available and the remaining amount
-          const remainingAmount = Number(amount) - monthlyRepayment;
+          const remainingAmount = Number(amount) - monthlyRepayment * scheduleDifference;
           if (remainingAmount > 0) {
             const remainingMonths = Math.ceil(remainingAmount / monthlyRepayment);
             for (let i = 0; i < remainingMonths; i++) {
-              await this.interestEnforcement(nextSchedule.start);
+              await this.interestEnforcement(loanschedules[i].start);
             }
           }
         }
