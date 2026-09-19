@@ -2453,76 +2453,25 @@ export class LoanService {
           const possibleSchedule = Math.floor(amount / Number(loanData.monthlyRepayment));
           console.log("Possible schedule", possibleSchedule);
           for (let i = 0; i < possibleSchedule; i++) {
-            console.log(
-              "Loan schedule",
-              loanschedules[i],
-              "start",
-              loanschedules[i].start,
-              "encountered",
-              i
-            );
             await this.interestEnforcement(loanschedules[i].start);
           }
         }
 
-        loan = await this.getLoanById(loanId);
-        if (loan.success && loan.data) {
-          loanData = loan.data;
-        }
-        const principalRepayment = Number(loanData.principalBalance);
-        const interestRepayment = Number(loanData.interestBalance);
-        const penaltyRepayment = Number(loanData.penaltyBalance);
-        console.log("PRINCIPAL REPAYMENT", principalRepayment);
-        console.log("INTEREST REPAYMENT", interestRepayment);
-        console.log("PENALTY REPAYMENT", penaltyRepayment);
-
-        // generate a reference number and mark DirectPay as settled
         const settledPayment = await directPayService.markValueSettled({
           stripePaymentIntentId,
           transactReference: reference,
         });
-        const transactReference = settledPayment.transactReference;
-        const scheduleId = loanData.loanSchedules.filter(
-          (schedule) => schedule.status === LoanScheduleStatus.Open
-        )[0]?.id;
-        let balanceAmount = Number(amount);
 
-        if (interestRepayment > 0 && balanceAmount > 0) {
-          const interestAmount = Math.min(balanceAmount, interestRepayment);
-          balanceAmount -= interestAmount;
-          await this.createLoanTransaction({
-            loanId: loanData.id,
-            scheduleId: scheduleId,
-            transactionType: TransactionType.interest,
-            transactionStatus: TransactionStatus.Completed,
-            creditAmount: 0,
-            debitAmount: interestAmount,
-            transactionDate: date,
-            description: "Interest repayment",
-            transactReference: transactReference,
-          });
-        }
-        if (principalRepayment > 0 && balanceAmount > 0) {
-          const principalAmount = Math.min(balanceAmount, principalRepayment);
-          balanceAmount -= principalAmount;
-          await this.createLoanTransaction({
-            loanId: loanData.id,
-            scheduleId: scheduleId,
-            transactionType: TransactionType.principal,
-            transactionStatus: TransactionStatus.Completed,
-            creditAmount: 0,
-            debitAmount: principalAmount,
-            transactionDate: date,
-            description: "Principal repayment",
-            transactReference: transactReference,
-          });
-        }
+        const allocation = await this.allocateInterestAndPrincipalRepayment({
+          loanId,
+          amount,
+          date,
+          transactReference: settledPayment.transactReference,
+        });
+        loanData = allocation.loanData;
         if (loanData) {
           const loan = await this.getLoanById(loanData.id);
           if (loan.success && loan.data) {
-            console.log("OVERALL BALANCE", Number(loan.data?.overallBalance));
-            console.log("DATE", date);
-            console.log("LOAN ID", loanData.id);
             await this.updateClosedSchedules(date, Number(loan.data?.overallBalance), loanData.id);
           }
         }
@@ -2542,6 +2491,80 @@ export class LoanService {
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * Allocate a repayment amount to outstanding interest, then principal.
+   */
+  async allocateInterestAndPrincipalRepayment({
+    loanId,
+    amount,
+    date = new Date(),
+    transactReference,
+  }: {
+    loanId: string;
+    amount: number;
+    date?: Date;
+    transactReference?: string;
+  }) {
+    const loan = await this.getLoanById(loanId);
+    if (!loan.success || !loan.data) {
+      throw new Error(loan.error || "Loan not found");
+    }
+
+    const loanData = loan.data;
+    const principalRepayment = Number(loanData.principalBalance);
+    const interestRepayment = Number(loanData.interestBalance);
+    const scheduleId = loanData.loanSchedules.filter(
+      (schedule) => schedule.status === LoanScheduleStatus.Open
+    )[0]?.id;
+
+    let balanceAmount = Number(amount);
+    let interestPaid = 0;
+    let principalPaid = 0;
+
+    if (interestRepayment > 0 && balanceAmount > 0) {
+      const interestAmount = Math.min(balanceAmount, interestRepayment);
+      balanceAmount -= interestAmount;
+      interestPaid = interestAmount;
+      await this.createLoanTransaction({
+        loanId: loanData.id,
+        scheduleId: scheduleId,
+        transactionType: TransactionType.interest,
+        transactionStatus: TransactionStatus.Completed,
+        creditAmount: 0,
+        debitAmount: interestAmount,
+        transactionDate: date,
+        description: "Interest repayment",
+        transactReference,
+      });
+    }
+
+    if (principalRepayment > 0 && balanceAmount > 0) {
+      const principalAmount = Math.min(balanceAmount, principalRepayment);
+      balanceAmount -= principalAmount;
+      principalPaid = principalAmount;
+      await this.createLoanTransaction({
+        loanId: loanData.id,
+        scheduleId: scheduleId,
+        transactionType: TransactionType.principal,
+        transactionStatus: TransactionStatus.Completed,
+        creditAmount: 0,
+        debitAmount: principalAmount,
+        transactionDate: date,
+        description: "Principal repayment",
+        transactReference,
+      });
+    }
+
+    return {
+      loanData,
+      scheduleId,
+      interestPaid,
+      principalPaid,
+      remainingAmount: balanceAmount,
+    };
+  }
+
   countClosedSchedules(records: RecordItem[]): number {
     return records.filter((r) => r.status === "Closed").length;
   }
