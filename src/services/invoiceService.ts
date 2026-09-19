@@ -2083,6 +2083,7 @@ export class InvoiceService {
     // create invoice mandate
     //generate short alphanumeric referenceId (max 24 characters)
     const referenceId = generateShortReferenceId();
+    console.log("PRODUCT data", product);
     const loanResult = await loanService.createLoan({
       buyerId: buyerId,
       invoiceId: id,

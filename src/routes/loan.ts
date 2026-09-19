@@ -133,6 +133,9 @@ router.post('/', authenticateJWT, loanController.createLoan);
  * /api/v1/loans:
  *   get:
  *     summary: Get all loans with optional filters
+ *     description: |
+ *       Returns paginated loans with buyer, merchant, product, schedules, transactions,
+ *       and computed balances including liquidatingBalance.
  *     tags: [Loan]
  *     security:
  *       - bearerAuth: []
@@ -146,13 +149,13 @@ router.post('/', authenticateJWT, loanController.createLoan);
  *         name: loanStatus
  *         schema:
  *           type: string
- *           enum: [Pending, Approved, Active, Cancel, Complete, Pause]
+ *           enum: [Pending, Approved, Active, Cancel, Complete, Pause, Default]
  *         description: Filter by loan status
  *       - in: query
  *         name: loanType
  *         schema:
  *           type: string
- *           enum: [Person, Corporate]
+ *           enum: [Personal, Corporate]
  *         description: Filter by loan type
  *       - in: query
  *         name: page
@@ -184,6 +187,71 @@ router.post('/', authenticateJWT, loanController.createLoan);
  *                       type: array
  *                       items:
  *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           splitrId:
+ *                             type: string
+ *                           loanAmount:
+ *                             type: number
+ *                           loanStatus:
+ *                             type: string
+ *                             enum: [Pending, Approved, Active, Cancel, Complete, Pause, Default]
+ *                           loanType:
+ *                             type: string
+ *                             enum: [Personal, Corporate]
+ *                           productId:
+ *                             type: string
+ *                             nullable: true
+ *                           product:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               productType:
+ *                                 type: string
+ *                               code:
+ *                                 type: string
+ *                               productName:
+ *                                 type: string
+ *                               tenure:
+ *                                 type: number
+ *                               minimumFinance:
+ *                                 type: number
+ *                               maximumFinance:
+ *                                 type: number
+ *                               rate:
+ *                                 type: number
+ *                           principalBalance:
+ *                             type: number
+ *                           interestBalance:
+ *                             type: number
+ *                           penaltyBalance:
+ *                             type: number
+ *                           overallBalance:
+ *                             type: number
+ *                           liquidatingBalance:
+ *                             type: number
+ *                             description: Overall balance plus accrued interest estimate for liquidation
+ *                           nextPaymentDate:
+ *                             type: string
+ *                             format: date-time
+ *                             nullable: true
+ *                           nextPaymentAmount:
+ *                             type: number
+ *                             nullable: true
+ *                           monthCompleted:
+ *                             type: number
+ *                           buyer:
+ *                             type: object
+ *                           merchant:
+ *                             type: object
+ *                             nullable: true
+ *                           loanSchedules:
+ *                             type: array
+ *                           loanTransactions:
+ *                             type: array
  *                     pagination:
  *                       type: object
  *                       properties:
@@ -473,6 +541,9 @@ router.get('/counts/grouped-by-day', authenticateJWT, loanController.getLoansCou
  * /api/v1/loans/{id}:
  *   get:
  *     summary: Get loan by ID
+ *     description: |
+ *       Returns a single loan with buyer, merchant, product, schedules, transactions,
+ *       computed balances (including liquidatingBalance), amountDue, and next payment details.
  *     tags: [Loan]
  *     security:
  *       - bearerAuth: []
@@ -497,6 +568,18 @@ router.get('/counts/grouped-by-day', authenticateJWT, loanController.getLoansCou
  *                 data:
  *                   type: object
  *                   properties:
+ *                     id:
+ *                       type: string
+ *                     splitrId:
+ *                       type: string
+ *                     loanAmount:
+ *                       type: number
+ *                     loanStatus:
+ *                       type: string
+ *                       enum: [Pending, Approved, Active, Cancel, Complete, Pause, Default]
+ *                     loanType:
+ *                       type: string
+ *                       enum: [Personal, Corporate]
  *                     productId:
  *                       type: string
  *                       nullable: true
@@ -505,6 +588,55 @@ router.get('/counts/grouped-by-day', authenticateJWT, loanController.getLoansCou
  *                       type: object
  *                       nullable: true
  *                       description: Linked ProductConfiguration summary
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         productType:
+ *                           type: string
+ *                         code:
+ *                           type: string
+ *                         productName:
+ *                           type: string
+ *                         tenure:
+ *                           type: number
+ *                         minimumFinance:
+ *                           type: number
+ *                         maximumFinance:
+ *                           type: number
+ *                         rate:
+ *                           type: number
+ *                     principalBalance:
+ *                       type: number
+ *                     interestBalance:
+ *                       type: number
+ *                     penaltyBalance:
+ *                       type: number
+ *                     overallBalance:
+ *                       type: number
+ *                     liquidatingBalance:
+ *                       type: number
+ *                       description: Overall balance plus accrued interest estimate for liquidation
+ *                     amountDue:
+ *                       type: number
+ *                       description: Current amount due based on schedules and overall balance
+ *                     nextPaymentDate:
+ *                       type: string
+ *                       format: date-time
+ *                       nullable: true
+ *                     nextPaymentAmount:
+ *                       type: number
+ *                       nullable: true
+ *                     monthCompleted:
+ *                       type: number
+ *                     buyer:
+ *                       type: object
+ *                     merchant:
+ *                       type: object
+ *                       nullable: true
+ *                     loanSchedules:
+ *                       type: array
+ *                     loanTransactions:
+ *                       type: array
  *       404:
  *         description: Loan not found
  *       500:
@@ -906,6 +1038,7 @@ router.post(
  *       3. Verifying payment via Mono or Stripe based on DirectPay.paymentMedium
  *       4. Updating the DirectPay status to Completed
  *       5. Processing the loan repayment transaction
+ *          (Stripe uses loanRepaymentSplitr with paymentType; Mono uses loanRepayment)
  *     tags: [Loan]
  *     security:
  *       - bearerAuth: []
@@ -917,6 +1050,19 @@ router.post(
  *           type: string
  *         description: Reference ID from the direct pay transaction
  *         example: "REF123456789"
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentType:
+ *                 type: string
+ *                 enum: [full, partial, early, late]
+ *                 default: full
+ *                 description: Repayment type used for Stripe Splitr settlement
+ *                 example: full
  *     responses:
  *       200:
  *         description: Loan repayment validated and processed successfully
@@ -935,7 +1081,7 @@ router.post(
  *                   type: object
  *                   description: Updated DirectPay record
  *       400:
- *         description: Bad request - Reference ID not found, direct pay not found, loan not found, or payment verification failed
+ *         description: Bad request - Reference ID not found, direct pay not found, loan not found, invalid paymentType, or payment verification failed
  *         content:
  *           application/json:
  *             schema:

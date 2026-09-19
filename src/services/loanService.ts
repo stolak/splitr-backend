@@ -17,6 +17,7 @@ import {
   getDayBeforeNextCycleByInstallmentType,
   getNextCycleByInstallmentType,
 } from "../utils/helper";
+import { randomUUID } from "crypto";
 import { RevenueService } from "./revenueService";
 import { AccountDetailsService } from "./accountDetailsService";
 import { InvoiceMandateService } from "./invoiceMandateService";
@@ -527,6 +528,11 @@ export class LoanService {
       const overallBalance = this.getLoanBalance(
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
+      const liquidatingBalance = this.getLoanLiquidatingBalance(
+        loan.loanTransactions as unknown as GetLoanBalanceInput[],
+        principalBalance,
+        interestBalance
+      );
       const amountDue = this.getAmountDue(loan);
       return {
         success: true,
@@ -536,6 +542,7 @@ export class LoanService {
           interestBalance,
           penaltyBalance,
           overallBalance,
+          liquidatingBalance,
           nextPaymentDate: loan.loanSchedules[0]?.end,
           nextPaymentAmount: loan.loanSchedules[0]?.expectedPayment,
           monthCompleted: this.countClosedSchedules(loan.loanSchedules as unknown as RecordItem[]),
@@ -734,12 +741,18 @@ export class LoanService {
         const overallBalance = this.getLoanBalance(
           loan.loanTransactions as unknown as GetLoanBalanceInput[]
         );
+        const liquidatingBalance = this.getLoanLiquidatingBalance(
+          loan.loanTransactions as unknown as GetLoanBalanceInput[],
+          principalBalance,
+          interestBalance
+        );
         return {
           ...loan,
           principalBalance,
           interestBalance,
           penaltyBalance,
           overallBalance,
+          liquidatingBalance,
           nextPaymentDate: loan.loanSchedules[0]?.end,
           nextPaymentAmount: loan.loanSchedules[0]?.expectedPayment,
           monthCompleted: this.countClosedSchedules(loan.loanSchedules as unknown as RecordItem[]),
@@ -2006,6 +2019,17 @@ export class LoanService {
     );
     return balance;
   }
+  getLoanLiquidatingBalance(
+    input: GetLoanBalanceInput[],
+    principal: Number,
+    interest: Number
+  ): Number {
+    const balance = input.reduce(
+      (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
+      0
+    );
+    return balance + Number(principal) * (Number(interest) / 12) * 0.01;
+  }
   getAmountDue(input: Loan & { loanSchedules?: any[]; loanTransactions?: any[] }) {
     // get next loan schedule that is not executed use Loan
     const nextSchedule = input.loanSchedules
@@ -2362,6 +2386,7 @@ export class LoanService {
     paymentType: "partial" | "full" | "early" | "late";
   }) {
     try {
+      const reference = randomUUID();
       // Check if the payment intent is succeeded
       const stripePaymentIntent = await stripeService.getPaymentIntent(stripePaymentIntentId);
       if (stripePaymentIntent.status !== "succeeded") {
@@ -2378,37 +2403,71 @@ export class LoanService {
 
       let loan = await this.getLoanById(loanId);
       if (loan.success && loan.data) {
-        const loanData = loan.data;
+        let loanData = loan.data;
         const balance = loanData.overallBalance;
         if (amount > Number(balance)) {
           console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
           return { success: false, error: "Amount is greater than balance" };
         }
 
-        const initialLoanSchedules = loanData.loanSchedules
-          .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
-          .sort((a, b) => a.end.getTime() - b.end.getTime());
-        const nextSchedule = initialLoanSchedules[0];
-        // check if date is within the next schedule
-        if (date <= nextSchedule.end && date >= nextSchedule.start) {
-          await this.interestEnforcement(nextSchedule.start);
+        if (paymentType === "full") {
+          if (amount < Number(loan.data.liquidatingBalance)) {
+            return { success: false, error: "Amount is less than the liquidating balance" };
+          }
+          const interest =
+            (Number(loanData.principalBalance) * Number(loanData.loanInterestRate) * 0.01) / 12;
+          const principalRepayment = amount - interest;
+          /// To do what happen next
+          await this.createLoanTransaction({
+            loanId: loanData.id,
+            transactionType: TransactionType.interest,
+            transactionStatus: TransactionStatus.Completed,
+            creditAmount: interest,
+            debitAmount: 0,
+            transactionDate: date,
+            description: "Interest charged on full repayment of loan",
+            transactReference: reference,
+          });
         }
-        loan = await this.getLoanById(loanId);
+        if (paymentType === "partial") {
+          const interest = (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12;
+          await this.createLoanTransaction({
+            loanId: loanData.id,
+            transactionType: TransactionType.interest,
+            transactionStatus: TransactionStatus.Completed,
+            creditAmount: interest,
+            debitAmount: 0,
+            transactionDate: date,
+            description: "Interest charged on partial repayment of loan",
+            transactReference: reference,
+          });
+
+          const principalRepayment = amount - interest;
+        }
+
         const loanschedules = loanData.loanSchedules
           .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
           .sort((a, b) => a.end.getTime() - b.end.getTime());
 
         if (paymentType === "early") {
-          const scheduleDifference = initialLoanSchedules.length - loanschedules.length;
-          const monthlyRepayment = Number(loanData.monthlyRepayment);
-          // find how many month repayment is available and the remaining amount
-          const remainingAmount = Number(amount) - monthlyRepayment * scheduleDifference;
-          if (remainingAmount > 0) {
-            const remainingMonths = Math.ceil(remainingAmount / monthlyRepayment);
-            for (let i = 0; i < remainingMonths; i++) {
-              await this.interestEnforcement(loanschedules[i].start);
-            }
+          const possibleSchedule = Math.floor(amount / Number(loanData.monthlyRepayment));
+          console.log("Possible schedule", possibleSchedule);
+          for (let i = 0; i < possibleSchedule; i++) {
+            console.log(
+              "Loan schedule",
+              loanschedules[i],
+              "start",
+              loanschedules[i].start,
+              "encountered",
+              i
+            );
+            await this.interestEnforcement(loanschedules[i].start);
           }
+        }
+
+        loan = await this.getLoanById(loanId);
+        if (loan.success && loan.data) {
+          loanData = loan.data;
         }
         const principalRepayment = Number(loanData.principalBalance);
         const interestRepayment = Number(loanData.interestBalance);
@@ -2420,27 +2479,14 @@ export class LoanService {
         // generate a reference number and mark DirectPay as settled
         const settledPayment = await directPayService.markValueSettled({
           stripePaymentIntentId,
+          transactReference: reference,
         });
         const transactReference = settledPayment.transactReference;
         const scheduleId = loanData.loanSchedules.filter(
           (schedule) => schedule.status === LoanScheduleStatus.Open
         )[0]?.id;
         let balanceAmount = Number(amount);
-        if (penaltyRepayment > 0 && balanceAmount > 0) {
-          const penaltyAmount = Math.min(balanceAmount, penaltyRepayment);
-          balanceAmount -= penaltyAmount;
-          await this.createLoanTransaction({
-            loanId: loanData.id,
-            scheduleId: scheduleId,
-            transactionType: TransactionType.penalty,
-            transactionStatus: TransactionStatus.Completed,
-            creditAmount: 0,
-            debitAmount: penaltyAmount,
-            transactionDate: date,
-            description: "Penalty repayment",
-            transactReference: transactReference,
-          });
-        }
+
         if (interestRepayment > 0 && balanceAmount > 0) {
           const interestAmount = Math.min(balanceAmount, interestRepayment);
           balanceAmount -= interestAmount;
@@ -2956,7 +3002,10 @@ export class LoanService {
     }
   }
 
-  async validateLoanRepayment(referenceid: string) {
+  async validateLoanRepayment(
+    referenceid: string,
+    paymentType: "full" | "partial" | "early" | "late" = "full"
+  ) {
     const directPay = await directPayService.getDirectPayByReference(referenceid);
 
     if (!directPay || !directPay.id) {
@@ -3005,7 +3054,13 @@ export class LoanService {
         return { success: false, error: "Failed to update direct pay" };
       }
       console.log("LOAN REPAYMENT", loanId, amount, date);
-      await this.loanRepayment(loanId, amount, date);
+      await this.loanRepaymentSplitr({
+        loanId,
+        amount,
+        date,
+        stripePaymentIntentId: directPay.stripePaymentIntentId,
+        paymentType: paymentType,
+      });
       return { success: true, data: updatedDirectPay };
     }
 

@@ -806,6 +806,7 @@ export class LoanController {
   async validateLoanRepayment(req: Request, res: Response) {
     try {
       const { referenceId } = req.params;
+      const { paymentType } = req.body ?? {};
 
       if (!referenceId) {
         return res.status(400).json({
@@ -814,7 +815,18 @@ export class LoanController {
         });
       }
 
-      const result = await loanService.validateLoanRepayment(referenceId);
+      const allowedPaymentTypes = ["full", "partial", "early", "late"] as const;
+      if (paymentType && !allowedPaymentTypes.includes(paymentType)) {
+        return res.status(400).json({
+          success: false,
+          message: "paymentType must be one of: full, partial, early, late",
+        });
+      }
+
+      const result = await loanService.validateLoanRepayment(
+        referenceId,
+        paymentType || "full"
+      );
 
       if (!result || !result.success) {
         return res.status(400).json({
