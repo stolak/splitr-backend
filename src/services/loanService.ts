@@ -2132,13 +2132,7 @@ export class LoanService {
       (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
       0
     );
-    console.log("BALANCE", balance);
-    console.log("PRINCIPAL", principal);
-    console.log("INTEREST", interest);
-    console.log(
-      "BALANCE + PRINCIPAL * INTEREST / 12 * 0.01",
-      balance + Number(principal) * (Number(interest) / 12) * 0.01
-    );
+
     return balance + Number(principal) * (Number(interest) / 12) * 0.01;
   }
   getAmountDue(input: Loan & { loanSchedules?: any[]; loanTransactions?: any[] }) {
@@ -2509,6 +2503,11 @@ export class LoanService {
         const paymentAmountCents = stripePaymentIntent.amount;
         console.log("Log payment amount cents for now", paymentAmountCents);
         if (paymentAmountCents !== Math.round(Number(amount) * 100)) {
+          console.log(
+            "PAYMENT AMOUNT CENTS IS NOT EQUAL TO THE AMOUNT",
+            paymentAmountCents,
+            amount
+          );
           return { success: false, error: "Payment amount is not equal to the amount" };
         }
       }
@@ -2520,13 +2519,21 @@ export class LoanService {
       if (loan.success && loan.data) {
         let loanData = loan.data;
         const balance = loanData.liquidatingBalance;
-        if (amount > Number(balance)) {
+        const amountCents = Math.round(Number(amount) * 100);
+        const balanceCents = Math.round(Number(balance) * 100);
+        if (amountCents > balanceCents) {
           console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
           return { success: false, error: "Amount is greater than balance" };
         }
 
         if (paymentType === "full") {
-          if (amount < Number(loan.data.liquidatingBalance)) {
+          const liquidatingBalanceCents = Math.round(Number(loan.data.liquidatingBalance) * 100);
+          if (amountCents < liquidatingBalanceCents) {
+            console.log(
+              "AMOUNT IS LESS THAN THE LIQUIDATING BALANCE",
+              amount,
+              loan.data.liquidatingBalance
+            );
             return { success: false, error: "Amount is less than the liquidating balance" };
           }
           await this.chargePartialRepaymentInterestAndAllocate({
@@ -2585,7 +2592,7 @@ export class LoanService {
               }
             }
           }
-          if (remainingAmount > 0) {
+          if (remainingAmount > 0.05) {
             await this.chargePartialRepaymentInterestAndAllocate({
               loanId,
               loanData,
@@ -3323,8 +3330,8 @@ export class LoanService {
     if (!Number.isFinite(monthlyRepay) || monthlyRepay <= 0) {
       throw new Error("monthlyRepay must be a positive number");
     }
-    if (!Number.isFinite(principalBalance) || principalBalance <= 0) {
-      throw new Error("principalBalance must be a positive number");
+    if (!Number.isFinite(principalBalance)) {
+      throw new Error("principalBalance must be a valid number");
     }
     if (!Number.isFinite(interestRate) || interestRate < 0) {
       throw new Error("interestRate must be a non-negative number");
@@ -3337,7 +3344,7 @@ export class LoanService {
       amountPay: number;
     }> = [];
 
-    let balance = principalBalance;
+    let balance = principalBalance < 0 ? 0 : principalBalance;
     let month = 1;
     const maxMonths = 12;
 
