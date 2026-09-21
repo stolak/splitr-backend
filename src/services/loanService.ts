@@ -2513,7 +2513,7 @@ export class LoanService {
       }
       // First, enforce penalties
       console.log("Log payment type for now", paymentType);
-      await this.penaltyEnforcement(date);
+      // await this.penaltyEnforcement(date);
 
       let loan = await this.getLoanById(loanId);
       if (loan.success && loan.data) {
