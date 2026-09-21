@@ -714,8 +714,9 @@ router.post('/:id/repayment', authenticateJWT, loanController.loanRepayment);
  *     summary: Process a Stripe-confirmed Splitr loan repayment
  *     description: |
  *       Verifies the Stripe PaymentIntent has succeeded and matches the repayment amount,
- *       then allocates the payment to penalty, interest, and principal in that order.
+ *       then allocates the payment to interest and principal.
  *       Amount is in major currency units and is compared to the PaymentIntent amount in cents.
+ *       When isTest is true, Stripe PaymentIntent verification and DirectPay settlement are skipped.
  *     tags: [Loan]
  *     security:
  *       - bearerAuth: []
@@ -734,7 +735,6 @@ router.post('/:id/repayment', authenticateJWT, loanController.loanRepayment);
  *             type: object
  *             required:
  *               - amount
- *               - stripePaymentIntentId
  *             properties:
  *               amount:
  *                 type: number
@@ -742,13 +742,18 @@ router.post('/:id/repayment', authenticateJWT, loanController.loanRepayment);
  *                 example: 150.5
  *               stripePaymentIntentId:
  *                 type: string
- *                 description: Succeeded Stripe PaymentIntent ID
+ *                 description: Succeeded Stripe PaymentIntent ID (required unless isTest is true)
  *                 example: "pi_abc123"
  *               paymentType:
  *                 type: string
  *                 enum: [partial, full, early, late]
  *                 default: partial
  *                 description: Repayment type
+ *               isTest:
+ *                 type: boolean
+ *                 default: false
+ *                 description: When true, skips Stripe verification and DirectPay settlement for test runs
+ *                 example: false
  *               date:
  *                 type: string
  *                 format: date-time

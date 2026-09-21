@@ -1,7 +1,7 @@
-import { DirectPayStatus, DirectPayType, PaymentProvider } from '@prisma/client';
-import axios from 'axios';
-import { randomUUID } from 'crypto';
-import prisma from '../utils/prisma';
+import { DirectPayStatus, DirectPayType, PaymentProvider } from "@prisma/client";
+import axios from "axios";
+import { randomUUID } from "crypto";
+import prisma from "../utils/prisma";
 
 // ==================== INTERFACES ====================
 
@@ -46,7 +46,7 @@ export interface Customer {
   address: string;
   name: string;
   identity: {
-    type: 'bvn';
+    type: "bvn";
     number: string;
   };
 }
@@ -121,13 +121,7 @@ export class DirectPayService {
    * Create a new direct pay
    */
   async createDirectPay(input: CreateDirectPayInput) {
-    const {
-      invoiceId,
-      buyerId,
-      type = DirectPayType.Other,
-      reference,
-      amount,
-    } = input;
+    const { invoiceId, buyerId, type = DirectPayType.Other, reference, amount } = input;
 
     const paymentMedium =
       input.paymentMedium ??
@@ -139,29 +133,29 @@ export class DirectPayService {
 
     // Validate required fields
     if (!invoiceId) {
-      throw new Error('Invoice ID is required');
+      throw new Error("Invoice ID is required");
     }
     if (!buyerId) {
-      throw new Error('Buyer ID is required');
+      throw new Error("Buyer ID is required");
     }
     if (!reference) {
-      throw new Error('Reference is required');
+      throw new Error("Reference is required");
     }
     if (!amount || amount <= 0) {
-      throw new Error('Valid amount is required');
+      throw new Error("Valid amount is required");
     }
 
     if (paymentMedium === PaymentProvider.Mono) {
       if (!input.monoAccountId) {
-        throw new Error('Mono account ID is required for Mono payments');
+        throw new Error("Mono account ID is required for Mono payments");
       }
       if (!input.monoCustomerId) {
-        throw new Error('Mono customer ID is required for Mono payments');
+        throw new Error("Mono customer ID is required for Mono payments");
       }
     }
 
     if (paymentMedium === PaymentProvider.Stripe && !input.stripePaymentIntentId) {
-      throw new Error('Stripe payment intent ID is required for Stripe payments');
+      throw new Error("Stripe payment intent ID is required for Stripe payments");
     }
 
     // Verify invoice exists
@@ -169,7 +163,7 @@ export class DirectPayService {
       where: { id: invoiceId },
     });
     if (!invoice) {
-      throw new Error('Invoice not found');
+      throw new Error("Invoice not found");
     }
 
     // Verify buyer exists
@@ -177,7 +171,7 @@ export class DirectPayService {
       where: { id: buyerId },
     });
     if (!buyer) {
-      throw new Error('Buyer not found');
+      throw new Error("Buyer not found");
     }
 
     // Verify mandate exists if provided
@@ -186,7 +180,7 @@ export class DirectPayService {
         where: { id: input.mandateId },
       });
       if (!mandate) {
-        throw new Error('Mandate not found');
+        throw new Error("Mandate not found");
       }
     }
 
@@ -195,7 +189,7 @@ export class DirectPayService {
       where: { reference },
     });
     if (existingDirectPay) {
-      throw new Error('Direct pay with this reference already exists');
+      throw new Error("Direct pay with this reference already exists");
     }
 
     // Create the direct pay
@@ -233,7 +227,7 @@ export class DirectPayService {
     });
 
     if (!directPay) {
-      throw new Error('Direct pay not found');
+      throw new Error("Direct pay not found");
     }
 
     return directPay;
@@ -277,7 +271,7 @@ export class DirectPayService {
       prisma.directPay.findMany({
         where,
         select: directPaySelect,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
@@ -304,13 +298,13 @@ export class DirectPayService {
     });
 
     if (!invoice) {
-      throw new Error('Invoice not found');
+      throw new Error("Invoice not found");
     }
 
     const directPays = await prisma.directPay.findMany({
       where: { invoiceId },
       select: directPaySelect,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return directPays;
@@ -325,13 +319,13 @@ export class DirectPayService {
     });
 
     if (!buyer) {
-      throw new Error('Buyer not found');
+      throw new Error("Buyer not found");
     }
 
     const directPays = await prisma.directPay.findMany({
       where: { buyerId },
       select: directPaySelect,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return directPays;
@@ -346,13 +340,13 @@ export class DirectPayService {
     });
 
     if (!mandate) {
-      throw new Error('Mandate not found');
+      throw new Error("Mandate not found");
     }
 
     const directPays = await prisma.directPay.findMany({
       where: { mandateId, isActive: true },
       select: directPaySelect,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return directPays;
@@ -365,7 +359,7 @@ export class DirectPayService {
       data: { status: DirectPayStatus.Cancelled, isActive: false },
     });
 
-    return { success: true, message: 'Direct pay regenerated successfully' };
+    return { success: true, message: "Direct pay regenerated successfully" };
   }
 
   /**
@@ -376,28 +370,36 @@ export class DirectPayService {
     directPayId,
     stripePaymentIntentId,
     transactReference,
+    isTest = false,
   }: {
     directPayId?: string;
     stripePaymentIntentId?: string;
     transactReference?: string;
+    isTest?: boolean;
   }) {
+    if (isTest) {
+      return {
+        isTest,
+        transactReference: transactReference || randomUUID(),
+      };
+    }
     if (!directPayId && !stripePaymentIntentId) {
-      throw new Error('directPayId or stripePaymentIntentId is required');
+      throw new Error("directPayId or stripePaymentIntentId is required");
     }
 
     const payment = directPayId
       ? await prisma.directPay.findUnique({ where: { id: directPayId } })
       : await prisma.directPay.findFirst({
           where: { stripePaymentIntentId },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
         });
 
     if (!payment) {
-      throw new Error('Direct pay not found');
+      throw new Error("Direct pay not found");
     }
 
     if (payment.isValueSettled) {
-      throw new Error('Payment is already settled');
+      throw new Error("Payment is already settled");
     }
 
     const reference = transactReference || randomUUID();
@@ -426,7 +428,7 @@ export class DirectPayService {
     });
 
     if (!directPay) {
-      throw new Error('Direct pay not found');
+      throw new Error("Direct pay not found");
     }
 
     return directPay;
@@ -442,7 +444,7 @@ export class DirectPayService {
     });
 
     if (!existingDirectPay) {
-      throw new Error('Direct pay not found');
+      throw new Error("Direct pay not found");
     }
 
     // Verify invoice exists if being updated
@@ -451,7 +453,7 @@ export class DirectPayService {
         where: { id: input.invoiceId },
       });
       if (!invoice) {
-        throw new Error('Invoice not found');
+        throw new Error("Invoice not found");
       }
     }
 
@@ -461,7 +463,7 @@ export class DirectPayService {
         where: { id: input.buyerId },
       });
       if (!buyer) {
-        throw new Error('Buyer not found');
+        throw new Error("Buyer not found");
       }
     }
 
@@ -472,7 +474,7 @@ export class DirectPayService {
           where: { id: input.mandateId },
         });
         if (!mandate) {
-          throw new Error('Mandate not found');
+          throw new Error("Mandate not found");
         }
       }
     }
@@ -483,13 +485,13 @@ export class DirectPayService {
         where: { reference: input.reference },
       });
       if (existingByReference) {
-        throw new Error('Direct pay with this reference already exists');
+        throw new Error("Direct pay with this reference already exists");
       }
     }
 
     // Validate amount if being updated
     if (input.amount !== undefined && input.amount <= 0) {
-      throw new Error('Amount must be greater than 0');
+      throw new Error("Amount must be greater than 0");
     }
 
     // Update the direct pay
@@ -541,14 +543,14 @@ export class DirectPayService {
     });
 
     if (!directPay) {
-      throw new Error('Direct pay not found');
+      throw new Error("Direct pay not found");
     }
 
     await prisma.directPay.delete({
       where: { id },
     });
 
-    return { message: 'Direct pay deleted successfully' };
+    return { message: "Direct pay deleted successfully" };
   }
 
   /**
@@ -615,12 +617,12 @@ export class DirectPayService {
    */
   async initiateMonoDirectPay(input: InitiateDirectPayInput) {
     try {
-      const url = 'https://api.withmono.com/v2/payments/initiate';
+      const url = "https://api.withmono.com/v2/payments/initiate";
 
       const payload: any = {
         amount: input.amount,
-        type: 'onetime-debit',
-        method: 'account',
+        type: "onetime-debit",
+        method: "account",
         description: input.description,
         reference: input.reference,
         redirect_url: input.redirectUrl || `${process.env.FRONTEND_URL}/buyer/dashboard/direct-pay`,
@@ -637,9 +639,9 @@ export class DirectPayService {
       }
       const response = await axios.post(url, payload, {
         headers: {
-          'mono-sec-key': process.env.MONO_SECRET_KEY!,
-          accept: 'application/json',
-          'content-type': 'application/json',
+          "mono-sec-key": process.env.MONO_SECRET_KEY!,
+          accept: "application/json",
+          "content-type": "application/json",
         },
       });
       //console.log('response', response);
@@ -661,14 +663,14 @@ export class DirectPayService {
 
       const response = await axios.get(url, {
         headers: {
-          'mono-sec-key': process.env.MONO_SECRET_KEY!,
-          accept: 'application/json',
-          'content-type': 'application/json',
+          "mono-sec-key": process.env.MONO_SECRET_KEY!,
+          accept: "application/json",
+          "content-type": "application/json",
         },
       });
       // update direct pay status to completed if successful
 
-      if (response.data.data.status === 'successful') {
+      if (response.data.data.status === "successful") {
         await prisma.directPay.update({
           where: { reference },
           data: { status: DirectPayStatus.Completed },
@@ -676,7 +678,7 @@ export class DirectPayService {
       }
       return { success: true, data: response.data.data };
     } catch (error: any) {
-      console.log('error', error);
+      console.log("error", error);
       return {
         success: false,
         error: error.response?.data?.message || error.response?.data || error.message,

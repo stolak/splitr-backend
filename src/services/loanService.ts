@@ -2480,24 +2480,28 @@ export class LoanService {
     date = new Date(),
     stripePaymentIntentId,
     paymentType = "partial",
+    isTest = false,
   }: {
     loanId: string;
     amount: number;
     date?: Date;
     stripePaymentIntentId: string;
     paymentType: "partial" | "full" | "early" | "late";
+    isTest?: boolean;
   }) {
     try {
       const reference = randomUUID();
       // Check if the payment intent is succeeded
-      const stripePaymentIntent = await stripeService.getPaymentIntent(stripePaymentIntentId);
-      if (stripePaymentIntent.status !== "succeeded") {
-        return { success: false, error: "Stripe payment intent is not succeeded" };
-      }
-      const paymentAmountCents = stripePaymentIntent.amount;
-      console.log("Log payment amount cents for now", paymentAmountCents);
-      if (paymentAmountCents !== Math.round(Number(amount) * 100)) {
-        return { success: false, error: "Payment amount is not equal to the amount" };
+      if (!isTest) {
+        const stripePaymentIntent = await stripeService.getPaymentIntent(stripePaymentIntentId);
+        if (stripePaymentIntent.status !== "succeeded") {
+          return { success: false, error: "Stripe payment intent is not succeeded" };
+        }
+        const paymentAmountCents = stripePaymentIntent.amount;
+        console.log("Log payment amount cents for now", paymentAmountCents);
+        if (paymentAmountCents !== Math.round(Number(amount) * 100)) {
+          return { success: false, error: "Payment amount is not equal to the amount" };
+        }
       }
       // First, enforce penalties
       console.log("Log payment type for now", paymentType);
@@ -2562,6 +2566,7 @@ export class LoanService {
         const settledPayment = await directPayService.markValueSettled({
           stripePaymentIntentId,
           transactReference: reference,
+          isTest,
         });
 
         const allocation = await this.allocateInterestAndPrincipalRepayment({

@@ -617,7 +617,7 @@ export class LoanController {
   async loanRepaymentSplitr(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { amount, date, stripePaymentIntentId, paymentType } = req.body;
+      const { amount, date, stripePaymentIntentId, paymentType, isTest } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -633,7 +633,8 @@ export class LoanController {
         });
       }
 
-      if (!stripePaymentIntentId) {
+      const testMode = Boolean(isTest);
+      if (!testMode && !stripePaymentIntentId) {
         return res.status(400).json({
           success: false,
           message: "stripePaymentIntentId is required",
@@ -660,8 +661,9 @@ export class LoanController {
         loanId: id,
         amount: Number(amount),
         date: repaymentDate,
-        stripePaymentIntentId,
+        stripePaymentIntentId: stripePaymentIntentId || "",
         paymentType: paymentType || "partial",
+        isTest: testMode,
       });
 
       if (!result || !result.success) {
