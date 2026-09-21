@@ -747,7 +747,7 @@ export class LoanService {
         const liquidatingBalance = this.getLoanLiquidatingBalance(
           loan.loanTransactions as unknown as GetLoanBalanceInput[],
           principalBalance,
-          interestBalance
+          Number(loan.loanInterestRate)
         );
         return {
           ...loan,
