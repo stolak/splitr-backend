@@ -2017,6 +2017,117 @@ export class InvoiceController {
       });
     }
   }
+
+  /**
+   * @swagger
+   * /api/v1/invoices/calculate-schedule:
+   *   post:
+   *     summary: Calculate full amortization schedule
+   *     description: |
+   *       Builds a repayment schedule until principal is repaid.
+   *       Each period charges interest as openingBalance * (interestRate / 100),
+   *       then applies monthlyRepay (capped at openingBalance + interest).
+   *     tags: [Invoice]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - monthlyRepay
+   *               - principalBalance
+   *               - interestRate
+   *             properties:
+   *               monthlyRepay:
+   *                 type: number
+   *                 description: Fixed repayment amount per period
+   *                 example: 8500
+   *               principalBalance:
+   *                 type: number
+   *                 description: Starting principal balance
+   *                 example: 100000
+   *               interestRate:
+   *                 type: number
+   *                 description: Interest rate percent applied each period (e.g. 1.5 for 1.5%)
+   *                 example: 1.5
+   *     responses:
+   *       200:
+   *         description: Schedule calculated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                   example: true
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       month:
+   *                         type: number
+   *                       openingBalance:
+   *                         type: number
+   *                       closingBalance:
+   *                         type: number
+   *                       amountPay:
+   *                         type: number
+   *       400:
+   *         description: Invalid inputs
+   *       500:
+   *         description: Internal server error
+   */
+  async calculateSchedule(req: Request, res: Response) {
+    try {
+      const { monthlyRepay, principalBalance, interestRate } = req.body ?? {};
+
+      if (
+        monthlyRepay === undefined ||
+        principalBalance === undefined ||
+        interestRate === undefined
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "monthlyRepay, principalBalance, and interestRate are required",
+        });
+      }
+
+      const parsedMonthlyRepay = Number(monthlyRepay);
+      const parsedPrincipalBalance = Number(principalBalance);
+      const parsedInterestRate = Number(interestRate);
+
+      if (
+        !Number.isFinite(parsedMonthlyRepay) ||
+        !Number.isFinite(parsedPrincipalBalance) ||
+        !Number.isFinite(parsedInterestRate)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "monthlyRepay, principalBalance, and interestRate must be valid numbers",
+        });
+      }
+
+      const data = invoiceService.calculateSchedule(
+        parsedMonthlyRepay,
+        parsedPrincipalBalance,
+        parsedInterestRate
+      );
+
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      console.error("Error calculating schedule:", error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Failed to calculate schedule",
+      });
+    }
+  }
 }
 
 export const invoiceController = new InvoiceController();

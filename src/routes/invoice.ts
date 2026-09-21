@@ -28,6 +28,9 @@ router.get('/my-invoices', authenticateJWT, invoiceController.getByCustomerEmail
 // Calculate refund details for invoice return
 router.post('/refund/calculate', invoiceController.calculateRefund);
 
+// Calculate full amortization schedule (no auth)
+router.post('/calculate-schedule', invoiceController.calculateSchedule);
+
 // Calculate refund details by invoice id
 router.get('/:id/refund/calculate', invoiceController.calculateRefundForInvoice);
 

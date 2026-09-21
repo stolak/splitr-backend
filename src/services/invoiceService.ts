@@ -2246,5 +2246,61 @@ export class InvoiceService {
       },
     };
   }
+
+  /**
+   * Build a full amortization schedule until principal is repaid.
+   */
+  calculateSchedule(monthlyRepay: number, principalBalance: number, interestRate: number) {
+    if (!Number.isFinite(monthlyRepay) || monthlyRepay <= 0) {
+      throw new Error("monthlyRepay must be a positive number");
+    }
+    if (!Number.isFinite(principalBalance) || principalBalance <= 0) {
+      throw new Error("principalBalance must be a positive number");
+    }
+    if (!Number.isFinite(interestRate) || interestRate < 0) {
+      throw new Error("interestRate must be a non-negative number");
+    }
+
+    const schedule: Array<{
+      month: number;
+      openingBalance: number;
+      closingBalance: number;
+      amountPay: number;
+    }> = [];
+
+    let balance = principalBalance;
+    let month = 1;
+    const maxMonths = 12;
+
+    while (balance > 0) {
+      if (month > maxMonths) {
+        throw new Error(
+          "Schedule exceeded maximum months; monthlyRepay may be too low to cover interest"
+        );
+      }
+
+      const openingBalance = balance;
+      const interest = openingBalance * (interestRate / 100);
+      const amountPay = Math.min(monthlyRepay, openingBalance + interest);
+      const principalPaid = amountPay - interest;
+      const closingBalance = Math.max(0, openingBalance - principalPaid);
+
+      if (principalPaid <= 0) {
+        throw new Error("monthlyRepay is too low to reduce principal after interest is charged");
+      }
+
+      schedule.push({
+        month,
+        openingBalance,
+        closingBalance,
+        amountPay,
+      });
+
+      balance = closingBalance;
+      month++;
+    }
+
+    return schedule;
+  }
 }
 export const invoiceService = new InvoiceService();

@@ -120,6 +120,8 @@ export interface UpdateLoanScheduleInput {
   end?: Date;
   expectedPayment?: number;
   actualPayment?: number;
+  expectedClosingBalance?: number;
+  expectedBalance?: number;
 }
 
 // LoanPenaltySchedule interfaces
@@ -2652,7 +2654,47 @@ export class LoanService {
       transactReference,
       description,
     });
-
+    console.log("ALLOCATION", allocation);
+    const loan = await this.getLoanById(loanId);
+    if (!loan.success || !loan.data) {
+      throw new Error(loan.error || "Loan not found");
+    }
+    const loanData2 = loan.data;
+    const calculateSchedule = this.calculateSchedule(
+      Number(loanData2.monthlyRepayment),
+      Number(loanData2.principalBalance),
+      Number(loanData2.loanInterestRate)
+    );
+    console.log("CALCULATE SCHEDULE", calculateSchedule);
+    // To do what happen next
+    // the the list of schedules and find the schedule that is open and update the schedule
+    const schedules = loanData2.loanSchedules
+      .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
+      .sort((a, b) => a.end.getTime() - b.end.getTime());
+    if (schedules.length > 0) {
+      for (let i = 0; i < schedules.length; i++) {
+        console.log(` ${i} <= ${calculateSchedule.length - 1}`);
+        const status =
+          (i <= calculateSchedule.length - 1 ? (calculateSchedule[i].openingBalance ?? 0) : 0) <= 0
+            ? LoanScheduleStatus.Closed
+            : LoanScheduleStatus.Open;
+        // update the opening and closing balance of the schedule and the closing balance of the schedule base on calculateSchedule
+        await prisma.loanSchedule.update({
+          where: { id: schedules[i].id },
+          data: {
+            openingBalance:
+              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].openingBalance ?? 0) : 0,
+            expectedBalance:
+              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].closingBalance ?? 0) : 0,
+            expectedPayment:
+              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].amountPay ?? 0) : 0,
+            expectedClosingBalance:
+              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].closingBalance ?? 0) : 0,
+            status: status,
+          },
+        });
+      }
+    }
     return {
       interestCharged: interest,
       ...allocation,
@@ -3275,6 +3317,59 @@ export class LoanService {
     }
 
     return { success: false, error: "Failed to validate loan repayment" };
+  }
+
+  calculateSchedule(monthlyRepay: number, principalBalance: number, interestRate: number) {
+    if (!Number.isFinite(monthlyRepay) || monthlyRepay <= 0) {
+      throw new Error("monthlyRepay must be a positive number");
+    }
+    if (!Number.isFinite(principalBalance) || principalBalance <= 0) {
+      throw new Error("principalBalance must be a positive number");
+    }
+    if (!Number.isFinite(interestRate) || interestRate < 0) {
+      throw new Error("interestRate must be a non-negative number");
+    }
+
+    const schedule: Array<{
+      month: number;
+      openingBalance: number;
+      closingBalance: number;
+      amountPay: number;
+    }> = [];
+
+    let balance = principalBalance;
+    let month = 1;
+    const maxMonths = 12;
+
+    while (balance > 0) {
+      if (month > maxMonths) {
+        throw new Error(
+          "Schedule exceeded maximum months; monthlyRepay may be too low to cover interest"
+        );
+      }
+
+      const openingBalance = balance;
+      const interest = (openingBalance * (interestRate / 100)) / 12;
+      const amountPay = Math.min(monthlyRepay, openingBalance + interest);
+      const principalPaid = amountPay - interest;
+      const closingBalance = Math.max(0, openingBalance - principalPaid);
+
+      if (principalPaid <= 0) {
+        throw new Error("monthlyRepay is too low to reduce principal after interest is charged");
+      }
+
+      schedule.push({
+        month,
+        openingBalance,
+        closingBalance,
+        amountPay,
+      });
+
+      balance = closingBalance;
+      month++;
+    }
+
+    return schedule;
   }
 }
 export const loanService = new LoanService();
