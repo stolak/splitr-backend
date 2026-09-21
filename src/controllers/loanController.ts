@@ -323,6 +323,44 @@ export class LoanController {
   }
 
   /**
+   * Force-delete loan and all associated records
+   */
+  async forceDeleteLoan(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Loan ID is required",
+        });
+      }
+
+      const result = await loanService.forceDeleteLoan(id);
+
+      if (!result.success) {
+        const statusCode = result.error?.includes("not found") ? 404 : 400;
+        return res.status(statusCode).json({
+          success: false,
+          message: result.error,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+      });
+    } catch (error: any) {
+      console.error("Error force-deleting loan:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
+    }
+  }
+
+  /**
    * Get loan summary
    */
   async getLoanSummary(req: Request, res: Response) {

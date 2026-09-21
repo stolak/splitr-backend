@@ -1348,6 +1348,75 @@ router.delete('/:id', authenticateJWT, loanController.deleteLoan);
 
 /**
  * @swagger
+ * /api/v1/loans/{id}/force:
+ *   delete:
+ *     summary: Force-delete loan and all associated records
+ *     description: |
+ *       Permanently deletes the loan and related records linked to the loan id:
+ *       loan transactions, loan schedules, penalty schedules, debit-trial schedules,
+ *       mandate debits, revenues, stripe payment intents, and stripe mandates.
+ *       Invoice mandates linked to the loan are unlinked (loanId set to null) rather than deleted.
+ *       The linked invoice status is reset to Pending.
+ *     tags: [Loan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Loan ID
+ *     responses:
+ *       200:
+ *         description: Loan and associated records force-deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     loan:
+ *                       type: object
+ *                     deletedCounts:
+ *                       type: object
+ *                       properties:
+ *                         loanTransactions:
+ *                           type: number
+ *                         loanSchedules:
+ *                           type: number
+ *                         loanPenaltySchedules:
+ *                           type: number
+ *                         loanDebitTrialSchedules:
+ *                           type: number
+ *                         mandateDebits:
+ *                           type: number
+ *                         revenues:
+ *                           type: number
+ *                         stripePaymentIntents:
+ *                           type: number
+ *                         stripeMandates:
+ *                           type: number
+ *                         mandatesUnlinked:
+ *                           type: number
+ *       400:
+ *         description: Bad request
+ *       404:
+ *         description: Loan not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete('/:id/force', authenticateJWT, loanController.forceDeleteLoan);
+
+/**
+ * @swagger
  * /api/v1/loans/{id}/summary:
  *   get:
  *     summary: Get comprehensive loan summary with calculations

@@ -11,6 +11,7 @@ import {
   Loan,
   DirectPayType,
   LoanInstallmentType,
+  InvoiceStatus,
 } from "@prisma/client";
 import {
   normalizeToMidnight,
@@ -889,6 +890,107 @@ export class LoanService {
         success: true,
         data: loan,
         message: "Loan deleted successfully",
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Force-delete a loan and all dependent records linked to the loan id.
+   */
+  async forceDeleteLoan(loanId: string) {
+    try {
+      const existingLoan = await prisma.loan.findUnique({
+        where: { id: loanId },
+        select: { id: true, splitrId: true, invoiceId: true },
+      });
+
+      if (!existingLoan) {
+        throw new Error("Loan not found");
+      }
+
+      const deleted = await prisma.$transaction(async (tx) => {
+        const schedules = await tx.loanSchedule.findMany({
+          where: { loanId },
+          select: { id: true },
+        });
+        const scheduleIds = schedules.map((schedule) => schedule.id);
+
+        let loanPenaltySchedules = 0;
+        let loanDebitTrialSchedules = 0;
+
+        if (scheduleIds.length > 0) {
+          const penaltyResult = await tx.loanPenaltySchedule.deleteMany({
+            where: { loanScheduleId: { in: scheduleIds } },
+          });
+          const debitTrialResult = await tx.loanDebitTrialSchedule.deleteMany({
+            where: { loanScheduleId: { in: scheduleIds } },
+          });
+          loanPenaltySchedules = penaltyResult.count;
+          loanDebitTrialSchedules = debitTrialResult.count;
+        }
+
+        const loanTransactions = await tx.loanTransaction.deleteMany({
+          where: { loanId },
+        });
+        const loanSchedules = await tx.loanSchedule.deleteMany({
+          where: { loanId },
+        });
+        const mandateDebits = await tx.mandateDebit.deleteMany({
+          where: { loanId },
+        });
+        const revenues = await tx.revenue.deleteMany({
+          where: { loanId },
+        });
+        const stripePaymentIntents = await tx.stripePaymentIntent.deleteMany({
+          where: { loanId },
+        });
+        const stripeMandates = await tx.stripeMandate.deleteMany({
+          where: { loanId },
+        });
+
+        // Unlink mandates that still point at this loan (invoice mandates may be shared)
+        const mandatesUnlinked = await tx.invoiceMandate.updateMany({
+          where: { loanId },
+          data: { loanId: null },
+        });
+
+        let invoiceResetToPending = false;
+        if (existingLoan.invoiceId) {
+          await tx.invoice.update({
+            where: { id: existingLoan.invoiceId },
+            data: { status: InvoiceStatus.Pending },
+          });
+          invoiceResetToPending = true;
+        }
+
+        const loan = await tx.loan.delete({
+          where: { id: loanId },
+        });
+
+        return {
+          loan,
+          invoiceId: existingLoan.invoiceId,
+          invoiceResetToPending,
+          deletedCounts: {
+            loanTransactions: loanTransactions.count,
+            loanSchedules: loanSchedules.count,
+            loanPenaltySchedules,
+            loanDebitTrialSchedules,
+            mandateDebits: mandateDebits.count,
+            revenues: revenues.count,
+            stripePaymentIntents: stripePaymentIntents.count,
+            stripeMandates: stripeMandates.count,
+            mandatesUnlinked: mandatesUnlinked.count,
+          },
+        };
+      });
+
+      return {
+        success: true,
+        data: deleted,
+        message: "Loan and associated records force-deleted successfully",
       };
     } catch (error: any) {
       return { success: false, error: error.message };
