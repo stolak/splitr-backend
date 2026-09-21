@@ -532,7 +532,7 @@ export class LoanService {
       const liquidatingBalance = this.getLoanLiquidatingBalance(
         loan.loanTransactions as unknown as GetLoanBalanceInput[],
         principalBalance,
-        interestBalance
+        Number(loan.loanInterestRate)
       );
       const amountDue = this.getAmountDue(loan);
       return {
@@ -2130,6 +2130,13 @@ export class LoanService {
       (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
       0
     );
+    console.log("BALANCE", balance);
+    console.log("PRINCIPAL", principal);
+    console.log("INTEREST", interest);
+    console.log(
+      "BALANCE + PRINCIPAL * INTEREST / 12 * 0.01",
+      balance + Number(principal) * (Number(interest) / 12) * 0.01
+    );
     return balance + Number(principal) * (Number(interest) / 12) * 0.01;
   }
   getAmountDue(input: Loan & { loanSchedules?: any[]; loanTransactions?: any[] }) {
@@ -2510,7 +2517,7 @@ export class LoanService {
       let loan = await this.getLoanById(loanId);
       if (loan.success && loan.data) {
         let loanData = loan.data;
-        const balance = loanData.overallBalance;
+        const balance = loanData.liquidatingBalance;
         if (amount > Number(balance)) {
           console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
           return { success: false, error: "Amount is greater than balance" };
@@ -2520,35 +2527,24 @@ export class LoanService {
           if (amount < Number(loan.data.liquidatingBalance)) {
             return { success: false, error: "Amount is less than the liquidating balance" };
           }
-          const interest =
-            (Number(loanData.principalBalance) * Number(loanData.loanInterestRate) * 0.01) / 12;
-          const principalRepayment = amount - interest;
-          /// To do what happen next
-          await this.createLoanTransaction({
-            loanId: loanData.id,
-            transactionType: TransactionType.interest,
-            transactionStatus: TransactionStatus.Completed,
-            creditAmount: interest,
-            debitAmount: 0,
-            transactionDate: date,
-            description: "Interest charged on full repayment of loan",
+          await this.chargePartialRepaymentInterestAndAllocate({
+            loanId,
+            loanData,
+            amount,
+            date,
             transactReference: reference,
+            description: "Interest charged on full repayment of loan",
           });
         }
         if (paymentType === "partial") {
-          const interest = (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12;
-          await this.createLoanTransaction({
-            loanId: loanData.id,
-            transactionType: TransactionType.interest,
-            transactionStatus: TransactionStatus.Completed,
-            creditAmount: interest,
-            debitAmount: 0,
-            transactionDate: date,
-            description: "Interest charged on partial repayment of loan",
+          await this.chargePartialRepaymentInterestAndAllocate({
+            loanId,
+            loanData,
+            amount,
+            date,
             transactReference: reference,
+            description: "Interest charged on partial repayment of loan",
           });
-
-          const principalRepayment = amount - interest;
         }
 
         const loanschedules = loanData.loanSchedules
@@ -2557,31 +2553,48 @@ export class LoanService {
 
         if (paymentType === "early") {
           const possibleSchedule = Math.floor(amount / Number(loanData.monthlyRepayment));
-          console.log("Possible schedule", possibleSchedule);
+          const remainingAmount = amount - possibleSchedule * Number(loanData.monthlyRepayment);
+          console.log("FLOOR", Math.floor(amount / Number(loanData.monthlyRepayment)));
+          console.log("POSSIBLE SCHEDULE", possibleSchedule);
+          const settledPayment = await directPayService.markValueSettled({
+            stripePaymentIntentId,
+            transactReference: reference,
+            isTest,
+          });
           for (let i = 0; i < possibleSchedule; i++) {
             await this.interestEnforcement(loanschedules[i].start);
+            console.log(`${i + 1} Interest enforcement on ${loanschedules[i].start}`);
+            const allocation = await this.allocateInterestAndPrincipalRepayment({
+              loanId,
+              amount: Number(loanData.monthlyRepayment),
+              date: loanschedules[i].start,
+              transactReference: settledPayment.transactReference,
+              description: "Early repayment of loan",
+            });
+            loanData = allocation.loanData;
+            if (loanData) {
+              const loan = await this.getLoanById(loanData.id);
+              if (loan.success && loan.data) {
+                await this.updateClosedSchedules(
+                  date,
+                  Number(loan.data?.overallBalance),
+                  loanData.id
+                );
+              }
+            }
+          }
+          if (remainingAmount > 0) {
+            await this.chargePartialRepaymentInterestAndAllocate({
+              loanId,
+              loanData,
+              amount: remainingAmount,
+              date,
+              transactReference: reference,
+              description: "Excess amount early repayment of loan",
+            });
           }
         }
 
-        const settledPayment = await directPayService.markValueSettled({
-          stripePaymentIntentId,
-          transactReference: reference,
-          isTest,
-        });
-
-        const allocation = await this.allocateInterestAndPrincipalRepayment({
-          loanId,
-          amount,
-          date,
-          transactReference: settledPayment.transactReference,
-        });
-        loanData = allocation.loanData;
-        if (loanData) {
-          const loan = await this.getLoanById(loanData.id);
-          if (loan.success && loan.data) {
-            await this.updateClosedSchedules(date, Number(loan.data?.overallBalance), loanData.id);
-          }
-        }
         await revenueService.createRevenue({
           type: RevenueType.Repayment,
           credit: Number(amount),
@@ -2600,6 +2613,53 @@ export class LoanService {
   }
 
   /**
+   * Charge interest on a partial repayment, then allocate the repayment to interest/principal.
+   */
+  async chargePartialRepaymentInterestAndAllocate({
+    loanId,
+    loanData,
+    amount,
+    date = new Date(),
+    transactReference,
+    description,
+  }: {
+    loanId: string;
+    loanData: {
+      id: string;
+      loanInterestRate: unknown;
+    };
+    amount: number;
+    date?: Date;
+    transactReference?: string;
+    description: string;
+  }) {
+    const interest = (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12;
+    await this.createLoanTransaction({
+      loanId: loanData.id,
+      transactionType: TransactionType.interest,
+      transactionStatus: TransactionStatus.Completed,
+      creditAmount: interest,
+      debitAmount: 0,
+      transactionDate: date,
+      description,
+      transactReference,
+    });
+
+    const allocation = await this.allocateInterestAndPrincipalRepayment({
+      loanId,
+      amount,
+      date,
+      transactReference,
+      description,
+    });
+
+    return {
+      interestCharged: interest,
+      ...allocation,
+    };
+  }
+
+  /**
    * Allocate a repayment amount to outstanding interest, then principal.
    */
   async allocateInterestAndPrincipalRepayment({
@@ -2607,11 +2667,13 @@ export class LoanService {
     amount,
     date = new Date(),
     transactReference,
+    description,
   }: {
     loanId: string;
     amount: number;
     date?: Date;
     transactReference?: string;
+    description: string;
   }) {
     const loan = await this.getLoanById(loanId);
     if (!loan.success || !loan.data) {
@@ -2641,7 +2703,7 @@ export class LoanService {
         creditAmount: 0,
         debitAmount: interestAmount,
         transactionDate: date,
-        description: "Interest repayment",
+        description: `${description} - Interest repayment`,
         transactReference,
       });
     }
@@ -2658,7 +2720,7 @@ export class LoanService {
         creditAmount: 0,
         debitAmount: principalAmount,
         transactionDate: date,
-        description: "Principal repayment",
+        description: `${description} - Principal repayment`,
         transactReference,
       });
     }
