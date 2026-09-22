@@ -2799,7 +2799,7 @@ export class LoanService {
       Number(loanData2.principalBalance),
       Number(loanData2.loanInterestRate)
     );
-    console.log("CALCULATE SCHEDULE", calculateSchedule);
+
     // To do what happen next
     // the the list of schedules and find the schedule that is open and update the schedule
     const schedules = loanData2.loanSchedules
