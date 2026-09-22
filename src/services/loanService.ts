@@ -2579,6 +2579,7 @@ export class LoanService {
               date: loanschedules[i].start,
               transactReference: settledPayment.transactReference,
               description: "Early repayment of loan",
+              withschedule: true,
             });
             loanData = allocation.loanData;
             if (loanData) {
@@ -2717,12 +2718,14 @@ export class LoanService {
     date = new Date(),
     transactReference,
     description,
+    withschedule = false,
   }: {
     loanId: string;
     amount: number;
     date?: Date;
     transactReference?: string;
     description: string;
+    withschedule?: boolean;
   }) {
     const loan = await this.getLoanById(loanId);
     if (!loan.success || !loan.data) {
@@ -2746,7 +2749,7 @@ export class LoanService {
       interestPaid = interestAmount;
       await this.createLoanTransaction({
         loanId: loanData.id,
-        scheduleId: scheduleId,
+        scheduleId: withschedule ? scheduleId : undefined,
         transactionType: TransactionType.interest,
         transactionStatus: TransactionStatus.Completed,
         creditAmount: 0,
@@ -2763,7 +2766,7 @@ export class LoanService {
       principalPaid = principalAmount;
       await this.createLoanTransaction({
         loanId: loanData.id,
-        scheduleId: scheduleId,
+        scheduleId: withschedule ? scheduleId : undefined,
         transactionType: TransactionType.principal,
         transactionStatus: TransactionStatus.Completed,
         creditAmount: 0,
