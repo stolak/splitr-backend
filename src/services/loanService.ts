@@ -439,9 +439,7 @@ export class LoanService {
             ? ((Number(input.loanAmount) * Number(loan.loanInterestRate)) / 12) * 0.01
             : periodicInstallment - Number(input.loanAmount) / input.loanTenure
         );
-        const principalAmount = roundUpTo2Decimals(
-          Number(input.monthlyRepayment) - interestAmount
-        );
+        const principalAmount = roundUpTo2Decimals(Number(input.monthlyRepayment) - interestAmount);
 
         await this.createLoanTransaction({
           loanId: loan.id,
@@ -2626,14 +2624,14 @@ export class LoanService {
         const balance = loanData.liquidatingBalance;
         const amountCents = Math.round(Number(amount) * 100);
         const balanceCents = Math.round(Number(balance) * 100);
-        if (amountCents > balanceCents) {
+        if (amountCents > balanceCents + 30) {
           console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
           return { success: false, error: "Amount is greater than balance" };
         }
 
         if (paymentType === "full") {
           const liquidatingBalanceCents = Math.round(Number(loan.data.liquidatingBalance) * 100);
-          if (amountCents < liquidatingBalanceCents) {
+          if (amountCents + 30 < liquidatingBalanceCents) {
             console.log(
               "AMOUNT IS LESS THAN THE LIQUIDATING BALANCE",
               amount,
@@ -3122,9 +3120,7 @@ export class LoanService {
         };
         dataByDate.set(dateKey, {
           count: currentData.count + 1,
-          totalAmount: roundUpTo2Decimals(
-            currentData.totalAmount + Number(loan.loanAmount)
-          ) ?? 0,
+          totalAmount: roundUpTo2Decimals(currentData.totalAmount + Number(loan.loanAmount)) ?? 0,
         });
       });
 
