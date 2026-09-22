@@ -123,3 +123,20 @@ export function getDayBeforeNextCycle(dateStr: string): Date {
 
   return oneDayBefore;
 }
+
+/**
+ * Round a number up to 2 decimal places (e.g. 1.181 -> 1.19, 1.180 -> 1.18).
+ * Returns undefined/null unchanged for optional fields.
+ */
+export function roundUpTo2Decimals(value: number): number;
+export function roundUpTo2Decimals(value: number | null | undefined): number | null | undefined;
+export function roundUpTo2Decimals(value: number | null | undefined): number | null | undefined {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return n;
+  }
+  return Math.ceil(n * 100 - Number.EPSILON) / 100;
+}
