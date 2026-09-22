@@ -2210,7 +2210,11 @@ export class LoanService {
       (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
       0
     );
-    return Math.max(0, roundUpTo2Decimals(balance) ?? 0);
+    const rounded = roundUpTo2Decimals(balance) ?? 0;
+    if (Math.abs(rounded) <= 0.3) {
+      return 0;
+    }
+    return Math.max(0, rounded);
   }
   getLoanLiquidatingBalance(
     input: GetLoanBalanceInput[],
@@ -2222,10 +2226,12 @@ export class LoanService {
       0
     );
 
-    return Math.max(
-      0,
-      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0
-    );
+    const rounded =
+      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0;
+    if (Math.abs(rounded) <= 0.3) {
+      return 0;
+    }
+    return Math.max(0, rounded);
   }
   getAmountDue(input: Loan & { loanSchedules?: any[]; loanTransactions?: any[] }) {
     // get next loan schedule that is not executed use Loan
