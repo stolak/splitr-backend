@@ -326,11 +326,13 @@ export class LoanService {
         const cycleType = product?.productType === "BI_WEEKLY" ? "BiWeekly" : "Monthly";
         const today = new Date(loanStartDate);
 
-        periodicInstallment = Number(product?.periodicInstallment);
+        periodicInstallment = roundUpTo2Decimals(Number(product?.periodicInstallment));
         // First installment is due immediately: start and end are today
         const [firstInstallment, ...remainingInstallments] = installments;
-        const firstPayment = Number(firstInstallment.amount);
-        partPayment = Number(firstInstallment.amount) - Number(product?.partPayment);
+        const firstPayment = roundUpTo2Decimals(Number(firstInstallment.amount));
+        partPayment = roundUpTo2Decimals(
+          Number(firstInstallment.amount) - Number(product?.partPayment)
+        );
         let expectedBalanceCursor = product?.financeAmount;
         let nextSchedule = this.nextSchedule(
           input.loanInterestRate,
@@ -342,8 +344,8 @@ export class LoanService {
           start: today,
           end: today,
           status: LoanScheduleStatus.Closed,
-          actualPayment: firstPayment - Number(product?.partPayment),
-          expectedPayment: firstPayment - Number(product?.partPayment),
+          actualPayment: roundUpTo2Decimals(firstPayment - Number(product?.partPayment)),
+          expectedPayment: roundUpTo2Decimals(firstPayment - Number(product?.partPayment)),
           expectedBalance: nextSchedule.openingBalance,
           isExecuted: true,
           expectedClosingBalance: nextSchedule.closingBalance,
@@ -358,7 +360,7 @@ export class LoanService {
 
         let nextcycle = new Date(today);
         for (const installment of remainingInstallments) {
-          const expectedPayment = Number(installment.amount);
+          const expectedPayment = roundUpTo2Decimals(Number(installment.amount));
           const cycleEnd = getDayBeforeNextCycleByInstallmentType(
             new Date(nextcycle).toISOString(),
             cycleType
@@ -399,25 +401,26 @@ export class LoanService {
                   installmentType
                 );
 
+          const interestOnBalance = roundUpTo2Decimals(
+            Number(loan.loanInterestRate) * 0.01 * expectedBalance
+          );
+          const expectedClosingBalance = roundUpTo2Decimals(
+            expectedBalance + interestOnBalance - Number(input.monthlyRepayment)
+          );
+
           this.createLoanSchedule({
             loanId: loan.id,
             start: nextcycle,
             end: cycleEnd,
-            expectedPayment: Number(input.monthlyRepayment),
-            expectedBalance: expectedBalance,
-            expectedClosingBalance:
-              expectedBalance +
-              Number(loan.loanInterestRate) * 0.01 * expectedBalance -
-              Number(input.monthlyRepayment),
+            expectedPayment: roundUpTo2Decimals(Number(input.monthlyRepayment)),
+            expectedBalance: roundUpTo2Decimals(expectedBalance),
+            expectedClosingBalance,
           });
           nextcycle = getNextCycleByInstallmentType(
             new Date(nextcycle).toISOString(),
             installmentType
           );
-          expectedBalance =
-            expectedBalance +
-            Number(loan.loanInterestRate) * 0.01 * expectedBalance -
-            Number(input.monthlyRepayment);
+          expectedBalance = expectedClosingBalance;
         }
       }
       if (input.loanStatus === LoanStatus.Active) {
@@ -431,11 +434,14 @@ export class LoanService {
           description: "Initial Loan disbursement",
         });
 
-        const interestAmount =
+        const interestAmount = roundUpTo2Decimals(
           input.installmentType === LoanInstallmentType.Monthly
             ? ((Number(input.loanAmount) * Number(loan.loanInterestRate)) / 12) * 0.01
-            : periodicInstallment - Number(input.loanAmount) / input.loanTenure;
-        const principalAmount = Number(input.monthlyRepayment) - interestAmount;
+            : periodicInstallment - Number(input.loanAmount) / input.loanTenure
+        );
+        const principalAmount = roundUpTo2Decimals(
+          Number(input.monthlyRepayment) - interestAmount
+        );
 
         await this.createLoanTransaction({
           loanId: loan.id,
@@ -2015,13 +2021,17 @@ export class LoanService {
       }
 
       // Calculate totals
-      const totalPaid = loan.loanTransactions
-        .filter((t) => t.transactionStatus === TransactionStatus.Completed)
-        .reduce((sum, t) => sum + Number(t.creditAmount), 0);
+      const totalPaid = roundUpTo2Decimals(
+        loan.loanTransactions
+          .filter((t) => t.transactionStatus === TransactionStatus.Completed)
+          .reduce((sum, t) => sum + Number(t.creditAmount), 0)
+      );
 
-      const totalPending = loan.loanTransactions
-        .filter((t) => t.transactionStatus === TransactionStatus.Pending)
-        .reduce((sum, t) => sum + Number(t.creditAmount), 0);
+      const totalPending = roundUpTo2Decimals(
+        loan.loanTransactions
+          .filter((t) => t.transactionStatus === TransactionStatus.Pending)
+          .reduce((sum, t) => sum + Number(t.creditAmount), 0)
+      );
 
       const scheduledPayments = loan.loanSchedules.length;
       const completedPayments = loan.loanSchedules.filter((s) => s.actualPayment).length;
@@ -2123,12 +2133,26 @@ export class LoanService {
       });
 
       // Convert to array and filter out types with no transactions
-      const result = Object.values(balanceByType).filter((item) => item.transactionCount > 0);
+      const result = Object.values(balanceByType)
+        .filter((item) => item.transactionCount > 0)
+        .map((item) => ({
+          ...item,
+          balance: Math.max(0, roundUpTo2Decimals(item.balance) ?? 0),
+          totalCredit: roundUpTo2Decimals(item.totalCredit) ?? 0,
+          totalDebit: roundUpTo2Decimals(item.totalDebit) ?? 0,
+        }));
 
       // Calculate overall balance
-      const overallBalance = result.reduce((sum, item) => sum + item.balance, 0);
-      const overallCredit = result.reduce((sum, item) => sum + item.totalCredit, 0);
-      const overallDebit = result.reduce((sum, item) => sum + item.totalDebit, 0);
+      const overallBalance = Math.max(
+        0,
+        roundUpTo2Decimals(result.reduce((sum, item) => sum + item.balance, 0)) ?? 0
+      );
+      const overallCredit = roundUpTo2Decimals(
+        result.reduce((sum, item) => sum + item.totalCredit, 0)
+      );
+      const overallDebit = roundUpTo2Decimals(
+        result.reduce((sum, item) => sum + item.totalDebit, 0)
+      );
 
       return {
         success: true,
@@ -2159,7 +2183,10 @@ export class LoanService {
         GROUP BY "transactionType"
       `;
 
-      const overallBalance = balances.reduce((sum, b) => sum + Number(b.balance), 0);
+      const overallBalance = Math.max(
+        0,
+        roundUpTo2Decimals(balances.reduce((sum, b) => sum + Number(b.balance), 0)) ?? 0
+      );
 
       return {
         success: true,
@@ -2167,7 +2194,7 @@ export class LoanService {
           loanId,
           balanceByType: balances.map((b) => ({
             transactionType: b.transactionType,
-            balance: Number(b.balance),
+            balance: Math.max(0, roundUpTo2Decimals(Number(b.balance)) ?? 0),
           })),
           overall: {
             balance: overallBalance,
@@ -2183,7 +2210,7 @@ export class LoanService {
       (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
       0
     );
-    return Math.max(0, balance);
+    return Math.max(0, roundUpTo2Decimals(balance) ?? 0);
   }
   getLoanLiquidatingBalance(
     input: GetLoanBalanceInput[],
@@ -2220,9 +2247,10 @@ export class LoanService {
       input.loanTransactions as unknown as GetLoanBalanceInput[]
     );
     if (lastExecutedScheduleBalance) {
-      const amountDue =
-        Number(overallBalance) - Number(lastExecutedScheduleBalance.expectedClosingBalance);
-      return { amountDue: Math.max(0, amountDue) };
+      const amountDue = roundUpTo2Decimals(
+        Number(overallBalance) - Number(lastExecutedScheduleBalance.expectedClosingBalance)
+      );
+      return { amountDue: Math.max(0, amountDue ?? 0) };
     } else {
       return { amountDue: 0 };
     }
@@ -2235,7 +2263,11 @@ export class LoanService {
     const balance = input
       .filter((item) => item.transactionType === transactionType)
       .reduce((sum, item) => Number(sum) + Number(item.creditAmount) - Number(item.debitAmount), 0);
-    return Math.max(0, balance);
+    const rounded = roundUpTo2Decimals(balance) ?? 0;
+    if (Math.abs(rounded) <= 0.2) {
+      return 0;
+    }
+    return Math.max(0, rounded);
   }
   async penaltyEnforcement(date: Date) {
     try {
@@ -2267,7 +2299,9 @@ export class LoanService {
             if (Number(balance) <= Number(expectedBalance)) {
               continue;
             }
-            let penalty = (Number(balance) * Number(loanPenaltySchedule.percentage)) / 100;
+            let penalty = roundUpTo2Decimals(
+              (Number(balance) * Number(loanPenaltySchedule.percentage)) / 100
+            );
 
             if (schedulePenaltyTransactions.length > 0) {
               //sum the debit amount of the transactions where the transaction type is penalty
@@ -2277,7 +2311,7 @@ export class LoanService {
               if (schedulePenaltyDebitAmount >= penalty) {
                 continue;
               }
-              penalty -= schedulePenaltyDebitAmount;
+              penalty = roundUpTo2Decimals(penalty - schedulePenaltyDebitAmount);
             }
 
             await this.createLoanTransaction({
@@ -2474,10 +2508,10 @@ export class LoanService {
         const scheduleId = loanData.loanSchedules.filter(
           (schedule) => schedule.status === LoanScheduleStatus.Open
         )[0]?.id;
-        let balanceAmount = Number(amount);
+        let balanceAmount = roundUpTo2Decimals(Number(amount));
         if (penaltyRepayment > 0 && balanceAmount > 0) {
-          const penaltyAmount = Math.min(balanceAmount, penaltyRepayment);
-          balanceAmount -= penaltyAmount;
+          const penaltyAmount = roundUpTo2Decimals(Math.min(balanceAmount, penaltyRepayment));
+          balanceAmount = roundUpTo2Decimals(balanceAmount - penaltyAmount);
           await this.createLoanTransaction({
             loanId: loanData.id,
             scheduleId: scheduleId,
@@ -2490,8 +2524,8 @@ export class LoanService {
           });
         }
         if (interestRepayment > 0 && balanceAmount > 0) {
-          const interestAmount = Math.min(balanceAmount, interestRepayment);
-          balanceAmount -= interestAmount;
+          const interestAmount = roundUpTo2Decimals(Math.min(balanceAmount, interestRepayment));
+          balanceAmount = roundUpTo2Decimals(balanceAmount - interestAmount);
           await this.createLoanTransaction({
             loanId: loanData.id,
             scheduleId: scheduleId,
@@ -2504,8 +2538,8 @@ export class LoanService {
           });
         }
         if (principalRepayment > 0 && balanceAmount > 0) {
-          const principalAmount = Math.min(balanceAmount, principalRepayment);
-          balanceAmount -= principalAmount;
+          const principalAmount = roundUpTo2Decimals(Math.min(balanceAmount, principalRepayment));
+          balanceAmount = roundUpTo2Decimals(balanceAmount - principalAmount);
           await this.createLoanTransaction({
             loanId: loanData.id,
             scheduleId: scheduleId,
@@ -2627,7 +2661,9 @@ export class LoanService {
 
         if (paymentType === "early") {
           const possibleSchedule = Math.floor(amount / Number(loanData.monthlyRepayment));
-          const remainingAmount = amount - possibleSchedule * Number(loanData.monthlyRepayment);
+          const remainingAmount = roundUpTo2Decimals(
+            amount - possibleSchedule * Number(loanData.monthlyRepayment)
+          );
           console.log("FLOOR", Math.floor(amount / Number(loanData.monthlyRepayment)));
           console.log("POSSIBLE SCHEDULE", possibleSchedule);
           const settledPayment = await directPayService.markValueSettled({
@@ -2708,7 +2744,9 @@ export class LoanService {
     transactReference?: string;
     description: string;
   }) {
-    const interest = (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12;
+    const interest = roundUpTo2Decimals(
+      (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12
+    );
     await this.createLoanTransaction({
       loanId: loanData.id,
       transactionType: TransactionType.interest,
@@ -2808,13 +2846,13 @@ export class LoanService {
       (schedule) => schedule.status === LoanScheduleStatus.Open
     )[0]?.id;
 
-    let balanceAmount = Number(amount);
+    let balanceAmount = roundUpTo2Decimals(Number(amount));
     let interestPaid = 0;
     let principalPaid = 0;
 
     if (interestRepayment > 0 && balanceAmount > 0) {
-      const interestAmount = Math.min(balanceAmount, interestRepayment);
-      balanceAmount -= interestAmount;
+      const interestAmount = roundUpTo2Decimals(Math.min(balanceAmount, interestRepayment));
+      balanceAmount = roundUpTo2Decimals(balanceAmount - interestAmount);
       interestPaid = interestAmount;
       await this.createLoanTransaction({
         loanId: loanData.id,
@@ -2830,8 +2868,8 @@ export class LoanService {
     }
 
     if (principalRepayment > 0 && balanceAmount > 0) {
-      const principalAmount = Math.min(balanceAmount, principalRepayment);
-      balanceAmount -= principalAmount;
+      const principalAmount = roundUpTo2Decimals(Math.min(balanceAmount, principalRepayment));
+      balanceAmount = roundUpTo2Decimals(balanceAmount - principalAmount);
       principalPaid = principalAmount;
       await this.createLoanTransaction({
         loanId: loanData.id,
@@ -2884,15 +2922,18 @@ export class LoanService {
   }
 
   nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number) {
-    const interest = (openingBalance * rate * 0.01) / 12;
-    const calculatedPrincipal = monthlyRepayment - interest;
-    const principal = Math.min(calculatedPrincipal, openingBalance);
-    const closingBalance = openingBalance - principal;
+    const interest = roundUpTo2Decimals((openingBalance * rate * 0.01) / 12);
+    const calculatedPrincipal = roundUpTo2Decimals(monthlyRepayment - interest);
+    const principal = roundUpTo2Decimals(Math.min(calculatedPrincipal, openingBalance));
+    let closingBalance = roundUpTo2Decimals(openingBalance - principal);
+    if (Math.abs(closingBalance) <= 0.3) {
+      closingBalance = 0;
+    }
 
     return {
       interest,
       principal,
-      openingBalance,
+      openingBalance: roundUpTo2Decimals(openingBalance),
       closingBalance,
     };
   }
@@ -2997,7 +3038,9 @@ export class LoanService {
       });
 
       // Calculate total loan amount
-      const totalLoanAmount = loans.reduce((sum, loan) => sum + Number(loan.loanAmount), 0);
+      const totalLoanAmount = roundUpTo2Decimals(
+        loans.reduce((sum, loan) => sum + Number(loan.loanAmount), 0)
+      );
 
       return {
         success: true,
@@ -3073,7 +3116,9 @@ export class LoanService {
         };
         dataByDate.set(dateKey, {
           count: currentData.count + 1,
-          totalAmount: currentData.totalAmount + Number(loan.loanAmount),
+          totalAmount: roundUpTo2Decimals(
+            currentData.totalAmount + Number(loan.loanAmount)
+          ) ?? 0,
         });
       });
 
@@ -3081,12 +3126,14 @@ export class LoanService {
       const countsByDay = Array.from(dataByDate.entries()).map(([date, data]) => ({
         date,
         count: data.count,
-        totalAmount: data.totalAmount,
+        totalAmount: roundUpTo2Decimals(data.totalAmount) ?? 0,
       }));
 
       // Calculate totals
       const totalCount = loans.length;
-      const totalLoanAmount = loans.reduce((sum, loan) => sum + Number(loan.loanAmount), 0);
+      const totalLoanAmount = roundUpTo2Decimals(
+        loans.reduce((sum, loan) => sum + Number(loan.loanAmount), 0)
+      );
 
       return {
         success: true,
@@ -3429,11 +3476,11 @@ export class LoanService {
         );
       }
 
-      const openingBalance = balance;
+      const openingBalance = roundUpTo2Decimals(balance);
       const interest = roundUpTo2Decimals((openingBalance * (interestRate / 100)) / 12);
-      const amountPay = Math.min(monthlyRepay, openingBalance + interest);
-      const principalPaid = amountPay - interest;
-      let closingBalance = Math.max(0, openingBalance - principalPaid);
+      const amountPay = roundUpTo2Decimals(Math.min(monthlyRepay, openingBalance + interest));
+      const principalPaid = roundUpTo2Decimals(amountPay - interest);
+      let closingBalance = Math.max(0, roundUpTo2Decimals(openingBalance - principalPaid) ?? 0);
       if (Math.abs(closingBalance) <= 0.3) {
         closingBalance = 0;
       }
