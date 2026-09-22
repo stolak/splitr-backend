@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { loanService } from "../services/loanService";
-import { TransactionType, TransactionStatus } from "@prisma/client";
+import { TransactionType, TransactionStatus, PaymentType } from "@prisma/client";
 
 export const loanTransactionController = {
   /**
@@ -16,6 +16,9 @@ export const loanTransactionController = {
         debitAmount,
         transactionDate,
         description,
+        scheduleId,
+        transactReference,
+        paymentType,
       } = req.body;
 
       // Validate required fields
@@ -41,6 +44,13 @@ export const loanTransactionController = {
         });
       }
 
+      if (paymentType && !Object.values(PaymentType).includes(paymentType)) {
+        return res.status(400).json({
+          success: false,
+          message: `paymentType must be one of: ${Object.values(PaymentType).join(", ")}`,
+        });
+      }
+
       const result = await loanService.createLoanTransaction({
         loanId,
         transactionType,
@@ -49,6 +59,9 @@ export const loanTransactionController = {
         debitAmount: Number(debitAmount),
         transactionDate: new Date(transactionDate),
         description,
+        scheduleId,
+        transactReference,
+        paymentType,
       });
 
       if (!result.success) {
@@ -145,13 +158,14 @@ export const loanTransactionController = {
    */
   async getAllLoanTransactions(req: Request, res: Response) {
     try {
-      const { transactionType, transactionStatus, page, limit } = req.query;
+      const { transactionType, transactionStatus, paymentType, page, limit } = req.query;
 
       const filters: any = {};
       if (transactionType)
         filters.transactionType = transactionType as TransactionType;
       if (transactionStatus)
         filters.transactionStatus = transactionStatus as TransactionStatus;
+      if (paymentType) filters.paymentType = paymentType as PaymentType;
       if (page) filters.page = parseInt(page as string);
       if (limit) filters.limit = parseInt(limit as string);
 
@@ -197,6 +211,16 @@ export const loanTransactionController = {
         return res.status(400).json({
           success: false,
           message: "Invalid transaction status",
+        });
+      }
+
+      if (
+        updateData.paymentType &&
+        !Object.values(PaymentType).includes(updateData.paymentType)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `paymentType must be one of: ${Object.values(PaymentType).join(", ")}`,
         });
       }
 

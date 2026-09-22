@@ -57,6 +57,16 @@ const router = Router();
  *               description:
  *                 type: string
  *                 description: Transaction description
+ *               scheduleId:
+ *                 type: string
+ *                 description: Optional loan schedule ID
+ *               transactReference:
+ *                 type: string
+ *                 description: Optional external transaction reference
+ *               paymentType:
+ *                 type: string
+ *                 enum: [full, partial, early, late, instant]
+ *                 description: Payment type classification for the transaction
  *     responses:
  *       201:
  *         description: Loan transaction created successfully
@@ -94,6 +104,12 @@ router.post(
  *           type: string
  *           enum: [Pending, Completed]
  *         description: Filter by transaction status
+ *       - in: query
+ *         name: paymentType
+ *         schema:
+ *           type: string
+ *           enum: [full, partial, early, late, instant]
+ *         description: Filter by payment type
  *       - in: query
  *         name: page
  *         schema:
@@ -265,6 +281,10 @@ router.get(
  *                 type: string
  *                 format: date-time
  *                 description: Date of transaction
+ *               paymentType:
+ *                 type: string
+ *                 enum: [full, partial, early, late, instant]
+ *                 description: Payment type classification for the transaction
  *     responses:
  *       200:
  *         description: Loan transaction updated successfully

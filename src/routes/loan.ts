@@ -746,7 +746,7 @@ router.post('/:id/repayment', authenticateJWT, loanController.loanRepayment);
  *                 example: "pi_abc123"
  *               paymentType:
  *                 type: string
- *                 enum: [partial, full, early, late]
+ *                 enum: [partial, full, early, late, instant]
  *                 default: partial
  *                 description: Repayment type
  *               isTest:
@@ -1064,7 +1064,7 @@ router.post(
  *             properties:
  *               paymentType:
  *                 type: string
- *                 enum: [full, partial, early, late]
+ *                 enum: [full, partial, early, late, instant]
  *                 default: full
  *                 description: Repayment type used for Stripe Splitr settlement
  *                 example: full

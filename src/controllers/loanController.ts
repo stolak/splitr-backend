@@ -641,11 +641,11 @@ export class LoanController {
         });
       }
 
-      const allowedPaymentTypes = ["partial", "full", "early", "late"] as const;
+      const allowedPaymentTypes = ["partial", "full", "early", "late", "instant"] as const;
       if (paymentType && !allowedPaymentTypes.includes(paymentType)) {
         return res.status(400).json({
           success: false,
-          message: "paymentType must be one of: partial, full, early, late",
+          message: "paymentType must be one of: partial, full, early, late, instant",
         });
       }
 
@@ -855,11 +855,11 @@ export class LoanController {
         });
       }
 
-      const allowedPaymentTypes = ["full", "partial", "early", "late"] as const;
+      const allowedPaymentTypes = ["full", "partial", "early", "late", "instant"] as const;
       if (paymentType && !allowedPaymentTypes.includes(paymentType)) {
         return res.status(400).json({
           success: false,
-          message: "paymentType must be one of: full, partial, early, late",
+          message: "paymentType must be one of: full, partial, early, late, instant",
         });
       }
 

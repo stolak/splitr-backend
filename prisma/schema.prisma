@@ -628,11 +628,20 @@ model LoanTransaction {
   description       String
   referenceNumber   String?           @unique
   transactReference String?
+  paymentType       PaymentType?
   transactionDate   DateTime
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   @@map("loan_transaction")
+}
+
+enum PaymentType {
+  full
+  partial
+  early
+  late
+  instant
 }
 
 model MerchantTransaction {

@@ -12,6 +12,7 @@ import {
   DirectPayType,
   LoanInstallmentType,
   InvoiceStatus,
+  PaymentType,
 } from "@prisma/client";
 import {
   normalizeToMidnight,
@@ -194,6 +195,7 @@ export interface CreateLoanTransactionInput {
   description: string;
   scheduleId?: string;
   transactReference?: string;
+  paymentType?: PaymentType;
 }
 
 export interface UpdateLoanTransactionInput {
@@ -202,6 +204,7 @@ export interface UpdateLoanTransactionInput {
   creditAmount?: number;
   debitAmount?: number;
   transactionDate?: Date;
+  paymentType?: PaymentType;
 }
 export interface GetLoanBalanceInput {
   transactionType: TransactionType;
@@ -432,6 +435,7 @@ export class LoanService {
           debitAmount: 0,
           transactionDate: new Date(),
           description: "Initial Loan disbursement",
+          paymentType: PaymentType.instant,
         });
 
         const interestAmount = roundUpTo2Decimals(
@@ -450,6 +454,7 @@ export class LoanService {
           transactionDate: new Date(),
           description: "Instant Loan interest charge",
           scheduleId: firstScheduleId,
+          paymentType: PaymentType.instant,
         });
         this.createLoanTransaction({
           loanId: loan.id,
@@ -460,6 +465,7 @@ export class LoanService {
           transactionDate: new Date(),
           description: "Instant Loan interest repayment",
           scheduleId: firstScheduleId,
+          paymentType: PaymentType.instant,
         });
         this.createLoanTransaction({
           loanId: loan.id,
@@ -470,6 +476,7 @@ export class LoanService {
           transactionDate: new Date(),
           description: "Initial Loan principal repayment",
           scheduleId: firstScheduleId,
+          paymentType: PaymentType.instant,
         });
       }
 
@@ -891,6 +898,7 @@ export class LoanService {
           debitAmount: 0,
           transactionDate: new Date(),
           description: `Initial load disbursement`,
+          paymentType: PaymentType.instant,
         });
       }
 
@@ -1764,6 +1772,7 @@ export class LoanService {
           transactionDate: input.transactionDate,
           scheduleId: input.scheduleId,
           transactReference: input.transactReference,
+          paymentType: input.paymentType,
         },
         include: {
           loan: {
@@ -1873,6 +1882,7 @@ export class LoanService {
   async getAllLoanTransactions(filters?: {
     transactionType?: TransactionType;
     transactionStatus?: TransactionStatus;
+    paymentType?: PaymentType;
     page?: number;
     limit?: number;
   }) {
@@ -1884,6 +1894,7 @@ export class LoanService {
       const where: any = {};
       if (filters?.transactionType) where.transactionType = filters.transactionType;
       if (filters?.transactionStatus) where.transactionStatus = filters.transactionStatus;
+      if (filters?.paymentType) where.paymentType = filters.paymentType;
 
       const [transactions, total] = await Promise.all([
         prisma.loanTransaction.findMany({
@@ -2585,14 +2596,14 @@ export class LoanService {
     amount,
     date = new Date(),
     stripePaymentIntentId,
-    paymentType = "partial",
+    paymentType = PaymentType.partial,
     isTest = false,
   }: {
     loanId: string;
     amount: number;
     date?: Date;
     stripePaymentIntentId: string;
-    paymentType: "partial" | "full" | "early" | "late";
+    paymentType: PaymentType;
     isTest?: boolean;
   }) {
     try {
@@ -2629,7 +2640,7 @@ export class LoanService {
           return { success: false, error: "Amount is greater than balance" };
         }
 
-        if (paymentType === "full") {
+        if (paymentType === PaymentType.full) {
           const liquidatingBalanceCents = Math.round(Number(loan.data.liquidatingBalance) * 100);
           if (amountCents + 30 < liquidatingBalanceCents) {
             console.log(
@@ -2646,16 +2657,18 @@ export class LoanService {
             date,
             transactReference: reference,
             description: "Interest charged on full repayment of loan",
+            paymentType,
           });
         }
-        if (paymentType === "partial") {
+        if (paymentType === PaymentType.partial) {
           await this.chargePartialRepaymentInterestAndAllocate({
             loanId,
             loanData,
             amount,
             date,
             transactReference: reference,
-            description: "Interest charged on partial repayment of loan",
+            description: `Interest charged on ${paymentType} repayment of loan`,
+            paymentType,
           });
         }
 
@@ -2663,7 +2676,7 @@ export class LoanService {
           .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
           .sort((a, b) => a.end.getTime() - b.end.getTime());
 
-        if (paymentType === "early") {
+        if (paymentType === PaymentType.early) {
           const possibleSchedule = Math.floor(amount / Number(loanData.monthlyRepayment));
           const remainingAmount = roundUpTo2Decimals(
             amount - possibleSchedule * Number(loanData.monthlyRepayment)
@@ -2685,6 +2698,7 @@ export class LoanService {
               transactReference: settledPayment.transactReference,
               description: "Early repayment of loan",
               withschedule: true,
+              paymentType,
             });
             loanData = allocation.loanData;
             if (loanData) {
@@ -2698,7 +2712,7 @@ export class LoanService {
               }
             }
           }
-          if (remainingAmount > 0.05) {
+          if (remainingAmount > 0.3) {
             await this.chargePartialRepaymentInterestAndAllocate({
               loanId,
               loanData,
@@ -2706,6 +2720,7 @@ export class LoanService {
               date,
               transactReference: reference,
               description: "Excess amount early repayment of loan",
+              paymentType: PaymentType.partial,
             });
           }
         }
@@ -2737,6 +2752,7 @@ export class LoanService {
     date = new Date(),
     transactReference,
     description,
+    paymentType,
   }: {
     loanId: string;
     loanData: {
@@ -2747,6 +2763,7 @@ export class LoanService {
     date?: Date;
     transactReference?: string;
     description: string;
+    paymentType?: PaymentType;
   }) {
     const interest = roundUpTo2Decimals(
       (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12
@@ -2760,6 +2777,7 @@ export class LoanService {
       transactionDate: date,
       description,
       transactReference,
+      paymentType,
     });
 
     const allocation = await this.allocateInterestAndPrincipalRepayment({
@@ -2768,6 +2786,7 @@ export class LoanService {
       date,
       transactReference,
       description,
+      paymentType,
     });
     console.log("ALLOCATION", allocation);
     const loan = await this.getLoanById(loanId);
@@ -2830,6 +2849,7 @@ export class LoanService {
     transactReference,
     description,
     withschedule = false,
+    paymentType,
   }: {
     loanId: string;
     amount: number;
@@ -2837,6 +2857,7 @@ export class LoanService {
     transactReference?: string;
     description: string;
     withschedule?: boolean;
+    paymentType?: PaymentType;
   }) {
     const loan = await this.getLoanById(loanId);
     if (!loan.success || !loan.data) {
@@ -2868,6 +2889,7 @@ export class LoanService {
         transactionDate: date,
         description: `${description} - Interest repayment`,
         transactReference,
+        paymentType,
       });
     }
 
@@ -2885,6 +2907,7 @@ export class LoanService {
         transactionDate: date,
         description: `${description} - Principal repayment`,
         transactReference,
+        paymentType,
       });
     }
 
@@ -3366,10 +3389,7 @@ export class LoanService {
     }
   }
 
-  async validateLoanRepayment(
-    referenceid: string,
-    paymentType: "full" | "partial" | "early" | "late" = "full"
-  ) {
+  async validateLoanRepayment(referenceid: string, paymentType: PaymentType = PaymentType.full) {
     const directPay = await directPayService.getDirectPayByReference(referenceid);
 
     if (!directPay || !directPay.id) {
