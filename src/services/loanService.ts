@@ -3430,10 +3430,13 @@ export class LoanService {
       }
 
       const openingBalance = balance;
-      const interest = (openingBalance * (interestRate / 100)) / 12;
+      const interest = roundUpTo2Decimals((openingBalance * (interestRate / 100)) / 12);
       const amountPay = Math.min(monthlyRepay, openingBalance + interest);
       const principalPaid = amountPay - interest;
-      const closingBalance = Math.max(0, openingBalance - principalPaid);
+      let closingBalance = Math.max(0, openingBalance - principalPaid);
+      if (Math.abs(closingBalance) <= 0.3) {
+        closingBalance = 0;
+      }
 
       if (principalPaid <= 0) {
         throw new Error("monthlyRepay is too low to reduce principal after interest is charged");
