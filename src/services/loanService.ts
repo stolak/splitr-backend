@@ -2183,7 +2183,7 @@ export class LoanService {
       (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
       0
     );
-    return balance;
+    return Math.max(0, balance);
   }
   getLoanLiquidatingBalance(
     input: GetLoanBalanceInput[],
@@ -2195,7 +2195,10 @@ export class LoanService {
       0
     );
 
-    return roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01);
+    return Math.max(
+      0,
+      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0
+    );
   }
   getAmountDue(input: Loan & { loanSchedules?: any[]; loanTransactions?: any[] }) {
     // get next loan schedule that is not executed use Loan
@@ -2219,7 +2222,7 @@ export class LoanService {
     if (lastExecutedScheduleBalance) {
       const amountDue =
         Number(overallBalance) - Number(lastExecutedScheduleBalance.expectedClosingBalance);
-      return { amountDue: amountDue > 0 ? amountDue : 0 };
+      return { amountDue: Math.max(0, amountDue) };
     } else {
       return { amountDue: 0 };
     }
@@ -2232,7 +2235,7 @@ export class LoanService {
     const balance = input
       .filter((item) => item.transactionType === transactionType)
       .reduce((sum, item) => Number(sum) + Number(item.creditAmount) - Number(item.debitAmount), 0);
-    return balance;
+    return Math.max(0, balance);
   }
   async penaltyEnforcement(date: Date) {
     try {
