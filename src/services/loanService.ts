@@ -563,7 +563,7 @@ export class LoanService {
         loan.loanTransactions as unknown as GetLoanBalanceInput[],
         principalBalance,
         Number(loan.loanInterestRate),
-          loan.loanInstallmentType      
+        loan.loanInstallmentType
       );
       const amountDue = this.getAmountDue(loan);
       return {
@@ -2332,9 +2332,10 @@ export class LoanService {
       0
     );
 
-    const rounded =installmentType === LoanInstallmentType.Monthly ?
-      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0 :
-      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) ) * 0.01) ?? 0;
+    const rounded =
+      installmentType === LoanInstallmentType.Monthly
+        ? (roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0)
+        : (roundUpTo2Decimals(balance + Number(principal) * Number(interest) * 0.01) ?? 0);
     if (Math.abs(rounded) <= 0.3) {
       return 0;
     }
@@ -2917,7 +2918,6 @@ export class LoanService {
       );
     } else {
       interest = this.flatRateInterestCalculation(
-
         Number(loanData.loanInterestRate),
         Number(amount)
       ).interest;
@@ -2942,7 +2942,7 @@ export class LoanService {
       description,
       paymentType,
     });
-    console.log("ALLOCATION", allocation);
+
     const loan = await this.getLoanById(loanId);
     if (!loan.success || !loan.data) {
       throw new Error(loan.error || "Loan not found");
@@ -2951,10 +2951,10 @@ export class LoanService {
     const calculateSchedule = this.calculateSchedule(
       Number(loanData2.monthlyRepayment),
       Number(loanData2.principalBalance),
-      Number(loanData2.loanInterestRate)
+      Number(loanData2.loanInterestRate),
+      loanData2.loanInstallmentType
     );
 
-    // To do what happen next
     // the the list of schedules and find the schedule that is open and update the schedule
     const schedules = loanData2.loanSchedules
       .filter((schedule) => schedule.status === LoanScheduleStatus.Open)
@@ -3648,7 +3648,19 @@ export class LoanService {
     return { success: false, error: "Failed to validate loan repayment" };
   }
 
-  calculateSchedule(monthlyRepay: number, principalBalance: number, interestRate: number) {
+  calculateSchedule(
+    monthlyRepay: number,
+    principalBalance: number,
+    interestRate: number,
+    installmentType: LoanInstallmentType
+  ) {
+    console.log(
+      "CALCULATE SCHEDULE",
+      monthlyRepay,
+      principalBalance,
+      interestRate,
+      installmentType
+    );
     if (!Number.isFinite(monthlyRepay) || monthlyRepay <= 0) {
       throw new Error("monthlyRepay must be a positive number");
     }
@@ -3678,10 +3690,22 @@ export class LoanService {
       }
 
       const openingBalance = roundUpTo2Decimals(balance);
-      const interest = roundUpTo2Decimals((openingBalance * (interestRate / 100)) / 12);
+      const interest =
+        installmentType === LoanInstallmentType.Monthly
+          ? roundUpTo2Decimals((openingBalance * (interestRate / 100)) / 12)
+          : roundUpTo2Decimals((openingBalance * interestRate) / 100);
       const amountPay = roundUpTo2Decimals(Math.min(monthlyRepay, openingBalance + interest));
+      console.log("AMOUNT PAY", {
+        amountPay,
+        interest,
+        openingBalance,
+        monthlyRepay,
+        installmentType,
+      });
       const principalPaid = roundUpTo2Decimals(amountPay - interest);
+      console.log("PRINCIPAL PAID", principalPaid);
       let closingBalance = Math.max(0, roundUpTo2Decimals(openingBalance - principalPaid) ?? 0);
+      console.log("CLOSING BALANCE", closingBalance);
       if (Math.abs(closingBalance) <= 0.3) {
         closingBalance = 0;
       }
