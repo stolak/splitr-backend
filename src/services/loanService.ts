@@ -353,7 +353,8 @@ export class LoanService {
         let nextSchedule = this.nextSchedule(
           input.loanInterestRate,
           Number(loan.loanAmount),
-          Number(input.monthlyRepayment)
+          Number(input.monthlyRepayment),
+          cycleType
         );
         const firstSchedule = await this.createLoanSchedule({
           loanId: loan.id,
@@ -385,7 +386,9 @@ export class LoanService {
           nextSchedule = this.nextSchedule(
             Number(loan.loanInterestRate),
             expectedBalanceCursor,
-            Number(input.monthlyRepayment)
+            Number(input.monthlyRepayment),
+            cycleType
+
           );
 
           this.createLoanSchedule({
@@ -2535,7 +2538,7 @@ export class LoanService {
           const loan = await this.getLoanById(loanInterestSchedule.loanId);
           if (loan.success && loan.data) {
             const balance = Number(loan.data?.principalBalance);
-
+            const installmentType = loan.data?.loanInstallmentType as LoanInstallmentType;
             await prisma.loanSchedule.update({
               where: { id: loanInterestSchedule.id },
               data: {
@@ -2546,7 +2549,8 @@ export class LoanService {
             const nextSchedule = this.nextSchedule(
               Number(loan.data?.loanInterestRate),
               balance,
-              Number(loan.data?.monthlyRepayment)
+              Number(loan.data?.monthlyRepayment),
+              installmentType
             );
             const interest = nextSchedule.interest;
             await this.createLoanTransaction({
@@ -3127,8 +3131,11 @@ export class LoanService {
     };
   }
 
-  nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number) {
-    const interest = roundUpTo2Decimals((openingBalance * rate * 0.01) / 12);
+  nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number, installmentType: LoanInstallmentType) {
+    const interest =
+      installmentType === LoanInstallmentType.Monthly
+        ? roundUpTo2Decimals((openingBalance * rate * 0.01) / 12)
+        : roundUpTo2Decimals((openingBalance * rate * 0.01) ); ;
     const calculatedPrincipal = roundUpTo2Decimals(monthlyRepayment - interest);
     const principal = roundUpTo2Decimals(Math.min(calculatedPrincipal, openingBalance));
     let closingBalance = roundUpTo2Decimals(openingBalance - principal);
