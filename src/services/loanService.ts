@@ -346,7 +346,6 @@ export class LoanService {
         periodicInstallment = roundUpTo2Decimals(Number(product?.periodicInstallment));
         // First installment is due immediately: start and end are today
         const [firstInstallment, ...remainingInstallments] = installments;
-        const firstPayment = roundUpTo2Decimals(Number(firstInstallment.amount));
         partPayment = roundUpTo2Decimals(
           Number(firstInstallment.amount) - Number(product?.partPayment)
         );
@@ -361,8 +360,8 @@ export class LoanService {
           start: today,
           end: today,
           status: LoanScheduleStatus.Closed,
-          actualPayment: roundUpTo2Decimals(firstPayment - Number(product?.partPayment)),
-          expectedPayment: roundUpTo2Decimals(firstPayment - Number(product?.partPayment)),
+          actualPayment: Number(input.monthlyRepayment),
+          expectedPayment: Number(input.monthlyRepayment),
           expectedBalance: nextSchedule.openingBalance,
           isExecuted: true,
           expectedClosingBalance: nextSchedule.closingBalance,
