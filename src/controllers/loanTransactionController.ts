@@ -64,6 +64,10 @@ export const loanTransactionController = {
         paymentType,
       });
 
+      if (!result) {
+        return res.status(200).json({ success: true, data: null });
+      }
+
       if (!result.success) {
         return res.status(400).json(result);
       }

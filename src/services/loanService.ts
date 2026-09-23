@@ -1771,6 +1771,10 @@ export class LoanService {
   async createLoanTransaction(input: CreateLoanTransactionInput) {
     const { creditAmount, debitAmount, loanId } = input;
 
+    if (Math.abs(creditAmount) < 0.01 && Math.abs(debitAmount) < 0.01) {
+      return null;
+    }
+
     if (creditAmount > 0 && debitAmount > 0) {
       return {
         success: false,
@@ -2892,6 +2896,7 @@ export class LoanService {
     loanData: {
       id: string;
       loanInterestRate: unknown;
+      loanInstallmentType: LoanInstallmentType;
     };
     amount: number;
     date?: Date;
@@ -2899,9 +2904,11 @@ export class LoanService {
     description: string;
     paymentType?: PaymentType;
   }) {
-    const interest = roundUpTo2Decimals(
-      (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12
-    );
+    const { loanInstallmentType } = loanData;
+    const interest =
+      loanInstallmentType === LoanInstallmentType.Monthly
+        ? roundUpTo2Decimals((Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12)
+        : 0;
     await this.createLoanTransaction({
       loanId: loanData.id,
       transactionType: TransactionType.interest,
