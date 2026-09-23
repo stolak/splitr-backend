@@ -562,7 +562,8 @@ export class LoanService {
       const liquidatingBalance = this.getLoanLiquidatingBalance(
         loan.loanTransactions as unknown as GetLoanBalanceInput[],
         principalBalance,
-        Number(loan.loanInterestRate)
+        Number(loan.loanInterestRate),
+          loan.loanInstallmentType      
       );
       const amountDue = this.getAmountDue(loan);
       return {
@@ -782,7 +783,8 @@ export class LoanService {
         const liquidatingBalance = this.getLoanLiquidatingBalance(
           loan.loanTransactions as unknown as GetLoanBalanceInput[],
           principalBalance,
-          Number(loan.loanInterestRate)
+          Number(loan.loanInterestRate),
+          loan.loanInstallmentType
         );
         return {
           ...loan,
@@ -2322,15 +2324,17 @@ export class LoanService {
   getLoanLiquidatingBalance(
     input: GetLoanBalanceInput[],
     principal: Number,
-    interest: Number
+    interest: Number,
+    installmentType: LoanInstallmentType
   ): Number {
     const balance = input.reduce(
       (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
       0
     );
 
-    const rounded =
-      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0;
+    const rounded =installmentType === LoanInstallmentType.Monthly ?
+      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0 :
+      roundUpTo2Decimals(balance + Number(principal) * (Number(interest) ) * 0.01) ?? 0;
     if (Math.abs(rounded) <= 0.3) {
       return 0;
     }
@@ -2897,6 +2901,7 @@ export class LoanService {
       id: string;
       loanInterestRate: unknown;
       loanInstallmentType: LoanInstallmentType;
+      loanAmount: unknown;
     };
     amount: number;
     date?: Date;
@@ -2905,10 +2910,18 @@ export class LoanService {
     paymentType?: PaymentType;
   }) {
     const { loanInstallmentType } = loanData;
-    const interest =
-      loanInstallmentType === LoanInstallmentType.Monthly
-        ? roundUpTo2Decimals((Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12)
-        : 0;
+    let interest = 0;
+    if (loanInstallmentType === LoanInstallmentType.Monthly) {
+      interest = roundUpTo2Decimals(
+        (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12
+      );
+    } else {
+      interest = this.flatRateInterestCalculation(
+
+        Number(loanData.loanInterestRate),
+        Number(amount)
+      ).interest;
+    }
     await this.createLoanTransaction({
       loanId: loanData.id,
       transactionType: TransactionType.interest,
@@ -3102,6 +3115,16 @@ export class LoanService {
     return await prisma.loanTransaction.findMany({
       where: { scheduleId: scheduleId },
     });
+  }
+
+  flatRateInterestCalculation(rate: number, amount: number) {
+    const interest = roundUpTo2Decimals((amount * rate) / (100 + rate));
+    const principal = roundUpTo2Decimals(amount - interest);
+
+    return {
+      principal,
+      interest,
+    };
   }
 
   nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number) {
