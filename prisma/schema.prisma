@@ -522,6 +522,7 @@ model Loan {
   loanDocumentVerified DocumentStatus?       @default(Pending)
   loanSchedules        LoanSchedule[]
   loanTransactions     LoanTransaction[]
+  loanPayments         LoanPayment[]
   mandates             InvoiceMandate[]      @relation("LoanMandate")
   mandateDebits        MandateDebit[]
   stripeMandates       StripeMandate[]
@@ -560,6 +561,7 @@ model LoanSchedule {
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
   loanTransactions       LoanTransaction[]
+  loanPayments           LoanPayment[]
 
   @@map("loan_schedule")
 }
@@ -642,6 +644,27 @@ enum PaymentType {
   early
   late
   instant
+  credit
+}
+
+model LoanPayment {
+  id                   String        @id @default(uuid())
+  loanId               String
+  loan                 Loan          @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  credit               Decimal       @default(0)
+  debit                Decimal       @default(0)
+  principal            Decimal?
+  interest             Decimal?
+  penalty              Decimal?
+  paymentType          PaymentType?
+  transactionReference String?
+  remarks              String
+  scheduleId           String?
+  schedule             LoanSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@map("loan_payment")
 }
 
 model MerchantTransaction {

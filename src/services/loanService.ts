@@ -206,6 +206,20 @@ export interface UpdateLoanTransactionInput {
   transactionDate?: Date;
   paymentType?: PaymentType;
 }
+
+export interface CreateLoanPaymentInput {
+  loanId: string;
+  credit?: number;
+  debit?: number;
+  principal?: number;
+  interest?: number;
+  penalty?: number;
+  paymentType: PaymentType;
+  transactionReference?: string;
+  remarks: string;
+  scheduleId?: string;
+}
+
 export interface GetLoanBalanceInput {
   transactionType: TransactionType;
   transactionStatus: TransactionStatus;
@@ -516,10 +530,13 @@ export class LoanService {
             select: loanProductConfigurationSelect,
           },
           loanSchedules: {
-            orderBy: { start: "asc" },
+            orderBy: { end: "asc" },
           },
           loanTransactions: {
-            orderBy: { transactionDate: "desc" },
+            orderBy: [{ transactionDate: "desc" }, { updatedAt: "asc" }, { id: "desc" }],
+          },
+          loanPayments: {
+            orderBy: { createdAt: "asc" },
           },
         },
       });
@@ -591,6 +608,7 @@ export class LoanService {
           },
           loanSchedules: true,
           loanTransactions: true,
+          loanPayments: true,
         },
       });
 
@@ -638,6 +656,9 @@ export class LoanService {
           },
           loanTransactions: {
             orderBy: { transactionDate: "desc" },
+          },
+          loanPayments: {
+            orderBy: { createdAt: "desc" },
           },
         },
       });
@@ -733,7 +754,10 @@ export class LoanService {
               orderBy: { start: "asc" },
             },
             loanTransactions: {
-              orderBy: [{ transactionDate: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
+              orderBy: [{ transactionDate: "asc" }, { updatedAt: "asc" }, { id: "asc" }],
+            },
+            loanPayments: {
+              orderBy: { createdAt: "asc" },
             },
           },
           orderBy: { createdAt: "desc" },
@@ -974,6 +998,9 @@ export class LoanService {
         const loanTransactions = await tx.loanTransaction.deleteMany({
           where: { loanId },
         });
+        const loanPayments = await tx.loanPayment.deleteMany({
+          where: { loanId },
+        });
         const loanSchedules = await tx.loanSchedule.deleteMany({
           where: { loanId },
         });
@@ -1015,6 +1042,7 @@ export class LoanService {
           invoiceResetToPending,
           deletedCounts: {
             loanTransactions: loanTransactions.count,
+            loanPayments: loanPayments.count,
             loanSchedules: loanSchedules.count,
             loanPenaltySchedules,
             loanDebitTrialSchedules,
@@ -1793,6 +1821,69 @@ export class LoanService {
       });
 
       return { success: true, data: transaction };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ==================== LOAN PAYMENT CRUD ====================
+
+  /**
+   * Create loan payment
+   */
+  async createLoanPayment(input: CreateLoanPaymentInput) {
+    try {
+      const loan = await prisma.loan.findUnique({
+        where: { id: input.loanId },
+      });
+
+      if (!loan) {
+        throw new Error("Loan not found");
+      }
+
+      if (input.scheduleId) {
+        const schedule = await prisma.loanSchedule.findUnique({
+          where: { id: input.scheduleId },
+        });
+        if (!schedule || schedule.loanId !== input.loanId) {
+          throw new Error("Loan schedule not found for this loan");
+        }
+      }
+
+      const payment = await prisma.loanPayment.create({
+        data: {
+          loanId: input.loanId,
+          credit: roundUpTo2Decimals(input.credit ?? 0),
+          debit: roundUpTo2Decimals(input.debit ?? 0),
+          principal:
+            input.principal !== undefined ? roundUpTo2Decimals(input.principal) : undefined,
+          interest: input.interest !== undefined ? roundUpTo2Decimals(input.interest) : undefined,
+          penalty: input.penalty !== undefined ? roundUpTo2Decimals(input.penalty) : undefined,
+          paymentType: input.paymentType,
+          transactionReference: input.transactionReference,
+          remarks: input.remarks,
+          scheduleId: input.scheduleId,
+        },
+        include: {
+          loan: {
+            select: {
+              id: true,
+              splitrId: true,
+              loanAmount: true,
+            },
+          },
+          schedule: {
+            select: {
+              id: true,
+              start: true,
+              end: true,
+              status: true,
+            },
+          },
+        },
+      });
+
+      return { success: true, data: payment };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -2626,7 +2717,7 @@ export class LoanService {
         }
       }
       // First, enforce penalties
-      console.log("Log payment type for now", paymentType);
+
       // await this.penaltyEnforcement(date);
 
       let loan = await this.getLoanById(loanId);
@@ -2650,6 +2741,23 @@ export class LoanService {
             );
             return { success: false, error: "Amount is less than the liquidating balance" };
           }
+          await directPayService.markValueSettled({
+            stripePaymentIntentId,
+            transactReference: reference,
+            isTest,
+          });
+
+          this.createLoanPayment({
+            loanId,
+            credit: amount,
+            debit: 0,
+            principal: 0,
+            interest: 0,
+            penalty: 0,
+            paymentType: PaymentType.credit,
+            transactionReference: reference,
+            remarks: `Full repayment of loan`,
+          });
           await this.chargePartialRepaymentInterestAndAllocate({
             loanId,
             loanData,
@@ -2661,6 +2769,22 @@ export class LoanService {
           });
         }
         if (paymentType === PaymentType.partial) {
+          await directPayService.markValueSettled({
+            stripePaymentIntentId,
+            transactReference: reference,
+            isTest,
+          });
+          this.createLoanPayment({
+            loanId,
+            credit: amount,
+            debit: 0,
+            principal: 0,
+            interest: 0,
+            penalty: 0,
+            paymentType: PaymentType.credit,
+            transactionReference: reference,
+            remarks: `Partial repayment of loan`,
+          });
           await this.chargePartialRepaymentInterestAndAllocate({
             loanId,
             loanData,
@@ -2687,6 +2811,17 @@ export class LoanService {
             stripePaymentIntentId,
             transactReference: reference,
             isTest,
+          });
+          this.createLoanPayment({
+            loanId,
+            credit: amount,
+            debit: 0,
+            principal: 0,
+            interest: 0,
+            penalty: 0,
+            paymentType: PaymentType.credit,
+            transactionReference: reference,
+            remarks: `Repayment of loan`,
           });
           for (let i = 0; i < possibleSchedule; i++) {
             await this.interestEnforcement(loanschedules[i].start);
@@ -2908,6 +3043,21 @@ export class LoanService {
         description: `${description} - Principal repayment`,
         transactReference,
         paymentType,
+      });
+    }
+
+    if (paymentType) {
+      await this.createLoanPayment({
+        loanId,
+        scheduleId: withschedule ? scheduleId : undefined,
+        credit: 0,
+        debit: amount,
+        principal: principalPaid,
+        interest: interestPaid,
+        penalty: 0,
+        paymentType,
+        transactionReference: transactReference ?? "",
+        remarks: description,
       });
     }
 

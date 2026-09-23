@@ -32,6 +32,7 @@ const options: swaggerJSDoc.Options = {
       },
       { name: 'LoanSetting', description: 'Loan settings management' },
       { name: 'LoanTransaction', description: 'Loan transaction management' },
+      { name: 'LoanPayment', description: 'Loan payment management' },
       { name: 'Location', description: 'Location management' },
       { name: 'Merchant', description: 'Merchant management' },
       { name: 'Mono', description: 'Mono integration' },

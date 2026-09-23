@@ -252,6 +252,8 @@ router.post('/', authenticateJWT, loanController.createLoan);
  *                             type: array
  *                           loanTransactions:
  *                             type: array
+ *                           loanPayments:
+ *                             type: array
  *                     pagination:
  *                       type: object
  *                       properties:
@@ -636,6 +638,8 @@ router.get('/counts/grouped-by-day', authenticateJWT, loanController.getLoansCou
  *                     loanSchedules:
  *                       type: array
  *                     loanTransactions:
+ *                       type: array
+ *                     loanPayments:
  *                       type: array
  *       404:
  *         description: Loan not found
@@ -1217,6 +1221,8 @@ router.get('/splitr-id/:splitrId', authenticateJWT, loanController.getLoanByspli
  *                       type: array
  *                     loanTransactions:
  *                       type: array
+ *                     loanPayments:
+ *                       type: array
  *       404:
  *         description: Loan not found for this invoice
  *       500:
@@ -1394,6 +1400,8 @@ router.delete('/:id', authenticateJWT, loanController.deleteLoan);
  *                       type: object
  *                       properties:
  *                         loanTransactions:
+ *                           type: number
+ *                         loanPayments:
  *                           type: number
  *                         loanSchedules:
  *                           type: number
