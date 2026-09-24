@@ -431,6 +431,7 @@ export class InvoiceService {
     customerEmail?: string;
     q?: string;
     type?: InvoiceType;
+    returnStatus?: LoanReturnStatus;
     from?: Date | string;
     to?: Date | string;
     page?: number;
@@ -466,6 +467,7 @@ export class InvoiceService {
       if (filters?.status) where.status = filters.status;
       if (filters?.customerEmail) where.customerEmail = filters.customerEmail;
       if (filters?.type) where.type = filters.type;
+      if (filters?.returnStatus) where.returnStatus = filters.returnStatus;
       if (filters?.q) {
         where.OR = [
           { splitrId: { contains: filters.q } },
@@ -748,6 +750,7 @@ export class InvoiceService {
 
     const updateData: any = {
       status: InvoiceStatus.Paid,
+      returnStatus: LoanReturnStatus.Active,
       buyerId: buyerId,
       customerName: `${buyer.firstName} ${buyer.lastName}`,
       customerEmail: buyer.email,
@@ -2062,6 +2065,7 @@ export class InvoiceService {
     const updateData = {
       status: InvoiceStatus.Paid,
       buyerId,
+      returnStatus: LoanReturnStatus.Active,
       customerName: `${buyer.firstName ?? ""} ${buyer.lastName ?? ""}`.trim(),
       customerEmail: buyer.email,
       customerPhoneNumber: buyer.phoneNumber ?? invoice.customerPhoneNumber,
@@ -2185,6 +2189,7 @@ export class InvoiceService {
 
     const updateData = {
       status: InvoiceStatus.Paid,
+      returnStatus: LoanReturnStatus.Active,
       buyerId,
       customerName: `${buyer.firstName ?? ""} ${buyer.lastName ?? ""}`.trim(),
       customerEmail: buyer.email,

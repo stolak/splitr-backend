@@ -130,6 +130,12 @@ import {
  *           type: string
  *           enum: [Purchase, Ecommerce, Shopping, Services, Invoice]
  *       - in: query
+ *         name: returnStatus
+ *         schema:
+ *           type: string
+ *           enum: [Active, Approved, Rejected, Refunded, Pending]
+ *         description: Filter by invoice return status
+ *       - in: query
  *         name: from
  *         schema:
  *           type: string
@@ -753,7 +759,7 @@ export class InvoiceController {
    */
   async list(req: Request, res: Response) {
     try {
-      const { merchantId, buyerId, status, customerEmail, q, type, from, to, page, limit } =
+      const { merchantId, buyerId, status, customerEmail, q, type, returnStatus, from, to, page, limit } =
         req.query;
 
       const filters: any = {};
@@ -763,6 +769,7 @@ export class InvoiceController {
       if (customerEmail) filters.customerEmail = customerEmail as string;
       if (q) filters.q = q as string;
       if (type) filters.type = type as InvoiceType;
+      if (returnStatus) filters.returnStatus = returnStatus as LoanReturnStatus;
       if (from) filters.from = from as string;
       if (to) filters.to = to as string;
       if (page) filters.page = parseInt(page as string);
