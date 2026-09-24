@@ -8,7 +8,6 @@ import {
   LoanPenaltyStatus,
   LoanScheduleStatus,
   RevenueType,
-  Loan,
   DirectPayType,
   LoanInstallmentType,
   InvoiceStatus,
@@ -20,6 +19,18 @@ import {
   getNextCycleByInstallmentType,
   roundUpTo2Decimals,
 } from "../utils/helper";
+import {
+  GetLoanBalanceInput,
+  LoanScheduleRecord,
+  calculateSchedule,
+  countClosedSchedules,
+  flatRateInterestCalculation,
+  getAmountDue,
+  getLoanBalance,
+  getLoanBalanceByTransactionType3,
+  getLoanLiquidatingBalance,
+  nextSchedule,
+} from "../utils/loanHelper";
 import { randomUUID } from "crypto";
 import { RevenueService } from "./revenueService";
 import { AccountDetailsService } from "./accountDetailsService";
@@ -29,11 +40,7 @@ import { directPayService } from "./directPayService";
 import { DirectPayStatus, PaymentProvider } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { buyerService } from "./buyerService";
-import {
-  CreateMandateDebitInput,
-  mandateDebitService,
-  UpdateMandateDebitInput,
-} from "../services/mandateDebitService";
+import { mandateDebitService } from "../services/mandateDebitService";
 import { BuyerFinanceQuoteProductOutcome } from "./scoringService";
 import { stripeService } from "./stripeService";
 import stripe from "../routes/stripe";
@@ -220,16 +227,6 @@ export interface CreateLoanPaymentInput {
   scheduleId?: string;
 }
 
-export interface GetLoanBalanceInput {
-  transactionType: TransactionType;
-  transactionStatus: TransactionStatus;
-  creditAmount: number;
-  debitAmount: number;
-}
-type RecordItem = {
-  status: string;
-  [key: string]: any;
-};
 const INTEREST_RATE = 7.5;
 export class LoanService {
   // ==================== LOAN CRUD ====================
@@ -350,7 +347,7 @@ export class LoanService {
           Number(firstInstallment.amount) - Number(product?.partPayment)
         );
         let expectedBalanceCursor = product?.financeAmount;
-        let nextSchedule = this.nextSchedule(
+        let scheduleStep = nextSchedule(
           input.loanInterestRate,
           Number(loan.loanAmount),
           Number(input.monthlyRepayment),
@@ -363,14 +360,14 @@ export class LoanService {
           status: LoanScheduleStatus.Closed,
           actualPayment: Number(input.monthlyRepayment),
           expectedPayment: Number(input.monthlyRepayment),
-          expectedBalance: nextSchedule.openingBalance,
+          expectedBalance: scheduleStep.openingBalance,
           isExecuted: true,
-          expectedClosingBalance: nextSchedule.closingBalance,
+          expectedClosingBalance: scheduleStep.closingBalance,
         });
         if (firstSchedule) {
           firstScheduleId = firstSchedule.data?.id ?? "";
         }
-        expectedBalanceCursor = nextSchedule.closingBalance;
+        expectedBalanceCursor = scheduleStep.closingBalance;
 
         // Subsequent installments begin on the next product-type interval from today
         // (BI_WEEKLY → +14 days, MONTHLY_FLEX → +1 month) and continue on that cadence
@@ -383,7 +380,7 @@ export class LoanService {
             cycleType
           );
 
-          nextSchedule = this.nextSchedule(
+          scheduleStep = nextSchedule(
             Number(loan.loanInterestRate),
             expectedBalanceCursor,
             Number(input.monthlyRepayment),
@@ -396,11 +393,11 @@ export class LoanService {
             end: cycleEnd,
             expectedPayment,
             expectedBalance: expectedBalanceCursor,
-            expectedClosingBalance: nextSchedule.closingBalance,
+            expectedClosingBalance: scheduleStep.closingBalance,
           });
 
           nextcycle = getNextCycleByInstallmentType(new Date(nextcycle).toISOString(), cycleType);
-          expectedBalanceCursor = nextSchedule.closingBalance;
+          expectedBalanceCursor = scheduleStep.closingBalance;
         }
 
         expectedBalance = expectedBalanceCursor;
@@ -546,28 +543,28 @@ export class LoanService {
         throw new Error("Loan not found");
       }
 
-      const principalBalance = this.getLoanBalanceByTransactionType3(
+      const principalBalance = getLoanBalanceByTransactionType3(
         TransactionType.principal,
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const interestBalance = this.getLoanBalanceByTransactionType3(
+      const interestBalance = getLoanBalanceByTransactionType3(
         TransactionType.interest,
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const penaltyBalance = this.getLoanBalanceByTransactionType3(
+      const penaltyBalance = getLoanBalanceByTransactionType3(
         TransactionType.penalty,
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const overallBalance = this.getLoanBalance(
+      const overallBalance = getLoanBalance(
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const liquidatingBalance = this.getLoanLiquidatingBalance(
+      const liquidatingBalance = getLoanLiquidatingBalance(
         loan.loanTransactions as unknown as GetLoanBalanceInput[],
         principalBalance,
         Number(loan.loanInterestRate),
         loan.loanInstallmentType
       );
-      const amountDue = this.getAmountDue(loan);
+      const amountDue = getAmountDue(loan);
       return {
         success: true,
         data: {
@@ -579,7 +576,9 @@ export class LoanService {
           liquidatingBalance,
           nextPaymentDate: loan.loanSchedules[0]?.end,
           nextPaymentAmount: loan.loanSchedules[0]?.expectedPayment,
-          monthCompleted: this.countClosedSchedules(loan.loanSchedules as unknown as RecordItem[]),
+          monthCompleted: countClosedSchedules(
+            loan.loanSchedules as unknown as LoanScheduleRecord[]
+          ),
           ...amountDue,
         },
       };
@@ -669,22 +668,22 @@ export class LoanService {
         throw new Error("Loan not found for this invoice");
       }
 
-      const principalBalance = this.getLoanBalanceByTransactionType3(
+      const principalBalance = getLoanBalanceByTransactionType3(
         TransactionType.principal,
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const interestBalance = this.getLoanBalanceByTransactionType3(
+      const interestBalance = getLoanBalanceByTransactionType3(
         TransactionType.interest,
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const penaltyBalance = this.getLoanBalanceByTransactionType3(
+      const penaltyBalance = getLoanBalanceByTransactionType3(
         TransactionType.penalty,
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const overallBalance = this.getLoanBalance(
+      const overallBalance = getLoanBalance(
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
-      const amountDue = this.getAmountDue(loan);
+      const amountDue = getAmountDue(loan);
       return {
         success: true,
         data: {
@@ -695,7 +694,9 @@ export class LoanService {
           overallBalance,
           nextPaymentDate: loan.loanSchedules[0]?.end,
           nextPaymentAmount: loan.loanSchedules[0]?.expectedPayment,
-          monthCompleted: this.countClosedSchedules(loan.loanSchedules as unknown as RecordItem[]),
+          monthCompleted: countClosedSchedules(
+            loan.loanSchedules as unknown as LoanScheduleRecord[]
+          ),
           ...amountDue,
         },
       };
@@ -767,22 +768,22 @@ export class LoanService {
         prisma.loan.count({ where }),
       ]);
       const loanWithBalance = loans.map((loan) => {
-        const principalBalance = this.getLoanBalanceByTransactionType3(
+        const principalBalance = getLoanBalanceByTransactionType3(
           TransactionType.principal,
           loan.loanTransactions as unknown as GetLoanBalanceInput[]
         );
-        const interestBalance = this.getLoanBalanceByTransactionType3(
+        const interestBalance = getLoanBalanceByTransactionType3(
           TransactionType.interest,
           loan.loanTransactions as unknown as GetLoanBalanceInput[]
         );
-        const penaltyBalance = this.getLoanBalanceByTransactionType3(
+        const penaltyBalance = getLoanBalanceByTransactionType3(
           TransactionType.penalty,
           loan.loanTransactions as unknown as GetLoanBalanceInput[]
         );
-        const overallBalance = this.getLoanBalance(
+        const overallBalance = getLoanBalance(
           loan.loanTransactions as unknown as GetLoanBalanceInput[]
         );
-        const liquidatingBalance = this.getLoanLiquidatingBalance(
+        const liquidatingBalance = getLoanLiquidatingBalance(
           loan.loanTransactions as unknown as GetLoanBalanceInput[],
           principalBalance,
           Number(loan.loanInterestRate),
@@ -797,7 +798,9 @@ export class LoanService {
           liquidatingBalance,
           nextPaymentDate: loan.loanSchedules[0]?.end,
           nextPaymentAmount: loan.loanSchedules[0]?.expectedPayment,
-          monthCompleted: this.countClosedSchedules(loan.loanSchedules as unknown as RecordItem[]),
+          monthCompleted: countClosedSchedules(
+            loan.loanSchedules as unknown as LoanScheduleRecord[]
+          ),
         };
       });
       return {
@@ -2312,79 +2315,6 @@ export class LoanService {
       return { success: false, error: error.message };
     }
   }
-  getLoanBalance(input: GetLoanBalanceInput[]): Number {
-    const balance = input.reduce(
-      (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
-      0
-    );
-    const rounded = roundUpTo2Decimals(balance) ?? 0;
-    if (Math.abs(rounded) <= 0.3) {
-      return 0;
-    }
-    return Math.max(0, rounded);
-  }
-  getLoanLiquidatingBalance(
-    input: GetLoanBalanceInput[],
-    principal: Number,
-    interest: Number,
-    installmentType: LoanInstallmentType
-  ): Number {
-    const balance = input.reduce(
-      (sum, item) => Number(sum) + Number(item.creditAmount) - item.debitAmount,
-      0
-    );
-
-    const rounded =
-      installmentType === LoanInstallmentType.Monthly
-        ? (roundUpTo2Decimals(balance + Number(principal) * (Number(interest) / 12) * 0.01) ?? 0)
-        : (roundUpTo2Decimals(balance + Number(principal) * Number(interest) * 0.01) ?? 0);
-    if (Math.abs(rounded) <= 0.3) {
-      return 0;
-    }
-    return Math.max(0, rounded);
-  }
-  getAmountDue(input: Loan & { loanSchedules?: any[]; loanTransactions?: any[] }) {
-    // get next loan schedule that is not executed use Loan
-    const nextSchedule = input.loanSchedules
-      ?.filter((schedule) => !schedule.isExecuted)
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())[0];
-
-    const lastExecutedSchedule = input.loanSchedules
-      ?.filter((schedule) => schedule.isExecuted)
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())[0];
-    // get loan overall balance at the last executed schedule
-    const lastExecutedScheduleBalance = input.loanSchedules
-      ?.filter((schedule) => schedule.isExecuted)
-      .sort((a, b) => new Date(a.end).getTime() - new Date(b.end).getTime())[0];
-
-    // get the last executed transaction loan schedule
-
-    const overallBalance = this.getLoanBalance(
-      input.loanTransactions as unknown as GetLoanBalanceInput[]
-    );
-    if (lastExecutedScheduleBalance) {
-      const amountDue = roundUpTo2Decimals(
-        Number(overallBalance) - Number(lastExecutedScheduleBalance.expectedClosingBalance)
-      );
-      return { amountDue: Math.max(0, amountDue ?? 0) };
-    } else {
-      return { amountDue: 0 };
-    }
-  }
-
-  getLoanBalanceByTransactionType3(
-    transactionType: TransactionType,
-    input: GetLoanBalanceInput[]
-  ): Number {
-    const balance = input
-      .filter((item) => item.transactionType === transactionType)
-      .reduce((sum, item) => Number(sum) + Number(item.creditAmount) - Number(item.debitAmount), 0);
-    const rounded = roundUpTo2Decimals(balance) ?? 0;
-    if (Math.abs(rounded) <= 0.2) {
-      return 0;
-    }
-    return Math.max(0, rounded);
-  }
   async penaltyEnforcement(date: Date) {
     try {
       // interest enforcement
@@ -2547,13 +2477,13 @@ export class LoanService {
             // const interest = balance * INTEREST_RATE * 0.01;
             let interest = 0;
             // if (installmentType === LoanInstallmentType.Monthly) {
-            const nextSchedule = this.nextSchedule(
+            const scheduleStep = nextSchedule(
               Number(loan.data?.loanInterestRate),
               balance,
               Number(loan.data?.monthlyRepayment),
               installmentType
             );
-            interest = nextSchedule.interest;
+            interest = scheduleStep.interest;
             // } else {
             //   interest = roundUpTo2Decimals(
             //     Math.min(Number(loan.data?.monthlyRepayment), balance) *
@@ -2930,7 +2860,7 @@ export class LoanService {
         (Number(amount) * Number(loanData.loanInterestRate) * 0.01) / 12
       );
     } else {
-      interest = this.flatRateInterestCalculation(
+      interest = flatRateInterestCalculation(
         Number(loanData.loanInterestRate),
         Number(amount)
       ).interest;
@@ -2961,7 +2891,7 @@ export class LoanService {
       throw new Error(loan.error || "Loan not found");
     }
     const loanData2 = loan.data;
-    const calculateSchedule = this.calculateSchedule(
+    const projectedSchedule = calculateSchedule(
       Number(loanData2.monthlyRepayment),
       Number(loanData2.principalBalance),
       Number(loanData2.loanInterestRate),
@@ -2974,9 +2904,9 @@ export class LoanService {
       .sort((a, b) => a.end.getTime() - b.end.getTime());
     if (schedules.length > 0) {
       for (let i = 0; i < schedules.length; i++) {
-        console.log(` ${i} <= ${calculateSchedule.length - 1}`);
+        console.log(` ${i} <= ${projectedSchedule.length - 1}`);
         const status =
-          (i <= calculateSchedule.length - 1 ? (calculateSchedule[i].openingBalance ?? 0) : 0) <= 0
+          (i <= projectedSchedule.length - 1 ? (projectedSchedule[i].openingBalance ?? 0) : 0) <= 0
             ? LoanScheduleStatus.Closed
             : LoanScheduleStatus.Open;
         // update the opening and closing balance of the schedule and the closing balance of the schedule base on calculateSchedule
@@ -2984,16 +2914,16 @@ export class LoanService {
           where: { id: schedules[i].id },
           data: {
             openingBalance: roundUpTo2Decimals(
-              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].openingBalance ?? 0) : 0
+              i <= projectedSchedule.length - 1 ? (projectedSchedule[i].openingBalance ?? 0) : 0
             ),
             expectedBalance: roundUpTo2Decimals(
-              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].closingBalance ?? 0) : 0
+              i <= projectedSchedule.length - 1 ? (projectedSchedule[i].closingBalance ?? 0) : 0
             ),
             expectedPayment: roundUpTo2Decimals(
-              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].amountPay ?? 0) : 0
+              i <= projectedSchedule.length - 1 ? (projectedSchedule[i].amountPay ?? 0) : 0
             ),
             expectedClosingBalance: roundUpTo2Decimals(
-              i <= calculateSchedule.length - 1 ? (calculateSchedule[i].closingBalance ?? 0) : 0
+              i <= projectedSchedule.length - 1 ? (projectedSchedule[i].closingBalance ?? 0) : 0
             ),
             status: status,
           },
@@ -3102,9 +3032,6 @@ export class LoanService {
     };
   }
 
-  countClosedSchedules(records: RecordItem[]): number {
-    return records.filter((r) => r.status === "Closed").length;
-  }
   async updateClosedSchedules(date: Date, balance: number, loanId: string): Promise<void> {
     const adjustedBalance = balance - 0.00999;
     const closedSchedules = await prisma.loanSchedule.updateMany({
@@ -3130,51 +3057,6 @@ export class LoanService {
     });
   }
 
-  flatRateInterestCalculation(rate: number, amount: number) {
-    const interest = roundUpTo2Decimals((amount * rate) / (100 + rate));
-    const principal = roundUpTo2Decimals(amount - interest);
-
-    return {
-      principal,
-      interest,
-    };
-  }
-
-  nextSchedule(
-    rate: number,
-    openingBalance: number,
-    monthlyRepayment: number,
-    installmentType: LoanInstallmentType
-  ) {
-    let interest = 0;
-    if (installmentType === LoanInstallmentType.Monthly) {
-      interest = roundUpTo2Decimals((openingBalance * rate * 0.01) / 12);
-    } else {
-      const flatRateInterestCalculation = this.flatRateInterestCalculation(rate, monthlyRepayment);
-      if (flatRateInterestCalculation.principal > openingBalance) {
-        interest = roundUpTo2Decimals(openingBalance * rate * 0.01);
-      } else {
-        interest = flatRateInterestCalculation.interest;
-      }
-    }
-    const calculatedPrincipal = roundUpTo2Decimals(monthlyRepayment - interest);
-    const principal = roundUpTo2Decimals(Math.min(calculatedPrincipal, openingBalance));
-    let closingBalance = roundUpTo2Decimals(openingBalance - principal);
-    if (Math.abs(closingBalance) <= 0.3) {
-      closingBalance = 0;
-    }
-
-    return {
-      interest,
-      principal,
-      openingBalance: roundUpTo2Decimals(openingBalance),
-      closingBalance,
-    };
-  }
-
-  /**
-   * Get loan counts grouped by status
-   */
   async getLoanCountsByStatus() {
     try {
       const counts = await prisma.loan.groupBy({
@@ -3674,110 +3556,6 @@ export class LoanService {
     }
 
     return { success: false, error: "Failed to validate loan repayment" };
-  }
-  calculateSchedule(
-    monthlyRepay: number,
-    principalBalance: number,
-    interestRate: number,
-    installmentType: LoanInstallmentType
-  ) {
-    console.log(
-      "CALCULATE SCHEDULE",
-      monthlyRepay,
-      principalBalance,
-      interestRate,
-      installmentType
-    );
-    if (!Number.isFinite(monthlyRepay) || monthlyRepay <= 0) {
-      throw new Error("monthlyRepay must be a positive number");
-    }
-    if (!Number.isFinite(principalBalance)) {
-      throw new Error("principalBalance must be a valid number");
-    }
-    if (!Number.isFinite(interestRate) || interestRate < 0) {
-      throw new Error("interestRate must be a non-negative number");
-    }
-
-    const schedule: Array<{
-      month: number;
-      openingBalance: number;
-      closingBalance: number;
-      amountPay: number;
-    }> = [];
-
-    let balance = principalBalance < 0 ? 0 : principalBalance;
-    let month = 1;
-    const maxMonths = 12;
-    let amountPay = 0;
-    console.log("BALANCE3333333333333:", balance);
-    while (balance > 0) {
-      if (month > maxMonths) {
-        throw new Error(
-          "Schedule exceeded maximum months; monthlyRepay may be too low to cover interest"
-        );
-      }
-
-      let openingBalance = roundUpTo2Decimals(balance);
-      let closingBalance = 0;
-      let principalPaid = 0;
-      if (installmentType === LoanInstallmentType.Monthly) {
-        const interest = roundUpTo2Decimals((openingBalance * (interestRate / 100)) / 12);
-
-        amountPay = roundUpTo2Decimals(Math.min(monthlyRepay, openingBalance + interest));
-        console.log("AMOUNT PAY", {
-          amountPay,
-          interest,
-          openingBalance,
-          monthlyRepay,
-          installmentType,
-        });
-        principalPaid = roundUpTo2Decimals(amountPay - interest);
-        console.log("PRINCIPAL PAID", principalPaid);
-        closingBalance = Math.max(0, roundUpTo2Decimals(openingBalance - principalPaid) ?? 0);
-        console.log("CLOSING BALANCE", closingBalance);
-      } else {
-        const { principal } = this.flatRateInterestCalculation(interestRate, monthlyRepay);
-        let principalPaid = Math.min(principal, balance);
-
-        const openingBalance = roundUpTo2Decimals(balance);
-        const interest = principalPaid * interestRate * 0.01;
-
-        amountPay = principalPaid + interest;
-        console.log("AMOUNT PAYdddd", {
-          amountPay,
-          interest,
-          openingBalance,
-          monthlyRepay,
-          installmentType,
-        });
-        principalPaid = roundUpTo2Decimals(amountPay - interest);
-        console.log("PRINCIPAL PAID", principalPaid);
-        closingBalance = openingBalance - principalPaid;
-        console.log("CLOSING BALANCE", closingBalance);
-      }
-      if (Math.abs(closingBalance) <= 0.3) {
-        console.log("CLOSING BALANCE IS TOO LOW", closingBalance);
-        closingBalance = 0;
-      }
-
-      ///
-      // if (principalPaid <= 0) {
-      //   console.log("PRINCIPAL PAID IS TOO LOW", principalPaid);
-      //   throw new Error("monthlyRepay is too low to reduce principal after interest is charged");
-      // }
-
-      schedule.push({
-        month,
-        openingBalance,
-        closingBalance,
-        amountPay,
-      });
-
-      balance = closingBalance;
-      month++;
-    }
-
-    return schedule;
   }
 }
 export const loanService = new LoanService();

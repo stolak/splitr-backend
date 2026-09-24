@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { loanService, CreateLoanInput, UpdateLoanInput } from "../services/loanService";
+import { calculateSchedule, nextSchedule } from "../utils/loanHelper";
 import { LoanInstallmentType, LoanStatus, LoanType } from "@prisma/client";
 
 export class LoanController {
@@ -908,7 +909,7 @@ export class LoanController {
         });
       }
 
-      const data = loanService.nextSchedule(
+      const data = nextSchedule(
         parsedRate,
         parsedOpeningBalance,
         parsedMonthlyRepayment,
@@ -969,7 +970,7 @@ export class LoanController {
         });
       }
 
-      const data = loanService.calculateSchedule(
+      const data = calculateSchedule(
         parsedMonthlyRepay,
         parsedPrincipalBalance,
         parsedInterestRate,
