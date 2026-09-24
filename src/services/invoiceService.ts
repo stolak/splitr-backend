@@ -12,8 +12,6 @@ import {
   LoanReturnStatus,
   PaystackTransferStatus,
   LoanInstallmentType,
-  TransactionType,
-  RevenueStatus,
   ProductType,
   PaymentProvider,
 } from "@prisma/client";
@@ -433,6 +431,8 @@ export class InvoiceService {
     customerEmail?: string;
     q?: string;
     type?: InvoiceType;
+    from?: Date | string;
+    to?: Date | string;
     page?: number;
     limit?: number;
   }) {
@@ -441,7 +441,26 @@ export class InvoiceService {
       const limit = filters?.limit || 10;
       const skip = (page - 1) * limit;
 
-      const where: any = {};
+      const now = new Date();
+      const fromDate = filters?.from ? new Date(filters.from) : new Date(now);
+      if (!filters?.from) {
+        fromDate.setFullYear(fromDate.getFullYear() - 1);
+      }
+      const toDate = filters?.to ? new Date(filters.to) : new Date(now);
+      // Always include one extra day so a local timezone still falls inside the range.
+      toDate.setDate(toDate.getDate() + 1);
+      toDate.setHours(23, 59, 59, 999);
+
+      if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+        return { success: false, message: "from and to must be valid dates" };
+      }
+
+      const where: any = {
+        createdAt: {
+          gte: fromDate,
+          lte: toDate,
+        },
+      };
       if (filters?.merchantId) where.merchantId = filters.merchantId;
       if (filters?.buyerId) where.buyerId = filters.buyerId;
       if (filters?.status) where.status = filters.status;

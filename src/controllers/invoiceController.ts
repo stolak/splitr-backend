@@ -130,6 +130,18 @@ import {
  *           type: string
  *           enum: [Purchase, Ecommerce, Shopping, Services, Invoice]
  *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Start of createdAt range. Defaults to one year before today.
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: End of createdAt range. One day is always added. Defaults to today.
+ *       - in: query
  *         name: page
  *         schema:
  *           type: integer
@@ -741,7 +753,8 @@ export class InvoiceController {
    */
   async list(req: Request, res: Response) {
     try {
-      const { merchantId, buyerId, status, customerEmail, q, type, page, limit } = req.query;
+      const { merchantId, buyerId, status, customerEmail, q, type, from, to, page, limit } =
+        req.query;
 
       const filters: any = {};
       if (merchantId) filters.merchantId = merchantId as string;
@@ -750,6 +763,8 @@ export class InvoiceController {
       if (customerEmail) filters.customerEmail = customerEmail as string;
       if (q) filters.q = q as string;
       if (type) filters.type = type as InvoiceType;
+      if (from) filters.from = from as string;
+      if (to) filters.to = to as string;
       if (page) filters.page = parseInt(page as string);
       if (limit) filters.limit = parseInt(limit as string);
 
