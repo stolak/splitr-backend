@@ -18,6 +18,8 @@ import {
   getDayBeforeNextCycleByInstallmentType,
   getNextCycleByInstallmentType,
   roundUpTo2Decimals,
+  calculateOverdueAmount,
+  Schedule,
 } from "../utils/helper";
 import {
   GetLoanBalanceInput,
@@ -120,6 +122,7 @@ export interface CreateLoanScheduleInput {
   actualPayment?: number;
   expectedBalance?: number;
   expectedClosingBalance?: number;
+  openingBalance?: number;
   status?: LoanScheduleStatus;
   isExecuted?: boolean;
 }
@@ -361,6 +364,7 @@ export class LoanService {
           actualPayment: Number(input.monthlyRepayment),
           expectedPayment: Number(input.monthlyRepayment),
           expectedBalance: scheduleStep.openingBalance,
+          openingBalance: scheduleStep.openingBalance,
           isExecuted: true,
           expectedClosingBalance: scheduleStep.closingBalance,
         });
@@ -392,6 +396,7 @@ export class LoanService {
             start: nextcycle,
             end: cycleEnd,
             expectedPayment,
+            openingBalance: scheduleStep.openingBalance,
             expectedBalance: expectedBalanceCursor,
             expectedClosingBalance: scheduleStep.closingBalance,
           });
@@ -565,6 +570,10 @@ export class LoanService {
         loan.loanInstallmentType
       );
       const amountDue = getAmountDue(loan);
+      const overdueBalance = calculateOverdueAmount(
+        loan.loanSchedules as unknown as Schedule[],
+        overallBalance
+      );
       return {
         success: true,
         data: {
@@ -580,6 +589,7 @@ export class LoanService {
             loan.loanSchedules as unknown as LoanScheduleRecord[]
           ),
           ...amountDue,
+          overdueBalance,
         },
       };
     } catch (error: any) {
@@ -789,6 +799,10 @@ export class LoanService {
           Number(loan.loanInterestRate),
           loan.loanInstallmentType
         );
+        const overdueBalance = calculateOverdueAmount(
+          loan.loanSchedules as unknown as Schedule[],
+          overallBalance
+        );
         return {
           ...loan,
           principalBalance,
@@ -801,6 +815,7 @@ export class LoanService {
           monthCompleted: countClosedSchedules(
             loan.loanSchedules as unknown as LoanScheduleRecord[]
           ),
+          overdueBalance,
         };
       });
       return {
@@ -1096,6 +1111,7 @@ export class LoanService {
           actualPayment: roundUpTo2Decimals(input.actualPayment),
           expectedBalance: roundUpTo2Decimals(input.expectedBalance || 0),
           expectedClosingBalance: roundUpTo2Decimals(input.expectedClosingBalance || 0),
+          openingBalance: roundUpTo2Decimals(input.openingBalance || 0),
           isExecuted: input.isExecuted || false,
           status: input.status || LoanScheduleStatus.Open,
         },
@@ -2681,7 +2697,10 @@ export class LoanService {
           console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
           return { success: false, error: "Amount is greater than balance" };
         }
+        // if(loanData.overdueBalance > 0){
 
+        //   return { success: false, error: "Loan is not fully paid" };
+        // }
         if (paymentType === PaymentType.full) {
           const liquidatingBalanceCents = Math.round(Number(loan.data.liquidatingBalance) * 100);
           if (amountCents + 30 < liquidatingBalanceCents) {

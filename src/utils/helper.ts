@@ -140,3 +140,32 @@ export function roundUpTo2Decimals(value: number | null | undefined): number | n
   }
   return Math.ceil(n * 100 - Number.EPSILON) / 100;
 }
+
+export type Schedule = {
+  id: string;
+  loanId: string;
+  start: string;
+  end: string;
+  status: string;
+  expectedPayment: string;
+  expectedBalance: string;
+  expectedClosingBalance: string;
+  actualPayment: string | null;
+  actualClosingBalance?: string | null;
+  openingBalance: string;
+  isExecuted: boolean;
+  executedAt: string | null;
+};
+
+export function calculateOverdueAmount(schedule: Schedule[], actualClosingBalance: number): number {
+  const executedSchedules = schedule
+    .filter((item) => item.status === "Open" && Number(item.openingBalance) !== 0)
+    .sort((b, a) => new Date(b.end).getTime() - new Date(a.end).getTime());
+
+  console.log("EXECUTED SCHEDULES", executedSchedules);
+  if (executedSchedules.length === 0) {
+    return 0;
+  }
+
+  return Math.max(0, actualClosingBalance - Number(executedSchedules[0].openingBalance));
+}
