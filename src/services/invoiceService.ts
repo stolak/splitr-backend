@@ -601,6 +601,55 @@ export class InvoiceService {
     }
   }
 
+  async getBuyerRefundInvoices(buyerId: string) {
+    try {
+      const invoices = await prisma.invoice.findMany({
+        where: {
+          buyerId,
+          returnStatus: {
+            in: [
+              LoanReturnStatus.Pending,
+              LoanReturnStatus.Approved,
+              LoanReturnStatus.Rejected,
+              LoanReturnStatus.Refunded,
+            ],
+          },
+        },
+        include: {
+          items: true,
+          category: {
+            select: invoiceCategorySelect,
+          },
+          merchant: {
+            select: {
+              id: true,
+              splitrId: true,
+              businessName: true,
+              businessEmail: true,
+            },
+          },
+          loan: {
+            select: {
+              id: true,
+              downPaymentAmount: true,
+              loanAmount: true,
+              loanTenure: true,
+              monthlyRepayment: true,
+            },
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      return { success: true, data: invoices };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Failed to fetch refund invoices",
+      };
+    }
+  }
+
   /**
    * Get invoices by buyer ID
    */

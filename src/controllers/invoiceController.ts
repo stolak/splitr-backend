@@ -1181,6 +1181,59 @@ export class InvoiceController {
   }
 
   /**
+   * @swagger
+   * /api/v1/invoices/buyer/refunds:
+   *   get:
+   *     summary: List invoices impacted by a return or refund for a buyer
+   *     description: Returns invoices whose returnStatus is Pending, Approved, Rejected, or Refunded. Query buyerId takes priority over the authenticated buyer.
+   *     tags: [Invoice]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: buyerId
+   *         schema:
+   *           type: string
+   *         description: Buyer ID. When omitted, the authenticated buyer is used.
+   *     responses:
+   *       200:
+   *         description: Refund-impacted invoices
+   *       400:
+   *         description: Buyer ID missing
+   *       401:
+   *         description: Unauthorized
+   */
+  async getBuyerRefundInvoices(req: Request, res: Response) {
+    try {
+      const buyerId = (req.query.buyerId as string) || req.user?.buyerId;
+
+      if (!buyerId) {
+        return res.status(400).json({
+          success: false,
+          message: "buyerId is required in the query or on the authenticated user",
+        });
+      }
+
+      const result = await invoiceService.getBuyerRefundInvoices(buyerId);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message,
+        });
+      }
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error("Error fetching buyer refund invoices:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch buyer refund invoices",
+      });
+    }
+  }
+
+  /**
    * Approve invoice and create loan for authenticated buyer
    */
   async approveAndCreateLoan(req: Request, res: Response) {

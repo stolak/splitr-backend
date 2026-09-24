@@ -19,6 +19,9 @@ router.get('/merchant/:merchantId', invoiceController.getByMerchantId);
 // Get merchant invoice statistics
 router.get('/merchant/:merchantId/stats', invoiceController.getMerchantStats);
 
+// Get buyer invoices impacted by a return or refund
+router.get('/buyer/refunds', authenticateJWT, invoiceController.getBuyerRefundInvoices);
+
 // Get buyer invoices
 router.get('/buyer/:buyerId', invoiceController.getByBuyerId);
 
