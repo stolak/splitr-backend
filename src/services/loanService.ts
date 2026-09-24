@@ -693,6 +693,12 @@ export class LoanService {
       const overallBalance = getLoanBalance(
         loan.loanTransactions as unknown as GetLoanBalanceInput[]
       );
+      const liquidatingBalance = getLoanLiquidatingBalance(
+        loan.loanTransactions as unknown as GetLoanBalanceInput[],
+        principalBalance,
+        Number(loan.loanInterestRate),
+        loan.loanInstallmentType
+      );
       const amountDue = getAmountDue(loan);
       return {
         success: true,
@@ -704,6 +710,7 @@ export class LoanService {
           overallBalance,
           nextPaymentDate: loan.loanSchedules[0]?.end,
           nextPaymentAmount: loan.loanSchedules[0]?.expectedPayment,
+          liquidatingBalance,
           monthCompleted: countClosedSchedules(
             loan.loanSchedules as unknown as LoanScheduleRecord[]
           ),
@@ -2575,9 +2582,7 @@ export class LoanService {
         const principalRepayment = Number(loanData.principalBalance);
         const interestRepayment = Number(loanData.interestBalance);
         const penaltyRepayment = Number(loanData.penaltyBalance);
-        console.log("PRINCIPAL REPAYMENT", principalRepayment);
-        console.log("INTEREST REPAYMENT", interestRepayment);
-        console.log("PENALTY REPAYMENT", penaltyRepayment);
+
         const scheduleId = loanData.loanSchedules.filter(
           (schedule) => schedule.status === LoanScheduleStatus.Open
         )[0]?.id;
@@ -2673,13 +2678,8 @@ export class LoanService {
           return { success: false, error: "Stripe payment intent is not succeeded" };
         }
         const paymentAmountCents = stripePaymentIntent.amount;
-        console.log("Log payment amount cents for now", paymentAmountCents);
+
         if (paymentAmountCents !== Math.round(Number(amount) * 100)) {
-          console.log(
-            "PAYMENT AMOUNT CENTS IS NOT EQUAL TO THE AMOUNT",
-            paymentAmountCents,
-            amount
-          );
           return { success: false, error: "Payment amount is not equal to the amount" };
         }
       }
@@ -2697,18 +2697,10 @@ export class LoanService {
           console.log("AMOUNT IS GREATER THAN BALANCE", amount, balance);
           return { success: false, error: "Amount is greater than balance" };
         }
-        // if(loanData.overdueBalance > 0){
 
-        //   return { success: false, error: "Loan is not fully paid" };
-        // }
         if (paymentType === PaymentType.full) {
           const liquidatingBalanceCents = Math.round(Number(loan.data.liquidatingBalance) * 100);
           if (amountCents + 30 < liquidatingBalanceCents) {
-            console.log(
-              "AMOUNT IS LESS THAN THE LIQUIDATING BALANCE",
-              amount,
-              loan.data.liquidatingBalance
-            );
             return { success: false, error: "Amount is less than the liquidating balance" };
           }
           await directPayService.markValueSettled({

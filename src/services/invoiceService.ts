@@ -14,6 +14,7 @@ import {
   LoanInstallmentType,
   ProductType,
   PaymentProvider,
+  PaymentType,
 } from "@prisma/client";
 import { loanService } from "./loanService";
 import { LoanSettingService } from "./loanSettingService";
@@ -21,7 +22,7 @@ import { MerchantTransactionService } from "./merchantTransactionService";
 import { emailService } from "./emailService";
 import { RevenueService } from "./revenueService";
 import { invoiceMandateService } from "./invoiceMandateService";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { accountDetailsService } from "./accountDetailsService";
 import { directPayService } from "./directPayService";
 import prisma from "../utils/prisma";
@@ -135,6 +136,17 @@ const invoiceSelect = {
   categoryId: true,
   status: true,
   type: true,
+  returnStatus: true,
+  returnAmount: true,
+  finalClaimRefunAmount: true,
+  claimRefundDate: true,
+  returnReason: true,
+  returnNote: true,
+  returnReference: true,
+  returnInitiatedDate: true,
+  returnInitiatedBy: true,
+  returnApprovedBy: true,
+  returnApprovedDate: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -1079,8 +1091,10 @@ export class InvoiceService {
       if (input.returnInitiatedDate !== undefined) {
         updateData.returnInitiatedDate = new Date(input.returnInitiatedDate);
       }
-      if (input.returnInitiatedBy !== undefined) updateData.returnInitiatedBy = input.returnInitiatedBy;
-      if (input.returnApprovedBy !== undefined) updateData.returnApprovedBy = input.returnApprovedBy;
+      if (input.returnInitiatedBy !== undefined)
+        updateData.returnInitiatedBy = input.returnInitiatedBy;
+      if (input.returnApprovedBy !== undefined)
+        updateData.returnApprovedBy = input.returnApprovedBy;
       if (input.returnApprovedDate !== undefined) {
         updateData.returnApprovedDate = new Date(input.returnApprovedDate);
       }
@@ -1093,6 +1107,60 @@ export class InvoiceService {
       if (willReturn) {
         await loanService.penaltyEnforcement(new Date());
       }
+      if (input.returnStatus === LoanReturnStatus.Approved && input.returnAmount) {
+        const loan = await loanService.getLoanByInvoiceId(id);
+        if (loan.success && loan.data) {
+          const liquidatingBalance = loan.data.liquidatingBalance;
+          const reference = generateShortReferenceId();
+          if (liquidatingBalance > input.returnAmount) {
+            loanService.createLoanPayment({
+              loanId: loan.data.id,
+              credit: input.returnAmount,
+              debit: 0,
+              principal: 0,
+              interest: 0,
+              penalty: 0,
+              paymentType: PaymentType.credit,
+              transactionReference: reference,
+              remarks: `Partial repayment of loan`,
+            });
+            await loanService.chargePartialRepaymentInterestAndAllocate({
+              loanId: loan.data.id,
+              loanData: loan.data,
+              amount: input.returnAmount,
+              date: new Date(),
+              transactReference: reference,
+              description: `Partial repayment of loan  from invoice ${id} refund`,
+              paymentType: PaymentType.partial,
+            });
+            updateData.finalClaimRefunAmount = 0;
+            updateData.claimRefundDate = new Date();
+          } else {
+            updateData.finalClaimRefunAmount = input.returnAmount - liquidatingBalance;
+            updateData.claimRefundDate = new Date();
+            loanService.createLoanPayment({
+              loanId: loan.data.id,
+              credit: liquidatingBalance,
+              debit: 0,
+              principal: 0,
+              interest: 0,
+              penalty: 0,
+              paymentType: PaymentType.credit,
+              transactionReference: reference,
+              remarks: `Full repayment of loan`,
+            });
+            await loanService.chargePartialRepaymentInterestAndAllocate({
+              loanId: loan.data.id,
+              loanData: loan.data,
+              amount: liquidatingBalance,
+              date: new Date(),
+              transactReference: reference,
+              description: "Full repayment of loan from invoice ${id} refund",
+              paymentType: PaymentType.full,
+            });
+          }
+        }
+      }
 
       const invoice = await prisma.invoice.update({
         where: { id },
@@ -1103,6 +1171,8 @@ export class InvoiceService {
           status: true,
           returnStatus: true,
           returnAmount: true,
+          finalClaimRefunAmount: true,
+          claimRefundDate: true,
           returnReason: true,
           returnNote: true,
           returnReference: true,

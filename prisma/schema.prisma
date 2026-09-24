@@ -853,15 +853,17 @@ model Invoice {
   updatedAt            DateTime              @updatedAt
   revenues             Revenue[]
 
-  returnStatus        LoanReturnStatus? @default(Active)
-  returnAmount        Decimal?
-  returnReason        String?
-  returnNote          String?
-  returnReference     String?
-  returnInitiatedDate DateTime?
-  returnInitiatedBy   String?
-  returnApprovedBy    String?
-  returnApprovedDate  DateTime?
+  returnStatus          LoanReturnStatus? @default(Active)
+  returnAmount          Decimal?
+  finalClaimRefunAmount Decimal?
+  claimRefundDate       DateTime?
+  returnReason          String?
+  returnNote            String?
+  returnReference       String?
+  returnInitiatedDate   DateTime?
+  returnInitiatedBy     String?
+  returnApprovedBy      String?
+  returnApprovedDate    DateTime?
 
   @@map("invoice")
 }

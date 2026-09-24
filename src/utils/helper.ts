@@ -162,7 +162,6 @@ export function calculateOverdueAmount(schedule: Schedule[], actualClosingBalanc
     .filter((item) => item.status === "Open" && Number(item.openingBalance) !== 0)
     .sort((b, a) => new Date(b.end).getTime() - new Date(a.end).getTime());
 
-  console.log("EXECUTED SCHEDULES", executedSchedules);
   if (executedSchedules.length === 0) {
     return 0;
   }
