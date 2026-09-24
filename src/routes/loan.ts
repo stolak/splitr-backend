@@ -380,6 +380,72 @@ router.post('/next-schedule', loanController.nextSchedule);
 
 /**
  * @swagger
+ * /api/v1/loans/calculate-schedule:
+ *   post:
+ *     summary: Calculate a full loan repayment schedule
+ *     tags: [Loan]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - monthlyRepay
+ *               - principalBalance
+ *               - interestRate
+ *               - installmentType
+ *             properties:
+ *               monthlyRepay:
+ *                 type: number
+ *                 description: Scheduled repayment amount
+ *                 example: 8500
+ *               principalBalance:
+ *                 type: number
+ *                 description: Opening principal balance
+ *                 example: 100000
+ *               interestRate:
+ *                 type: number
+ *                 description: Interest rate as a percentage (e.g. 7.5 for 7.5%)
+ *                 example: 7.5
+ *               installmentType:
+ *                 type: string
+ *                 enum: [Weekly, BiWeekly, Monthly, BiMonthly, Quarterly, BiQuarterly, HalfYearly, BiHalfYearly, Yearly, BiYearly, OneTime]
+ *                 description: Monthly uses interest/12; other types use a flat rate on the opening balance
+ *                 example: Monthly
+ *     responses:
+ *       200:
+ *         description: Schedule calculated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       month:
+ *                         type: number
+ *                       openingBalance:
+ *                         type: number
+ *                       closingBalance:
+ *                         type: number
+ *                       amountPay:
+ *                         type: number
+ *       400:
+ *         description: Missing or invalid inputs
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/calculate-schedule', loanController.calculateSchedule);
+
+/**
+ * @swagger
  * /api/v1/loans/counts/by-date-range:
  *   get:
  *     summary: Get loans created within a date range

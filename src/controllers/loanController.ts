@@ -1,10 +1,6 @@
 import { Request, Response } from "express";
-import {
-  loanService,
-  CreateLoanInput,
-  UpdateLoanInput,
-} from "../services/loanService";
-import { LoanStatus, LoanType } from "@prisma/client";
+import { loanService, CreateLoanInput, UpdateLoanInput } from "../services/loanService";
+import { LoanInstallmentType, LoanStatus, LoanType } from "@prisma/client";
 
 export class LoanController {
   /**
@@ -723,8 +719,7 @@ export class LoanController {
 
       res.status(200).json({
         success: true,
-        message:
-          "Loan repayment processed successfully with Mono mandate debit",
+        message: "Loan repayment processed successfully with Mono mandate debit",
         data: {
           loanId: id,
           amountDebited: result.data,
@@ -758,8 +753,7 @@ export class LoanController {
       if (!amount || amount <= 0) {
         return res.status(400).json({
           success: false,
-          message:
-            "Valid repayment amount is required and must be greater than 0",
+          message: "Valid repayment amount is required and must be greater than 0",
         });
       }
 
@@ -808,8 +802,7 @@ export class LoanController {
       if (!amount || amount <= 0) {
         return res.status(400).json({
           success: false,
-          message:
-            "Valid repayment amount is required and must be greater than 0",
+          message: "Valid repayment amount is required and must be greater than 0",
         });
       }
 
@@ -863,10 +856,7 @@ export class LoanController {
         });
       }
 
-      const result = await loanService.validateLoanRepayment(
-        referenceId,
-        paymentType || "full"
-      );
+      const result = await loanService.validateLoanRepayment(referenceId, paymentType || "full");
 
       if (!result || !result.success) {
         return res.status(400).json({
@@ -894,7 +884,7 @@ export class LoanController {
    */
   async nextSchedule(req: Request, res: Response) {
     try {
-      const { rate, openingBalance, monthlyRepayment } = req.body ?? {};
+      const { rate, openingBalance, monthlyRepayment, installmentType } = req.body ?? {};
 
       if (rate === undefined || openingBalance === undefined || monthlyRepayment === undefined) {
         return res.status(400).json({
@@ -921,7 +911,8 @@ export class LoanController {
       const data = loanService.nextSchedule(
         parsedRate,
         parsedOpeningBalance,
-        parsedMonthlyRepayment
+        parsedMonthlyRepayment,
+        installmentType as LoanInstallmentType
       );
 
       return res.status(200).json({
@@ -933,6 +924,67 @@ export class LoanController {
       return res.status(500).json({
         success: false,
         message: error.message || "Internal server error",
+      });
+    }
+  }
+
+  /**
+   * Calculate the full repayment schedule from repayment, principal, rate, and installment type
+   */
+  async calculateSchedule(req: Request, res: Response) {
+    try {
+      const { monthlyRepay, principalBalance, interestRate, installmentType } = req.body ?? {};
+
+      if (
+        monthlyRepay === undefined ||
+        principalBalance === undefined ||
+        interestRate === undefined ||
+        !installmentType
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "monthlyRepay, principalBalance, interestRate, and installmentType are required",
+        });
+      }
+
+      if (!Object.values(LoanInstallmentType).includes(installmentType)) {
+        return res.status(400).json({
+          success: false,
+          message: `installmentType must be one of: ${Object.values(LoanInstallmentType).join(", ")}`,
+        });
+      }
+
+      const parsedMonthlyRepay = Number(monthlyRepay);
+      const parsedPrincipalBalance = Number(principalBalance);
+      const parsedInterestRate = Number(interestRate);
+
+      if (
+        !Number.isFinite(parsedMonthlyRepay) ||
+        !Number.isFinite(parsedPrincipalBalance) ||
+        !Number.isFinite(parsedInterestRate)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "monthlyRepay, principalBalance, and interestRate must be valid numbers",
+        });
+      }
+
+      const data = loanService.calculateSchedule(
+        parsedMonthlyRepay,
+        parsedPrincipalBalance,
+        parsedInterestRate,
+        installmentType
+      );
+
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      console.error("Error calculating schedule:", error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Failed to calculate schedule",
       });
     }
   }

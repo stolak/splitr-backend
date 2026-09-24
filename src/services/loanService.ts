@@ -388,7 +388,6 @@ export class LoanService {
             expectedBalanceCursor,
             Number(input.monthlyRepayment),
             cycleType
-
           );
 
           this.createLoanSchedule({
@@ -2546,13 +2545,23 @@ export class LoanService {
               },
             });
             // const interest = balance * INTEREST_RATE * 0.01;
+            let interest = 0;
+            // if (installmentType === LoanInstallmentType.Monthly) {
             const nextSchedule = this.nextSchedule(
               Number(loan.data?.loanInterestRate),
               balance,
               Number(loan.data?.monthlyRepayment),
               installmentType
             );
-            const interest = nextSchedule.interest;
+            interest = nextSchedule.interest;
+            // } else {
+            //   interest = roundUpTo2Decimals(
+            //     Math.min(Number(loan.data?.monthlyRepayment), balance) *
+            //       Number(loan.data?.loanInterestRate) *
+            //       0.01
+            //   );
+            // }
+
             await this.createLoanTransaction({
               loanId: loan.data.id,
               scheduleId: loanInterestSchedule.id,
@@ -3131,11 +3140,23 @@ export class LoanService {
     };
   }
 
-  nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number, installmentType: LoanInstallmentType) {
-    const interest =
-      installmentType === LoanInstallmentType.Monthly
-        ? roundUpTo2Decimals((openingBalance * rate * 0.01) / 12)
-        : roundUpTo2Decimals((openingBalance * rate * 0.01) ); ;
+  nextSchedule(
+    rate: number,
+    openingBalance: number,
+    monthlyRepayment: number,
+    installmentType: LoanInstallmentType
+  ) {
+    let interest = 0;
+    if (installmentType === LoanInstallmentType.Monthly) {
+      interest = roundUpTo2Decimals((openingBalance * rate * 0.01) / 12);
+    } else {
+      const flatRateInterestCalculation = this.flatRateInterestCalculation(rate, monthlyRepayment);
+      if (flatRateInterestCalculation.principal > openingBalance) {
+        interest = roundUpTo2Decimals(openingBalance * rate * 0.01);
+      } else {
+        interest = flatRateInterestCalculation.interest;
+      }
+    }
     const calculatedPrincipal = roundUpTo2Decimals(monthlyRepayment - interest);
     const principal = roundUpTo2Decimals(Math.min(calculatedPrincipal, openingBalance));
     let closingBalance = roundUpTo2Decimals(openingBalance - principal);
@@ -3654,7 +3675,6 @@ export class LoanService {
 
     return { success: false, error: "Failed to validate loan repayment" };
   }
-
   calculateSchedule(
     monthlyRepay: number,
     principalBalance: number,
@@ -3688,7 +3708,8 @@ export class LoanService {
     let balance = principalBalance < 0 ? 0 : principalBalance;
     let month = 1;
     const maxMonths = 12;
-
+    let amountPay = 0;
+    console.log("BALANCE3333333333333:", balance);
     while (balance > 0) {
       if (month > maxMonths) {
         throw new Error(
@@ -3696,30 +3717,54 @@ export class LoanService {
         );
       }
 
-      const openingBalance = roundUpTo2Decimals(balance);
-      const interest =
-        installmentType === LoanInstallmentType.Monthly
-          ? roundUpTo2Decimals((openingBalance * (interestRate / 100)) / 12)
-          : roundUpTo2Decimals((openingBalance * interestRate) / 100);
-      const amountPay = roundUpTo2Decimals(Math.min(monthlyRepay, openingBalance + interest));
-      console.log("AMOUNT PAY", {
-        amountPay,
-        interest,
-        openingBalance,
-        monthlyRepay,
-        installmentType,
-      });
-      const principalPaid = roundUpTo2Decimals(amountPay - interest);
-      console.log("PRINCIPAL PAID", principalPaid);
-      let closingBalance = Math.max(0, roundUpTo2Decimals(openingBalance - principalPaid) ?? 0);
-      console.log("CLOSING BALANCE", closingBalance);
+      let openingBalance = roundUpTo2Decimals(balance);
+      let closingBalance = 0;
+      let principalPaid = 0;
+      if (installmentType === LoanInstallmentType.Monthly) {
+        const interest = roundUpTo2Decimals((openingBalance * (interestRate / 100)) / 12);
+
+        amountPay = roundUpTo2Decimals(Math.min(monthlyRepay, openingBalance + interest));
+        console.log("AMOUNT PAY", {
+          amountPay,
+          interest,
+          openingBalance,
+          monthlyRepay,
+          installmentType,
+        });
+        principalPaid = roundUpTo2Decimals(amountPay - interest);
+        console.log("PRINCIPAL PAID", principalPaid);
+        closingBalance = Math.max(0, roundUpTo2Decimals(openingBalance - principalPaid) ?? 0);
+        console.log("CLOSING BALANCE", closingBalance);
+      } else {
+        const { principal } = this.flatRateInterestCalculation(interestRate, monthlyRepay);
+        let principalPaid = Math.min(principal, balance);
+
+        const openingBalance = roundUpTo2Decimals(balance);
+        const interest = principalPaid * interestRate * 0.01;
+
+        amountPay = principalPaid + interest;
+        console.log("AMOUNT PAYdddd", {
+          amountPay,
+          interest,
+          openingBalance,
+          monthlyRepay,
+          installmentType,
+        });
+        principalPaid = roundUpTo2Decimals(amountPay - interest);
+        console.log("PRINCIPAL PAID", principalPaid);
+        closingBalance = openingBalance - principalPaid;
+        console.log("CLOSING BALANCE", closingBalance);
+      }
       if (Math.abs(closingBalance) <= 0.3) {
+        console.log("CLOSING BALANCE IS TOO LOW", closingBalance);
         closingBalance = 0;
       }
 
-      if (principalPaid <= 0) {
-        throw new Error("monthlyRepay is too low to reduce principal after interest is charged");
-      }
+      ///
+      // if (principalPaid <= 0) {
+      //   console.log("PRINCIPAL PAID IS TOO LOW", principalPaid);
+      //   throw new Error("monthlyRepay is too low to reduce principal after interest is charged");
+      // }
 
       schedule.push({
         month,
