@@ -30,6 +30,7 @@ import { paystackMerchantTransferRecipientService } from "./paystackMerchantTran
 import { paystackTransferService } from "./paystackTransferService";
 import { paystackService } from "./paystackService";
 import { scoreService } from "./scoringService";
+import { roundUpTo2Decimals } from "../utils/helper";
 export const FIRST_INSTALLMENT_NOW = process.env.FIRST_INSTALLMENT_NOW === "true";
 const loanSettingService = new LoanSettingService();
 const merchantTransactionService = new MerchantTransactionService();
@@ -104,6 +105,18 @@ export interface UpdateInvoiceInput {
   returnApprovedBy?: string;
   returnApprovedDate?: Date | string;
   returnInitiatedBy?: string;
+}
+
+export interface UpdateInvoiceReturnInput {
+  returnStatus?: LoanReturnStatus;
+  returnAmount?: number;
+  returnReason?: string;
+  returnNote?: string;
+  returnReference?: string;
+  returnInitiatedDate?: Date | string;
+  returnInitiatedBy?: string;
+  returnApprovedBy?: string;
+  returnApprovedDate?: Date | string;
 }
 
 // ==================== SELECT OBJECTS ====================
@@ -991,6 +1004,75 @@ export class InvoiceService {
       return {
         success: false,
         message: error.message || "Failed to update invoice",
+      };
+    }
+  }
+
+  async updateInvoiceReturn(id: string, input: UpdateInvoiceReturnInput) {
+    const willReturn = input.returnStatus === LoanReturnStatus.Approved;
+    try {
+      const existingInvoice = await prisma.invoice.findUnique({
+        where: { id },
+      });
+
+      if (!existingInvoice) {
+        throw new Error("Invoice not found");
+      }
+
+      const updateData: any = {};
+      if (input.returnStatus !== undefined) updateData.returnStatus = input.returnStatus;
+      if (input.returnAmount !== undefined) {
+        updateData.returnAmount = roundUpTo2Decimals(input.returnAmount);
+      }
+      if (input.returnReason !== undefined) updateData.returnReason = input.returnReason;
+      if (input.returnNote !== undefined) updateData.returnNote = input.returnNote;
+      if (input.returnReference !== undefined) updateData.returnReference = input.returnReference;
+      if (input.returnInitiatedDate !== undefined) {
+        updateData.returnInitiatedDate = new Date(input.returnInitiatedDate);
+      }
+      if (input.returnInitiatedBy !== undefined) updateData.returnInitiatedBy = input.returnInitiatedBy;
+      if (input.returnApprovedBy !== undefined) updateData.returnApprovedBy = input.returnApprovedBy;
+      if (input.returnApprovedDate !== undefined) {
+        updateData.returnApprovedDate = new Date(input.returnApprovedDate);
+      }
+      if (willReturn) updateData.status = InvoiceStatus.Cancelled;
+
+      if (Object.keys(updateData).length === 0) {
+        throw new Error("No return fields provided");
+      }
+
+      if (willReturn) {
+        await loanService.penaltyEnforcement(new Date());
+      }
+
+      const invoice = await prisma.invoice.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          splitrId: true,
+          status: true,
+          returnStatus: true,
+          returnAmount: true,
+          returnReason: true,
+          returnNote: true,
+          returnReference: true,
+          returnInitiatedDate: true,
+          returnInitiatedBy: true,
+          returnApprovedBy: true,
+          returnApprovedDate: true,
+        },
+      });
+
+      return {
+        success: true,
+        message: "Invoice return updated successfully",
+        data: invoice,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Failed to update invoice return",
       };
     }
   }

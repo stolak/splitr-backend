@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { invoiceService, CreateInvoiceInput, UpdateInvoiceInput } from "../services/invoiceService";
+import { invoiceService, CreateInvoiceInput, UpdateInvoiceInput, UpdateInvoiceReturnInput } from "../services/invoiceService";
 
 import {
   InvoiceStatus,
@@ -973,6 +973,100 @@ export class InvoiceController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to update invoice",
+      });
+    }
+  }
+
+  /**
+   * @swagger
+   * /api/v1/invoices/{id}/return:
+   *   patch:
+   *     summary: Update invoice return and refund details
+   *     tags: [Invoice]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               returnStatus:
+   *                 type: string
+   *                 enum: [Active, Approved, Rejected, Refunded, Pending]
+   *                 description: Pending stamps initiated date and user. Approved stamps approved date and user, and cancels the invoice.
+   *               returnAmount:
+   *                 type: number
+   *               returnReason:
+   *                 type: string
+   *               returnNote:
+   *                 type: string
+   *               returnReference:
+   *                 type: string
+   *               returnInitiatedDate:
+   *                 type: string
+   *                 format: date-time
+   *               returnInitiatedBy:
+   *                 type: string
+   *               returnApprovedBy:
+   *                 type: string
+   *               returnApprovedDate:
+   *                 type: string
+   *                 format: date-time
+   *     responses:
+   *       200:
+   *         description: Invoice return updated
+   *       400:
+   *         description: Invalid input
+   *       401:
+   *         description: Unauthorized
+   */
+  async updateReturn(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const input: UpdateInvoiceReturnInput = req.body;
+
+      if (
+        input.returnStatus !== undefined &&
+        !Object.values(LoanReturnStatus).includes(input.returnStatus)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `returnStatus must be one of: ${Object.values(LoanReturnStatus).join(", ")}`,
+        });
+      }
+
+      if (input.returnStatus === LoanReturnStatus.Pending) {
+        input.returnInitiatedDate = input.returnInitiatedDate ?? new Date();
+        input.returnInitiatedBy = input.returnInitiatedBy ?? req.user?.id;
+      }
+      if (input.returnStatus === LoanReturnStatus.Approved) {
+        input.returnApprovedDate = input.returnApprovedDate ?? new Date();
+        input.returnApprovedBy = input.returnApprovedBy ?? req.user?.id;
+      }
+
+      const result = await invoiceService.updateInvoiceReturn(id, input);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message,
+        });
+      }
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error("Error updating invoice return:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update invoice return",
       });
     }
   }

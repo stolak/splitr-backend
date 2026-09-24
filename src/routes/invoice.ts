@@ -92,6 +92,9 @@ router.post(
   invoiceController.validateMandateDownPaymentAndCreateLoan,
 );
 
+// Update invoice return / refund details
+router.patch('/:id/return', authenticateJWT, invoiceController.updateReturn);
+
 // Update invoice status
 router.patch('/:id/status', invoiceController.updateStatus);
 
