@@ -59,6 +59,7 @@ import {
   merchantInstantPayoutSettingsRoutes,
   merchantDefaultFeesRateRoutes,
 } from "./merchantPricing";
+import taxMatrixRoutes from "./taxMatrix";
 import { Router } from "express";
 
 const router = Router();
@@ -121,6 +122,7 @@ router.use("/t-cut-offs", tCutOffRoutes);
 router.use("/rolling-reserves", rollingReserveRoutes);
 router.use("/merchant-instant-payout-settings", merchantInstantPayoutSettingsRoutes);
 router.use("/merchant-default-fees-rates", merchantDefaultFeesRateRoutes);
+router.use("/tax-matrices", taxMatrixRoutes);
 
 /**
  * @swagger

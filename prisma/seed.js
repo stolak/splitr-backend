@@ -1339,6 +1339,84 @@ async function main() {
 
     console.log("✅ Invoice categories seeded successfully");
 
+    console.log("\n🍁 Seeding tax matrix...");
+    const taxMatrices = [
+      { provinceCode: "AB", province: "Alberta", gstRate: 5, psrRate: 0 },
+      { provinceCode: "BC", province: "British Columbia", gstRate: 5, psrRate: 7 },
+      { provinceCode: "MB", province: "Manitoba", gstRate: 5, psrRate: 7 },
+      { provinceCode: "NB", province: "New Brunswick", gstRate: 15, psrRate: 0 },
+      { provinceCode: "NL", province: "Newfoundland and Labrador", gstRate: 15, psrRate: 0 },
+      { provinceCode: "NT", province: "Northwest Territories", gstRate: 5, psrRate: 0 },
+      { provinceCode: "NS", province: "Nova Scotia", gstRate: 14, psrRate: 0 },
+      { provinceCode: "NU", province: "Nunavut", gstRate: 5, psrRate: 0 },
+      { provinceCode: "ON", province: "Ontario", gstRate: 13, psrRate: 0 },
+      { provinceCode: "PE", province: "Prince Edward Island", gstRate: 15, psrRate: 0 },
+      { provinceCode: "QC", province: "Quebec", gstRate: 5, psrRate: 9.98 },
+      { provinceCode: "SK", province: "Saskatchewan", gstRate: 5, psrRate: 6 },
+      { provinceCode: "YT", province: "Yukon", gstRate: 5, psrRate: 0 },
+    ];
+
+    for (const row of taxMatrices) {
+      await prisma.taxMatrix.upsert({
+        where: { provinceCode: row.provinceCode },
+        update: {
+          province: row.province,
+          gstRate: row.gstRate,
+          psrRate: row.psrRate,
+        },
+        create: row,
+      });
+    }
+
+    console.log(`✅ ${taxMatrices.length} tax matrix rows seeded successfully`);
+
+    console.log("\n🏷️ Seeding merchant tiers...");
+    const merchantTiers = [
+      {
+        label: "A",
+        description: "T+1 business day",
+        cutOff: { label: "T+1", dayPlus: 1, rollingMaturityDay: 3 },
+      },
+      {
+        label: "B",
+        description: "T+1 business day",
+        cutOff: { label: "T+1", dayPlus: 1, rollingMaturityDay: 7 },
+      },
+      {
+        label: "C",
+        description: "T+2 business days",
+        cutOff: { label: "T+2", dayPlus: 2, rollingMaturityDay: 14 },
+      },
+      {
+        label: "D",
+        description: "T+3 to T+5 business days",
+        cutOff: { label: "T+3 to T+5", dayPlus: 3, rollingMaturityDay: 30 },
+      },
+    ];
+
+    for (const row of merchantTiers) {
+      const existing = await prisma.merchantTier.findFirst({
+        where: { label: row.label },
+      });
+
+      const tier = existing
+        ? await prisma.merchantTier.update({
+            where: { id: existing.id },
+            data: { description: row.description },
+          })
+        : await prisma.merchantTier.create({
+            data: { label: row.label, description: row.description },
+          });
+
+      await prisma.tCutOff.upsert({
+        where: { merchantTierId: tier.id },
+        update: row.cutOff,
+        create: { merchantTierId: tier.id, ...row.cutOff },
+      });
+    }
+
+    console.log(`✅ ${merchantTiers.length} merchant tiers seeded successfully`);
+
     console.log("\n🎉 Database seeding completed successfully!");
     console.log("\n📋 Sample Data Created:");
     console.log("👥 Users:");

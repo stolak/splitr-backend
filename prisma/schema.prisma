@@ -1352,20 +1352,20 @@ enum ProductType {
 
 /// Configurable financing products (e.g. Pay in 4, Monthly Flex) with their tenure, limits and rate.
 model ProductConfiguration {
-  id             String      @id @default(uuid())
-  productType    ProductType @default(MONTHLY_FLEX)
-  code           String      @unique @db.VarChar(50)
-  productName    String      @db.VarChar(150)
-  tenure         Int
-  minimumFinance Decimal     @db.Decimal(15, 2)
-  maximumFinance Decimal     @db.Decimal(15, 2)
-  rate           Decimal     @db.Decimal(10, 4) // rate as a percentage, e.g. 2.5 for 2.5%
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  loans                    Loan[]
-  merchantFeesRates        MerchantFeesRate[]
-  rollingReserves          RollingReserve[]
-  merchantDefaultFeesRate  MerchantDefaultFeesRate?
+  id                      String                   @id @default(uuid())
+  productType             ProductType              @default(MONTHLY_FLEX)
+  code                    String                   @unique @db.VarChar(50)
+  productName             String                   @db.VarChar(150)
+  tenure                  Int
+  minimumFinance          Decimal                  @db.Decimal(15, 2)
+  maximumFinance          Decimal                  @db.Decimal(15, 2)
+  rate                    Decimal                  @db.Decimal(10, 4) // rate as a percentage, e.g. 2.5 for 2.5%
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  loans                   Loan[]
+  merchantFeesRates       MerchantFeesRate[]
+  rollingReserves         RollingReserve[]
+  merchantDefaultFeesRate MerchantDefaultFeesRate?
 
   @@index([code])
   @@map("product_configuration")
@@ -1373,9 +1373,10 @@ model ProductConfiguration {
 
 model MerchantFeesRate {
   id                     String               @id @default(uuid())
-  merchantId             String
+  // Lengths keep the composite unique index within MySQL's 1000-byte utf8mb4 limit.
+  merchantId             String               @db.VarChar(36)
   merchant               Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  productConfigurationId String
+  productConfigurationId String               @db.VarChar(36)
   productConfiguration   ProductConfiguration @relation(fields: [productConfigurationId], references: [id], onDelete: Cascade)
   rate                   Decimal              @db.Decimal(10, 4)
   createdAt              DateTime             @default(now())
@@ -1389,8 +1390,7 @@ model MerchantTier {
   id                    String                         @id @default(uuid())
   label                 String
   description           String?
-  rollingMaturityDay    Int
-  tCutOffs              TCutOff[]
+  tCutOff               TCutOff?
   rollingReserves       RollingReserve[]
   instantPayoutSettings MerchantInstantPayoutSettings?
   createdAt             DateTime                       @default(now())
@@ -1400,22 +1400,24 @@ model MerchantTier {
 }
 
 model TCutOff {
-  id             String       @id @default(uuid())
-  merchantTierId String
-  merchantTier   MerchantTier @relation(fields: [merchantTierId], references: [id], onDelete: Cascade)
-  label          String
-  dayPlus        Int
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                 String       @id @default(uuid())
+  merchantTierId     String       @unique
+  merchantTier       MerchantTier @relation(fields: [merchantTierId], references: [id], onDelete: Cascade)
+  label              String
+  dayPlus            Int
+  rollingMaturityDay Int
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   @@map("t_cut_off")
 }
 
 model RollingReserve {
   id                     String               @id @default(uuid())
-  merchantTierId         String
+  // Lengths keep the composite unique index within MySQL's 1000-byte utf8mb4 limit.
+  merchantTierId         String               @db.VarChar(36)
   merchantTier           MerchantTier         @relation(fields: [merchantTierId], references: [id], onDelete: Cascade)
-  productConfigurationId String
+  productConfigurationId String               @db.VarChar(36)
   productConfiguration   ProductConfiguration @relation(fields: [productConfigurationId], references: [id], onDelete: Cascade)
   rate                   Decimal              @db.Decimal(10, 4)
   createdAt              DateTime             @default(now())
@@ -1448,4 +1450,16 @@ model MerchantDefaultFeesRate {
   updatedAt              DateTime             @updatedAt
 
   @@map("merchant_default_fees_rate")
+}
+
+model TaxMatrix {
+  id           String   @id @default(uuid())
+  provinceCode String   @unique @db.VarChar(10)
+  province     String
+  gstRate      Decimal  @db.Decimal(10, 4)
+  psrRate      Decimal  @db.Decimal(10, 4)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("tax_matrix")
 }

@@ -11,7 +11,7 @@ const productSelect = {
 const tierSelect = { id: true, label: true } as const;
 
 const tierInclude = {
-  tCutOffs: { orderBy: { dayPlus: "asc" as const } },
+  tCutOff: true,
   rollingReserves: {
     include: { productConfiguration: { select: productSelect } },
     orderBy: { createdAt: "desc" as const },
@@ -307,21 +307,15 @@ export class MerchantPricingService {
     return record ? mapTier(record) : null;
   }
 
-  async createTier(input: {
-    label?: unknown;
-    description?: unknown;
-    rollingMaturityDay?: unknown;
-  }) {
+  async createTier(input: { label?: unknown; description?: unknown }) {
     const label = requireText(input.label, "label");
     const description = optionalText(input.description, "description");
-    const rollingMaturityDay = requireInt(input.rollingMaturityDay, "rollingMaturityDay");
 
     const record = await write(() =>
       prisma.merchantTier.create({
         data: {
           label,
           description: description ?? null,
-          rollingMaturityDay,
         },
         include: tierInclude,
       })
@@ -329,10 +323,7 @@ export class MerchantPricingService {
     return mapTier(record);
   }
 
-  async updateTier(
-    id: string,
-    input: { label?: unknown; description?: unknown; rollingMaturityDay?: unknown }
-  ) {
+  async updateTier(id: string, input: { label?: unknown; description?: unknown }) {
     const existing = await prisma.merchantTier.findUnique({
       where: { id },
       select: { id: true },
@@ -341,9 +332,8 @@ export class MerchantPricingService {
 
     const label = input.label === undefined ? undefined : requireText(input.label, "label");
     const description = optionalText(input.description, "description");
-    const rollingMaturityDay = optionalInt(input.rollingMaturityDay, "rollingMaturityDay");
 
-    if (label === undefined && description === undefined && rollingMaturityDay === undefined) {
+    if (label === undefined && description === undefined) {
       throw new Error("At least one field is required");
     }
 
@@ -353,7 +343,6 @@ export class MerchantPricingService {
         data: {
           ...(label !== undefined && { label }),
           ...(description !== undefined && { description }),
-          ...(rollingMaturityDay !== undefined && { rollingMaturityDay }),
         },
         include: tierInclude,
       })
@@ -386,15 +375,36 @@ export class MerchantPricingService {
     });
   }
 
-  async createCutOff(input: { merchantTierId?: unknown; label?: unknown; dayPlus?: unknown }) {
+  async getCutOffByTier(merchantTierId: string) {
+    return prisma.tCutOff.findUnique({
+      where: { merchantTierId },
+      include: { merchantTier: { select: tierSelect } },
+    });
+  }
+
+  async createCutOff(input: {
+    merchantTierId?: unknown;
+    label?: unknown;
+    dayPlus?: unknown;
+    rollingMaturityDay?: unknown;
+  }) {
     const merchantTierId = requireText(input.merchantTierId, "merchantTierId");
     const label = requireText(input.label, "label");
     const dayPlus = requireInt(input.dayPlus, "dayPlus");
+    const rollingMaturityDay = requireInt(input.rollingMaturityDay, "rollingMaturityDay");
     await this.assertMerchantTier(merchantTierId);
+
+    const duplicate = await prisma.tCutOff.findUnique({
+      where: { merchantTierId },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new Error("A T cut off already exists for this merchant tier");
+    }
 
     return write(() =>
       prisma.tCutOff.create({
-        data: { merchantTierId, label, dayPlus },
+        data: { merchantTierId, label, dayPlus, rollingMaturityDay },
         include: { merchantTier: { select: tierSelect } },
       })
     );
@@ -402,7 +412,12 @@ export class MerchantPricingService {
 
   async updateCutOff(
     id: string,
-    input: { merchantTierId?: unknown; label?: unknown; dayPlus?: unknown }
+    input: {
+      merchantTierId?: unknown;
+      label?: unknown;
+      dayPlus?: unknown;
+      rollingMaturityDay?: unknown;
+    }
   ) {
     const existing = await prisma.tCutOff.findUnique({ where: { id } });
     if (!existing) throw new Error("T cut off not found");
@@ -413,13 +428,26 @@ export class MerchantPricingService {
         : requireText(input.merchantTierId, "merchantTierId");
     const label = input.label === undefined ? undefined : requireText(input.label, "label");
     const dayPlus = optionalInt(input.dayPlus, "dayPlus");
+    const rollingMaturityDay = optionalInt(input.rollingMaturityDay, "rollingMaturityDay");
 
-    if (merchantTierId === undefined && label === undefined && dayPlus === undefined) {
+    if (
+      merchantTierId === undefined &&
+      label === undefined &&
+      dayPlus === undefined &&
+      rollingMaturityDay === undefined
+    ) {
       throw new Error("At least one field is required");
     }
 
     if (merchantTierId && merchantTierId !== existing.merchantTierId) {
       await this.assertMerchantTier(merchantTierId);
+      const duplicate = await prisma.tCutOff.findUnique({
+        where: { merchantTierId },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new Error("A T cut off already exists for this merchant tier");
+      }
     }
 
     return write(() =>
@@ -429,6 +457,7 @@ export class MerchantPricingService {
           ...(merchantTierId !== undefined && { merchantTierId }),
           ...(label !== undefined && { label }),
           ...(dayPlus !== undefined && { dayPlus }),
+          ...(rollingMaturityDay !== undefined && { rollingMaturityDay }),
         },
         include: { merchantTier: { select: tierSelect } },
       })

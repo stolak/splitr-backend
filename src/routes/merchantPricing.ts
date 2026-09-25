@@ -186,7 +186,7 @@ merchantFeesRateRoutes.delete("/:id", auth, fees.deleteFeesRate.bind(fees));
  * /api/v1/merchant-tiers:
  *   get:
  *     summary: List merchant tiers
- *     description: Each tier includes its cut offs, rolling reserves, and instant payout settings.
+ *     description: Each tier includes its cut off, rolling reserves, and instant payout settings.
  *     tags: [MerchantTier]
  *     security:
  *       - bearerAuth: []
@@ -204,17 +204,15 @@ merchantFeesRateRoutes.delete("/:id", auth, fees.deleteFeesRate.bind(fees));
  *         application/json:
  *           schema:
  *             type: object
- *             required: [label, rollingMaturityDay]
+ *             required: [label]
  *             properties:
  *               label:
  *                 type: string
- *                 example: Gold
+ *                 example: A
  *               description:
  *                 type: string
  *                 nullable: true
- *               rollingMaturityDay:
- *                 type: integer
- *                 example: 30
+ *                 example: T+1 business day
  *     responses:
  *       201:
  *         description: Merchant tier created successfully
@@ -266,8 +264,6 @@ merchantTierRoutes.post("/", auth, fees.createTier.bind(fees));
  *               description:
  *                 type: string
  *                 nullable: true
- *               rollingMaturityDay:
- *                 type: integer
  *     responses:
  *       200:
  *         description: Merchant tier updated successfully
@@ -289,7 +285,7 @@ merchantTierRoutes.post("/", auth, fees.createTier.bind(fees));
  *         description: Merchant tier updated successfully
  *   delete:
  *     summary: Delete a merchant tier
- *     description: Also deletes the tier's cut offs, rolling reserves, and instant payout settings.
+ *     description: Also deletes the tier's cut off, rolling reserves, and instant payout settings.
  *     tags: [MerchantTier]
  *     security:
  *       - bearerAuth: []
@@ -328,6 +324,7 @@ merchantTierRoutes.delete("/:id", auth, fees.deleteTier.bind(fees));
  *         description: T cut offs retrieved successfully
  *   post:
  *     summary: Create a T cut off
+ *     description: One cut off is allowed per merchant tier.
  *     tags: [TCutOff]
  *     security:
  *       - bearerAuth: []
@@ -337,16 +334,19 @@ merchantTierRoutes.delete("/:id", auth, fees.deleteTier.bind(fees));
  *         application/json:
  *           schema:
  *             type: object
- *             required: [merchantTierId, label, dayPlus]
+ *             required: [merchantTierId, label, dayPlus, rollingMaturityDay]
  *             properties:
  *               merchantTierId:
  *                 type: string
  *               label:
  *                 type: string
- *                 example: T+2
+ *                 example: T+1
  *               dayPlus:
  *                 type: integer
- *                 example: 2
+ *                 example: 1
+ *               rollingMaturityDay:
+ *                 type: integer
+ *                 example: 3
  *     responses:
  *       201:
  *         description: T cut off created successfully
@@ -357,6 +357,28 @@ merchantTierRoutes.delete("/:id", auth, fees.deleteTier.bind(fees));
  */
 tCutOffRoutes.get("/", auth, fees.listCutOffs.bind(fees));
 tCutOffRoutes.post("/", auth, fees.createCutOff.bind(fees));
+
+/**
+ * @swagger
+ * /api/v1/t-cut-offs/tier/{merchantTierId}:
+ *   get:
+ *     summary: Get the T cut off for a merchant tier
+ *     tags: [TCutOff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantTierId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: T cut off retrieved successfully
+ *       404:
+ *         description: T cut off not found
+ */
+tCutOffRoutes.get("/tier/:merchantTierId", auth, fees.getCutOffByTier.bind(fees));
 
 /**
  * @swagger
@@ -400,6 +422,8 @@ tCutOffRoutes.post("/", auth, fees.createCutOff.bind(fees));
  *               label:
  *                 type: string
  *               dayPlus:
+ *                 type: integer
+ *               rollingMaturityDay:
  *                 type: integer
  *     responses:
  *       200:

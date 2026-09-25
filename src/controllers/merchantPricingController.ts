@@ -151,6 +151,18 @@ export class MerchantPricingController {
     }
   }
 
+  async getCutOffByTier(req: Request, res: Response) {
+    try {
+      const data = await merchantPricingService.getCutOffByTier(req.params.merchantTierId);
+      if (!data) {
+        return res.status(404).json({ success: false, message: "T cut off not found" });
+      }
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async createCutOff(req: Request, res: Response) {
     try {
       const data = await merchantPricingService.createCutOff(req.body ?? {});
