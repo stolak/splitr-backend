@@ -16,6 +16,10 @@ const tierInclude = {
     include: { productConfiguration: { select: productSelect } },
     orderBy: { createdAt: "desc" as const },
   },
+  merchantDefaultFeesRates: {
+    include: { productConfiguration: { select: productSelect } },
+    orderBy: { createdAt: "desc" as const },
+  },
   instantPayoutSettings: true,
 } satisfies Prisma.MerchantTierInclude;
 
@@ -116,6 +120,7 @@ function mapDefaultFees<T extends { rate: Prisma.Decimal }>(record: T) {
 
 function mapTier<T extends {
   rollingReserves?: Array<{ rate: Prisma.Decimal }>;
+  merchantDefaultFeesRates?: Array<{ rate: Prisma.Decimal }>;
   instantPayoutSettings?: {
     baseRate: Prisma.Decimal;
     surchargeRate: Prisma.Decimal;
@@ -125,6 +130,7 @@ function mapTier<T extends {
   return {
     ...record,
     rollingReserves: record.rollingReserves?.map((reserve) => mapReserve(reserve)),
+    merchantDefaultFeesRates: record.merchantDefaultFeesRates?.map((fee) => mapDefaultFees(fee)),
     instantPayoutSettings: record.instantPayoutSettings
       ? mapInstant(record.instantPayoutSettings)
       : record.instantPayoutSettings,
@@ -491,6 +497,38 @@ export class MerchantPricingService {
     return records.map((record) => mapReserve(record));
   }
 
+  async listReservesByTier() {
+    const tiers = await prisma.merchantTier.findMany({
+      orderBy: { label: "asc" },
+      include: {
+        rollingReserves: {
+          include: {
+            productConfiguration: {
+              select: { productName: true, productType: true, tenure: true },
+            },
+          },
+        },
+      },
+    });
+
+    return tiers.map((tier) => ({
+      tier: tier.label,
+      data: [...tier.rollingReserves]
+        .sort((left, right) => {
+          const typeOrder = left.productConfiguration.productType.localeCompare(
+            right.productConfiguration.productType
+          );
+          if (typeOrder !== 0) return typeOrder;
+          return left.productConfiguration.tenure - right.productConfiguration.tenure;
+        })
+        .map((reserve) => ({
+          id: reserve.id,
+          product: reserve.productConfiguration.productName,
+          rate: Number(reserve.rate),
+        })),
+    }));
+  }
+
   async getReserve(id: string) {
     const record = await prisma.rollingReserve.findUnique({
       where: { id },
@@ -743,51 +781,98 @@ export class MerchantPricingService {
     return { id };
   }
 
-  async listDefaultFeesRates(productConfigurationId?: string) {
+  async listDefaultFeesRates(filters: { merchantTierId?: string; productConfigurationId?: string }) {
     const records = await prisma.merchantDefaultFeesRate.findMany({
-      where: productConfigurationId ? { productConfigurationId } : undefined,
-      include: { productConfiguration: { select: productSelect } },
+      where: {
+        ...(filters.merchantTierId && { merchantTierId: filters.merchantTierId }),
+        ...(filters.productConfigurationId && {
+          productConfigurationId: filters.productConfigurationId,
+        }),
+      },
+      include: {
+        merchantTier: { select: tierSelect },
+        productConfiguration: { select: productSelect },
+      },
       orderBy: { createdAt: "desc" },
     });
     return records.map((record) => mapDefaultFees(record));
   }
 
+  async listDefaultFeesRatesByTier() {
+    const tiers = await prisma.merchantTier.findMany({
+      orderBy: { label: "asc" },
+      include: {
+        merchantDefaultFeesRates: {
+          include: {
+            productConfiguration: {
+              select: { productName: true, productType: true, tenure: true },
+            },
+          },
+        },
+      },
+    });
+
+    return tiers.map((tier) => ({
+      tier: tier.label,
+      data: [...tier.merchantDefaultFeesRates]
+        .sort((left, right) => {
+          const typeOrder = left.productConfiguration.productType.localeCompare(
+            right.productConfiguration.productType
+          );
+          if (typeOrder !== 0) return typeOrder;
+          return left.productConfiguration.tenure - right.productConfiguration.tenure;
+        })
+        .map((fee) => ({
+          id: fee.id,
+          product: fee.productConfiguration.productName,
+          rate: Number(fee.rate),
+        })),
+    }));
+  }
+
   async getDefaultFeesRate(id: string) {
     const record = await prisma.merchantDefaultFeesRate.findUnique({
       where: { id },
-      include: { productConfiguration: { select: productSelect } },
+      include: {
+        merchantTier: { select: tierSelect },
+        productConfiguration: { select: productSelect },
+      },
     });
     return record ? mapDefaultFees(record) : null;
   }
 
-  async getDefaultFeesRateByProduct(productConfigurationId: string) {
-    const record = await prisma.merchantDefaultFeesRate.findUnique({
-      where: { productConfigurationId },
-      include: { productConfiguration: { select: productSelect } },
-    });
-    return record ? mapDefaultFees(record) : null;
-  }
-
-  async createDefaultFeesRate(input: { productConfigurationId?: unknown; rate?: unknown }) {
+  async createDefaultFeesRate(input: {
+    merchantTierId?: unknown;
+    productConfigurationId?: unknown;
+    rate?: unknown;
+  }) {
+    const merchantTierId = requireText(input.merchantTierId, "merchantTierId");
     const productConfigurationId = requireText(
       input.productConfigurationId,
       "productConfigurationId"
     );
     const rate = requireNumber(input.rate, "rate");
+
+    await this.assertMerchantTier(merchantTierId);
     await this.assertProductConfiguration(productConfigurationId);
 
-    const duplicate = await prisma.merchantDefaultFeesRate.findUnique({
-      where: { productConfigurationId },
+    const duplicate = await prisma.merchantDefaultFeesRate.findFirst({
+      where: { merchantTierId, productConfigurationId },
       select: { id: true },
     });
     if (duplicate) {
-      throw new Error("A default fees rate already exists for this product configuration");
+      throw new Error(
+        "A default fees rate already exists for this merchant tier and product configuration"
+      );
     }
 
     const record = await write(() =>
       prisma.merchantDefaultFeesRate.create({
-        data: { productConfigurationId, rate },
-        include: { productConfiguration: { select: productSelect } },
+        data: { merchantTierId, productConfigurationId, rate },
+        include: {
+          merchantTier: { select: tierSelect },
+          productConfiguration: { select: productSelect },
+        },
       })
     );
     return mapDefaultFees(record);
@@ -795,32 +880,46 @@ export class MerchantPricingService {
 
   async updateDefaultFeesRate(
     id: string,
-    input: { productConfigurationId?: unknown; rate?: unknown }
+    input: { merchantTierId?: unknown; productConfigurationId?: unknown; rate?: unknown }
   ) {
     const existing = await prisma.merchantDefaultFeesRate.findUnique({ where: { id } });
     if (!existing) throw new Error("Default fees rate not found");
 
+    const merchantTierId =
+      input.merchantTierId === undefined
+        ? existing.merchantTierId
+        : requireText(input.merchantTierId, "merchantTierId");
     const productConfigurationId =
       input.productConfigurationId === undefined
-        ? undefined
+        ? existing.productConfigurationId
         : requireText(input.productConfigurationId, "productConfigurationId");
     const rate = optionalNumber(input.rate, "rate");
 
-    if (productConfigurationId === undefined && rate === undefined) {
+    if (
+      input.merchantTierId === undefined &&
+      input.productConfigurationId === undefined &&
+      rate === undefined
+    ) {
       throw new Error("At least one field is required");
     }
 
+    if (merchantTierId !== existing.merchantTierId) await this.assertMerchantTier(merchantTierId);
+    if (productConfigurationId !== existing.productConfigurationId) {
+      await this.assertProductConfiguration(productConfigurationId);
+    }
+
     if (
-      productConfigurationId &&
+      merchantTierId !== existing.merchantTierId ||
       productConfigurationId !== existing.productConfigurationId
     ) {
-      await this.assertProductConfiguration(productConfigurationId);
-      const duplicate = await prisma.merchantDefaultFeesRate.findUnique({
-        where: { productConfigurationId },
+      const duplicate = await prisma.merchantDefaultFeesRate.findFirst({
+        where: { merchantTierId, productConfigurationId, id: { not: id } },
         select: { id: true },
       });
       if (duplicate) {
-        throw new Error("A default fees rate already exists for this product configuration");
+        throw new Error(
+          "A default fees rate already exists for this merchant tier and product configuration"
+        );
       }
     }
 
@@ -828,10 +927,14 @@ export class MerchantPricingService {
       prisma.merchantDefaultFeesRate.update({
         where: { id },
         data: {
-          ...(productConfigurationId !== undefined && { productConfigurationId }),
+          merchantTierId,
+          productConfigurationId,
           ...(rate !== undefined && { rate }),
         },
-        include: { productConfiguration: { select: productSelect } },
+        include: {
+          merchantTier: { select: tierSelect },
+          productConfiguration: { select: productSelect },
+        },
       })
     );
     return mapDefaultFees(record);

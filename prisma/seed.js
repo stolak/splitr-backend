@@ -1417,6 +1417,106 @@ async function main() {
 
     console.log(`✅ ${merchantTiers.length} merchant tiers seeded successfully`);
 
+    console.log("\n📦 Seeding rolling reserves...");
+    const rollingReserveRates = {
+      A: { PAY_IN_4: 0.5, PAY_IN_6: 0.75, MONTHLY_FLEX: 1 },
+      B: { PAY_IN_4: 1, PAY_IN_6: 1.5, MONTHLY_FLEX: 2 },
+      C: { PAY_IN_4: 3, PAY_IN_6: 4, MONTHLY_FLEX: 5 },
+      D: { PAY_IN_4: 7, PAY_IN_6: 8.5, MONTHLY_FLEX: 10 },
+    };
+    const monthlyFlexCodes = Array.from({ length: 10 }, (_, index) => `MONTHLY_FLEX_${index + 3}`);
+    const reserveProducts = await prisma.productConfiguration.findMany({
+      where: { code: { in: ["PAY_IN_4", "PAY_IN_6", ...monthlyFlexCodes] } },
+      select: { id: true, code: true },
+    });
+    const productByCode = new Map(reserveProducts.map((product) => [product.code, product.id]));
+
+    let rollingReserveCount = 0;
+    for (const [tierLabel, rates] of Object.entries(rollingReserveRates)) {
+      const tier = await prisma.merchantTier.findFirst({
+        where: { label: tierLabel },
+        select: { id: true },
+      });
+      if (!tier) {
+        throw new Error(`Merchant tier ${tierLabel} was not found`);
+      }
+
+      const assignments = [
+        { code: "PAY_IN_4", rate: rates.PAY_IN_4 },
+        { code: "PAY_IN_6", rate: rates.PAY_IN_6 },
+        ...monthlyFlexCodes.map((code) => ({ code, rate: rates.MONTHLY_FLEX })),
+      ];
+
+      for (const assignment of assignments) {
+        const productConfigurationId = productByCode.get(assignment.code);
+        if (!productConfigurationId) {
+          throw new Error(`Product configuration ${assignment.code} was not found`);
+        }
+
+        await prisma.rollingReserve.upsert({
+          where: {
+            merchantTierId_productConfigurationId: {
+              merchantTierId: tier.id,
+              productConfigurationId,
+            },
+          },
+          update: { rate: assignment.rate },
+          create: {
+            merchantTierId: tier.id,
+            productConfigurationId,
+            rate: assignment.rate,
+          },
+        });
+        rollingReserveCount += 1;
+      }
+    }
+
+    console.log(`✅ ${rollingReserveCount} rolling reserves seeded successfully`);
+
+    console.log("\n💳 Seeding default merchant fees rates...");
+    const defaultFeesByProduct = [
+      { code: "PAY_IN_4", rate: 4 },
+      { code: "PAY_IN_6", rate: 5 },
+      ...monthlyFlexCodes.map((code) => ({ code, rate: 5 })),
+    ];
+    const defaultFeeTiers = ["A", "B", "C", "D"];
+    let defaultFeesCount = 0;
+
+    for (const tierLabel of defaultFeeTiers) {
+      const tier = await prisma.merchantTier.findFirst({
+        where: { label: tierLabel },
+        select: { id: true },
+      });
+      if (!tier) {
+        throw new Error(`Merchant tier ${tierLabel} was not found`);
+      }
+
+      for (const row of defaultFeesByProduct) {
+        const productConfigurationId = productByCode.get(row.code);
+        if (!productConfigurationId) {
+          throw new Error(`Product configuration ${row.code} was not found`);
+        }
+
+        await prisma.merchantDefaultFeesRate.upsert({
+          where: {
+            merchantTierId_productConfigurationId: {
+              merchantTierId: tier.id,
+              productConfigurationId,
+            },
+          },
+          update: { rate: row.rate },
+          create: {
+            merchantTierId: tier.id,
+            productConfigurationId,
+            rate: row.rate,
+          },
+        });
+        defaultFeesCount += 1;
+      }
+    }
+
+    console.log(`✅ ${defaultFeesCount} default merchant fees rates seeded successfully`);
+
     console.log("\n🎉 Database seeding completed successfully!");
     console.log("\n📋 Sample Data Created:");
     console.log("👥 Users:");

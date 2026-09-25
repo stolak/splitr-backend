@@ -202,6 +202,15 @@ export class MerchantPricingController {
     }
   }
 
+  async listReservesByTier(_req: Request, res: Response) {
+    try {
+      const data = await merchantPricingService.listReservesByTier();
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async getReserve(req: Request, res: Response) {
     try {
       const data = await merchantPricingService.getReserve(req.params.id);
@@ -311,23 +320,19 @@ export class MerchantPricingController {
 
   async listDefaultFeesRates(req: Request, res: Response) {
     try {
-      const data = await merchantPricingService.listDefaultFeesRates(
-        queryString(req.query.productConfigurationId)
-      );
+      const data = await merchantPricingService.listDefaultFeesRates({
+        merchantTierId: queryString(req.query.merchantTierId),
+        productConfigurationId: queryString(req.query.productConfigurationId),
+      });
       return this.ok(res, data);
     } catch (error) {
       return this.fail(res, error);
     }
   }
 
-  async getDefaultFeesRateByProduct(req: Request, res: Response) {
+  async listDefaultFeesRatesByTier(_req: Request, res: Response) {
     try {
-      const data = await merchantPricingService.getDefaultFeesRateByProduct(
-        req.params.productConfigurationId
-      );
-      if (!data) {
-        return res.status(404).json({ success: false, message: "Default fees rate not found" });
-      }
+      const data = await merchantPricingService.listDefaultFeesRatesByTier();
       return this.ok(res, data);
     } catch (error) {
       return this.fail(res, error);

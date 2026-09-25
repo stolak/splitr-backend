@@ -519,6 +519,48 @@ rollingReserveRoutes.post("/", auth, fees.createReserve.bind(fees));
 
 /**
  * @swagger
+ * /api/v1/rolling-reserves/by-tier:
+ *   get:
+ *     summary: List rolling reserves grouped by merchant tier
+ *     tags: [RollingReserve]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Rolling reserves grouped by tier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       tier:
+ *                         type: string
+ *                         example: A
+ *                       data:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                             product:
+ *                               type: string
+ *                               example: Pay in 4
+ *                             rate:
+ *                               type: number
+ *                               example: 0.5
+ */
+rollingReserveRoutes.get("/by-tier", auth, fees.listReservesByTier.bind(fees));
+
+/**
+ * @swagger
  * /api/v1/rolling-reserves/{id}:
  *   get:
  *     summary: Get a rolling reserve by id
@@ -780,6 +822,10 @@ merchantInstantPayoutSettingsRoutes.delete("/:id", auth, fees.deleteInstantSetti
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
+ *         name: merchantTierId
+ *         schema:
+ *           type: string
+ *       - in: query
  *         name: productConfigurationId
  *         schema:
  *           type: string
@@ -788,7 +834,7 @@ merchantInstantPayoutSettingsRoutes.delete("/:id", auth, fees.deleteInstantSetti
  *         description: Default fees rates retrieved successfully
  *   post:
  *     summary: Create a default merchant fees rate
- *     description: One default rate is allowed per product configuration.
+ *     description: One default rate is allowed per merchant tier and product configuration.
  *     tags: [MerchantDefaultFeesRate]
  *     security:
  *       - bearerAuth: []
@@ -798,48 +844,70 @@ merchantInstantPayoutSettingsRoutes.delete("/:id", auth, fees.deleteInstantSetti
  *         application/json:
  *           schema:
  *             type: object
- *             required: [productConfigurationId, rate]
+ *             required: [merchantTierId, productConfigurationId, rate]
  *             properties:
+ *               merchantTierId:
+ *                 type: string
  *               productConfigurationId:
  *                 type: string
  *               rate:
  *                 type: number
- *                 example: 2.5
+ *                 example: 4
  *     responses:
  *       201:
  *         description: Default fees rate created successfully
  *       400:
  *         description: Validation failed or duplicate rate
  *       404:
- *         description: Product configuration not found
+ *         description: Merchant tier or product configuration not found
  */
 merchantDefaultFeesRateRoutes.get("/", auth, fees.listDefaultFeesRates.bind(fees));
 merchantDefaultFeesRateRoutes.post("/", auth, fees.createDefaultFeesRate.bind(fees));
 
 /**
  * @swagger
- * /api/v1/merchant-default-fees-rates/product-configuration/{productConfigurationId}:
+ * /api/v1/merchant-default-fees-rates/by-tier:
  *   get:
- *     summary: Get the default fees rate for a product configuration
+ *     summary: List default fees rates grouped by merchant tier
  *     tags: [MerchantDefaultFeesRate]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: productConfigurationId
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
- *         description: Default fees rate retrieved successfully
- *       404:
- *         description: Default fees rate not found
+ *         description: Default fees rates grouped by tier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       tier:
+ *                         type: string
+ *                         example: A
+ *                       data:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                             product:
+ *                               type: string
+ *                               example: Pay in 4
+ *                             rate:
+ *                               type: number
+ *                               example: 4
  */
 merchantDefaultFeesRateRoutes.get(
-  "/product-configuration/:productConfigurationId",
+  "/by-tier",
   auth,
-  fees.getDefaultFeesRateByProduct.bind(fees)
+  fees.listDefaultFeesRatesByTier.bind(fees)
 );
 
 /**
@@ -879,6 +947,8 @@ merchantDefaultFeesRateRoutes.get(
  *           schema:
  *             type: object
  *             properties:
+ *               merchantTierId:
+ *                 type: string
  *               productConfigurationId:
  *                 type: string
  *               rate:

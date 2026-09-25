@@ -1364,8 +1364,8 @@ model ProductConfiguration {
   updatedAt               DateTime                 @updatedAt
   loans                   Loan[]
   merchantFeesRates       MerchantFeesRate[]
-  rollingReserves         RollingReserve[]
-  merchantDefaultFeesRate MerchantDefaultFeesRate?
+  rollingReserves          RollingReserve[]
+  merchantDefaultFeesRates MerchantDefaultFeesRate[]
 
   @@index([code])
   @@map("product_configuration")
@@ -1390,9 +1390,10 @@ model MerchantTier {
   id                    String                         @id @default(uuid())
   label                 String
   description           String?
-  tCutOff               TCutOff?
-  rollingReserves       RollingReserve[]
-  instantPayoutSettings MerchantInstantPayoutSettings?
+  tCutOff                  TCutOff?
+  rollingReserves          RollingReserve[]
+  merchantDefaultFeesRates MerchantDefaultFeesRate[]
+  instantPayoutSettings    MerchantInstantPayoutSettings?
   createdAt             DateTime                       @default(now())
   updatedAt             DateTime                       @updatedAt
 
@@ -1443,12 +1444,16 @@ model MerchantInstantPayoutSettings {
 
 model MerchantDefaultFeesRate {
   id                     String               @id @default(uuid())
-  productConfigurationId String               @unique
+  // Lengths keep the composite unique index within MySQL's 1000-byte utf8mb4 limit.
+  merchantTierId         String               @db.VarChar(36)
+  merchantTier           MerchantTier         @relation(fields: [merchantTierId], references: [id], onDelete: Cascade)
+  productConfigurationId String               @db.VarChar(36)
   productConfiguration   ProductConfiguration @relation(fields: [productConfigurationId], references: [id], onDelete: Cascade)
   rate                   Decimal              @db.Decimal(10, 4)
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
 
+  @@unique([merchantTierId, productConfigurationId], map: "merchant_default_fees_tier_product_key")
   @@map("merchant_default_fees_rate")
 }
 
