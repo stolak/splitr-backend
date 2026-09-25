@@ -51,6 +51,14 @@ import creditBureauRoutes from "./creditBureau";
 import inveriteRoutes from "./inverite";
 import productConfigurationRoutes from "./productConfiguration";
 import invoiceCategoryRoutes from "./invoiceCategory";
+import {
+  merchantFeesRateRoutes,
+  merchantTierRoutes,
+  tCutOffRoutes,
+  rollingReserveRoutes,
+  merchantInstantPayoutSettingsRoutes,
+  merchantDefaultFeesRateRoutes,
+} from "./merchantPricing";
 import { Router } from "express";
 
 const router = Router();
@@ -107,6 +115,12 @@ router.use("/credit-bureaus", creditBureauRoutes);
 router.use("/inverite", inveriteRoutes);
 router.use("/product-configurations", productConfigurationRoutes);
 router.use("/invoice-categories", invoiceCategoryRoutes);
+router.use("/merchant-fees-rates", merchantFeesRateRoutes);
+router.use("/merchant-tiers", merchantTierRoutes);
+router.use("/t-cut-offs", tCutOffRoutes);
+router.use("/rolling-reserves", rollingReserveRoutes);
+router.use("/merchant-instant-payout-settings", merchantInstantPayoutSettingsRoutes);
+router.use("/merchant-default-fees-rates", merchantDefaultFeesRateRoutes);
 
 /**
  * @swagger

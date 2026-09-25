@@ -358,6 +358,7 @@ model Merchant {
   paystackTransferRecipients PaystackMerchantTransferRecipient[]
   paystackTransfers          PaystackTransfer[]
   stripeConnectAccountId     String?                             @unique
+  merchantFeesRates          MerchantFeesRate[]
 
   @@map("merchant")
 }
@@ -1361,8 +1362,90 @@ model ProductConfiguration {
   rate           Decimal     @db.Decimal(10, 4) // rate as a percentage, e.g. 2.5 for 2.5%
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
-  loans          Loan[]
+  loans                    Loan[]
+  merchantFeesRates        MerchantFeesRate[]
+  rollingReserves          RollingReserve[]
+  merchantDefaultFeesRate  MerchantDefaultFeesRate?
 
   @@index([code])
   @@map("product_configuration")
+}
+
+model MerchantFeesRate {
+  id                     String               @id @default(uuid())
+  merchantId             String
+  merchant               Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  productConfigurationId String
+  productConfiguration   ProductConfiguration @relation(fields: [productConfigurationId], references: [id], onDelete: Cascade)
+  rate                   Decimal              @db.Decimal(10, 4)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@unique([merchantId, productConfigurationId])
+  @@map("merchant_fees_rate")
+}
+
+model MerchantTier {
+  id                    String                         @id @default(uuid())
+  label                 String
+  description           String?
+  rollingMaturityDay    Int
+  tCutOffs              TCutOff[]
+  rollingReserves       RollingReserve[]
+  instantPayoutSettings MerchantInstantPayoutSettings?
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+
+  @@map("merchant_tier")
+}
+
+model TCutOff {
+  id             String       @id @default(uuid())
+  merchantTierId String
+  merchantTier   MerchantTier @relation(fields: [merchantTierId], references: [id], onDelete: Cascade)
+  label          String
+  dayPlus        Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("t_cut_off")
+}
+
+model RollingReserve {
+  id                     String               @id @default(uuid())
+  merchantTierId         String
+  merchantTier           MerchantTier         @relation(fields: [merchantTierId], references: [id], onDelete: Cascade)
+  productConfigurationId String
+  productConfiguration   ProductConfiguration @relation(fields: [productConfigurationId], references: [id], onDelete: Cascade)
+  rate                   Decimal              @db.Decimal(10, 4)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@unique([merchantTierId, productConfigurationId])
+  @@map("rolling_reserve")
+}
+
+model MerchantInstantPayoutSettings {
+  id                  String       @id @default(uuid())
+  merchantTierId      String       @unique
+  merchantTier        MerchantTier @relation(fields: [merchantTierId], references: [id], onDelete: Cascade)
+  baseRate            Decimal      @db.Decimal(10, 4)
+  surchargeRate       Decimal      @db.Decimal(10, 4)
+  maxPayoutPercentage Decimal      @db.Decimal(10, 4)
+  isEnabled           Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@map("merchant_instant_payout_settings")
+}
+
+model MerchantDefaultFeesRate {
+  id                     String               @id @default(uuid())
+  productConfigurationId String               @unique
+  productConfiguration   ProductConfiguration @relation(fields: [productConfigurationId], references: [id], onDelete: Cascade)
+  rate                   Decimal              @db.Decimal(10, 4)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@map("merchant_default_fees_rate")
 }
