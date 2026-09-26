@@ -1,9 +1,9 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from "@prisma/client";
 
-import { authService } from './authService';
-import { emailService } from './emailService';
+import { authService } from "./authService";
+import { emailService } from "./emailService";
 
-import prisma from '../utils/prisma';
+import prisma from "../utils/prisma";
 
 export interface CreateMerchantInput {
   businessName: string;
@@ -97,6 +97,9 @@ export interface UpdateMerchantInput {
   }>;
   rejectionReasons?: Array<{ section: string; reason: string }>;
   agreedToTerms?: boolean;
+
+  merchantTierId?: string;
+  provinceCode?: string;
 }
 
 export interface FormatedtInput {
@@ -161,6 +164,9 @@ export interface FormatedtInput {
   bankName?: string;
   bankCode?: string;
   isAgreedToTerms?: boolean;
+
+  merchantTierId?: string;
+  provinceCode?: string;
 }
 
 export const merchantSelect = {
@@ -184,6 +190,9 @@ export const merchantSelect = {
   splitrId: true,
   logoUrl: true,
   businessTypes: true,
+
+  merchantTierId: true,
+  provinceCode: true,
 
   // Relations
   shareholders: {
@@ -298,60 +307,62 @@ export const merchantSelect = {
   },
 } as const;
 const allowedKeys: (keyof FormatedtInput)[] = [
-  'businessName',
-  'logoUrl',
-  'businessTypes',
-  'businessEmail',
-  'authorizedPerson',
-  'authorizedDesignation',
-  'authorizedPhoneNo',
-  'authorizedEmail',
-  'typeOfServiceOrProducts',
-  'cacNumber',
-  'dateOfIncorporation',
-  'tin',
-  'registrationAddress',
-  'businessDescription',
-  'businessCategory',
-  'businessType',
-  'businessPhone',
-  'officeWebsite',
-  'officeWebsite',
-  'isBusinessInfoVerified',
-  'isAuthorizedPersonVerified',
-  'isDirectorsVerified',
-  'isShareholdersVerified',
-  'cacCertificate',
-  'isCACCertificateVerified',
-  'memart',
-  'isMEMERTCertificateVerified',
-  'cac2Form',
-  'isCAC2CAC7FormVerified',
-  'utilityBill',
-  'utilityBillVerified',
-  'boardResolution',
-  'boardResolutionVerified',
-  'documentStatus',
-  'applicationStatus',
-  'verificationStatus',
-  'isAuthorisersVerified',
-  'isBankAccountVerified',
-  'merchantCharge',
-  'isAgreedToTerms',
+  "businessName",
+  "logoUrl",
+  "businessTypes",
+  "businessEmail",
+  "authorizedPerson",
+  "authorizedDesignation",
+  "authorizedPhoneNo",
+  "authorizedEmail",
+  "typeOfServiceOrProducts",
+  "cacNumber",
+  "dateOfIncorporation",
+  "tin",
+  "registrationAddress",
+  "businessDescription",
+  "businessCategory",
+  "businessType",
+  "businessPhone",
+  "officeWebsite",
+  "officeWebsite",
+  "isBusinessInfoVerified",
+  "isAuthorizedPersonVerified",
+  "isDirectorsVerified",
+  "isShareholdersVerified",
+  "cacCertificate",
+  "isCACCertificateVerified",
+  "memart",
+  "isMEMERTCertificateVerified",
+  "cac2Form",
+  "isCAC2CAC7FormVerified",
+  "utilityBill",
+  "utilityBillVerified",
+  "boardResolution",
+  "boardResolutionVerified",
+  "documentStatus",
+  "applicationStatus",
+  "verificationStatus",
+  "isAuthorisersVerified",
+  "isBankAccountVerified",
+  "merchantCharge",
+  "isAgreedToTerms",
+  "merchantTierId",
+  "provinceCode",
 ];
 /**
  * Columns declared `@unique` on the Merchant model, with the wording used to report a clash.
  * Keep this in sync with prisma/schema.prisma.
  */
 const MERCHANT_UNIQUE_FIELD_LABELS = {
-  splitrId: 'Splitr ID',
-  businessEmail: 'business email',
-  authorizedEmail: 'authorized person email',
-  businessPhone: 'business phone',
-  cacNumber: 'CAC number',
-  tin: 'TIN',
-  officeWebsite: 'office website',
-  stripeConnectAccountId: 'Stripe Connect account',
+  splitrId: "Splitr ID",
+  businessEmail: "business email",
+  authorizedEmail: "authorized person email",
+  businessPhone: "business phone",
+  cacNumber: "CAC number",
+  tin: "TIN",
+  officeWebsite: "office website",
+  stripeConnectAccountId: "Stripe Connect account",
 } as const;
 
 type MerchantUniqueField = keyof typeof MERCHANT_UNIQUE_FIELD_LABELS;
@@ -376,7 +387,7 @@ export class MerchantService {
       .map((field) => ({ field, value: values[field] }))
       .filter(
         (check): check is { field: MerchantUniqueField; value: string } =>
-          typeof check.value === 'string' && check.value.trim() !== ''
+          typeof check.value === "string" && check.value.trim() !== ""
       );
 
     if (checks.length === 0) {
@@ -409,7 +420,7 @@ export class MerchantService {
    * into the same readable message.
    */
   private rethrowDuplicateMerchantField(error: any): never {
-    if (error?.code === 'P2002') {
+    if (error?.code === "P2002") {
       const target = error?.meta?.target;
       const targets: string[] = (Array.isArray(target) ? target : [target])
         .filter(Boolean)
@@ -436,7 +447,7 @@ export class MerchantService {
       select: { id: true },
     });
     if (!existing) {
-      throw new Error('Merchant not found');
+      throw new Error("Merchant not found");
     }
 
     await this.ensureUniqueFieldsAreAvailable(data, id);
@@ -464,30 +475,30 @@ export class MerchantService {
   async createMerchant(input: CreateMerchantInput) {
     const { businessEmail, businessName, authorizedPerson, authorizedEmail } = input;
     if (!businessEmail) {
-      throw new Error('Business email is required');
+      throw new Error("Business email is required");
     }
     if (!businessName) {
-      throw new Error('Business name is required');
+      throw new Error("Business name is required");
     }
     if (!authorizedPerson) {
-      throw new Error('Authorized person name is required');
+      throw new Error("Authorized person name is required");
     }
 
     if (!authorizedEmail) {
-      throw new Error('Authorized email is required');
+      throw new Error("Authorized email is required");
     }
     // Check if any unique detail is already registered to a merchant
     await this.ensureUniqueFieldsAreAvailable(input);
     // check if email exist with user
     const existingByUserEmail = await prisma.user.findFirst({ where: { email: authorizedEmail } });
     if (existingByUserEmail) {
-      throw new Error('Contact person email already exists with a user');
+      throw new Error("Contact person email already exists with a user");
     }
     // Create merchant first
     const merchant = await prisma.merchant
       .create({
         data: {
-          splitrId: '', // Will be auto-generated by trigger
+          splitrId: "", // Will be auto-generated by trigger
           businessName: input.businessName,
           logoUrl: input.logoUrl,
           businessTypes: input.businessTypes ?? [],
@@ -512,10 +523,10 @@ export class MerchantService {
       })
       .catch((error) => this.rethrowDuplicateMerchantField(error));
     if (!merchant) {
-      throw new Error('Merchant not created');
+      throw new Error("Merchant not created");
     }
     // split authorizedPerson into firstName and lastName
-    const [firstName, lastName] = input.authorizedPerson.split(' ');
+    const [firstName, lastName] = input.authorizedPerson.split(" ");
     const newUser = await authService.create({
       email: input.authorizedEmail,
       password: input.password,
@@ -523,24 +534,24 @@ export class MerchantService {
       lastName: lastName,
       phoneNumber: input.authorizedPhoneNo,
       merchantId: merchant.id,
-      role: 'Merchant',
-      userType: 'Merchant',
+      role: "Merchant",
+      userType: "Merchant",
       isVerified: false,
       isPhoneVerified: true,
       isEmailVerified: true,
       isActive: true,
     });
     if (!newUser) {
-      throw new Error('User not created');
+      throw new Error("User not created");
     }
     await this.createAuthorisers(merchant.id, [
       {
         authoriserName: firstName,
-        designation: input.authorizedDesignation || 'Authorized Person',
+        designation: input.authorizedDesignation || "Authorized Person",
         authoriserEmail: input.authorizedEmail,
         authoriserPhone: input.authorizedPhoneNo,
-        nin: 'NIN not provided',
-        bvn: 'BVN not provided',
+        nin: "NIN not provided",
+        bvn: "BVN not provided",
       },
     ]);
     // Create merchant
@@ -554,7 +565,7 @@ export class MerchantService {
       select: merchantSelect,
     });
     if (!merchant) {
-      throw new Error('Merchant not found');
+      throw new Error("Merchant not found");
     }
     return merchant;
   }
@@ -575,7 +586,7 @@ export class MerchantService {
     const merchants = await prisma.merchant.findMany({
       select: merchantSelect,
       where: whereClause,
-      orderBy: { id: 'desc' },
+      orderBy: { id: "desc" },
     });
     return merchants;
   }
@@ -583,7 +594,7 @@ export class MerchantService {
   async updateMerchant(id: string, data: UpdateMerchantInput, req: any) {
     const existing = await prisma.merchant.findUnique({ where: { id } });
     if (!existing) {
-      throw new Error('Merchant not found');
+      throw new Error("Merchant not found");
     }
 
     // check if any properties exist in data and push it to updateData
@@ -600,7 +611,7 @@ export class MerchantService {
       }
     });
     if (Object.keys(updateData).length === 0) {
-      console.log('No valid fields provided for update');
+      console.log("No valid fields provided for update");
       return this.getMerchantById(id);
     }
     const prevMerchant = await prisma.merchant.findUnique({ where: { id } });
@@ -621,9 +632,9 @@ export class MerchantService {
     }
 
     if (updateData.isAgreedToTerms) {
-      updateData.applicationStatus = 'Approved';
-      updateData.verificationStatus = 'Approved';
-      updateData.documentStatus = 'Approved';
+      updateData.applicationStatus = "Approved";
+      updateData.verificationStatus = "Approved";
+      updateData.documentStatus = "Approved";
     }
     const merchant = await this.updateMerchantRecord(id, updateData);
 
@@ -643,10 +654,10 @@ export class MerchantService {
       await this.createRejectionReasons(id, data.rejectionReasons); // TODO: Implement this
     }
     if (
-      documentStatus !== 'Approved' &&
-      applicationStatus !== 'Approved' &&
-      data.documentStatus == 'Approved' &&
-      data.applicationStatus == 'Approved'
+      documentStatus !== "Approved" &&
+      applicationStatus !== "Approved" &&
+      data.documentStatus == "Approved" &&
+      data.applicationStatus == "Approved"
     ) {
       const merchantAuthoriser = await this.getMerchantById(id);
 
@@ -659,7 +670,7 @@ export class MerchantService {
         if (existingUser) {
           continue;
         }
-        const [firstName, lastName] = authoriser.authoriserName.split(' ');
+        const [firstName, lastName] = authoriser.authoriserName.split(" ");
         await authService.create({
           email: authoriser.authoriserEmail,
           password: authoriser.authoriserEmail,
@@ -667,8 +678,8 @@ export class MerchantService {
           lastName: lastName,
           phoneNumber: authoriser.authoriserPhone,
           merchantId: id,
-          role: 'Merchant',
-          userType: 'Merchant',
+          role: "Merchant",
+          userType: "Merchant",
           isVerified: false,
           isPhoneVerified: false,
           isEmailVerified: false,
@@ -679,8 +690,8 @@ export class MerchantService {
       for (const authoriser of authorisers) {
         emailService.sendTemplateEmail({
           to: authoriser.authoriserEmail,
-          templateName: 'representativeValidation',
-          subject: 'splitr Merchant Registration – Authorized Representative Validation Required',
+          templateName: "representativeValidation",
+          subject: "splitr Merchant Registration – Authorized Representative Validation Required",
           data: {
             representative_name: authoriser.authoriserName,
             merchant_business_name: merchantAuthoriser?.businessName,
@@ -691,14 +702,14 @@ export class MerchantService {
     }
     if (!isAgreedToTerms && merchant.isAgreedToTerms) {
       // create new
-      
+
       // send email to merchant
       const merchantUser = merchant.users;
       for (const user of merchantUser) {
         emailService.sendTemplateEmail({
           to: user.email,
-          templateName: 'merchantVerificationComplete',
-          subject: 'Welcome to splitr Merchant Network',
+          templateName: "merchantVerificationComplete",
+          subject: "Welcome to splitr Merchant Network",
           data: {
             merchant_name: merchant.businessName,
             merchant_dashboard_link: `${process.env.MERCHANT_DASHBOARD_URL}/merchant/dashboard`,
@@ -713,15 +724,15 @@ export class MerchantService {
   async deleteMerchant(id: string) {
     const existing = await prisma.merchant.findUnique({ where: { id } });
     if (!existing) {
-      throw new Error('Merchant not found');
+      throw new Error("Merchant not found");
     }
     await prisma.merchant.delete({ where: { id } });
-    return { message: 'Merchant deleted successfully' };
+    return { message: "Merchant deleted successfully" };
   }
 
   async createDirectors(
     merchantId: string,
-    directors: Array<{ director?: string; position?: string; doc?: string }>,
+    directors: Array<{ director?: string; position?: string; doc?: string }>
   ) {
     if (!directors || directors.length === 0) {
       return [];
@@ -753,7 +764,7 @@ export class MerchantService {
 
   async createShareholders(
     merchantId: string,
-    shareholders: Array<{ shareholder?: string; holding?: string }>,
+    shareholders: Array<{ shareholder?: string; holding?: string }>
   ) {
     if (!shareholders || shareholders.length === 0) {
       return [];
@@ -790,7 +801,7 @@ export class MerchantService {
       authoriserPhone?: string;
       bvn?: string;
       nin?: string;
-    }>,
+    }>
   ) {
     if (!authorisers || authorisers.length === 0) {
       return [];
@@ -805,7 +816,7 @@ export class MerchantService {
           authoriser.designation &&
           authoriser.authoriserEmail &&
           authoriser.authoriserPhone &&
-          authoriser.nin,
+          authoriser.nin
       ) // Filter out entries where required fields are missing
       .map((authoriser) => ({
         merchantId,
@@ -836,7 +847,7 @@ export class MerchantService {
       bankId?: string;
       accountName?: string;
       accountNumber?: string;
-    }>,
+    }>
   ) {
     if (!bankAccounts || bankAccounts.length === 0) {
       return [];
@@ -846,7 +857,7 @@ export class MerchantService {
 
     const bankAccountsData = bankAccounts
       .filter(
-        (bankAccount) => bankAccount.bankId && bankAccount.accountName && bankAccount.accountNumber,
+        (bankAccount) => bankAccount.bankId && bankAccount.accountName && bankAccount.accountNumber
       ) // Filter out entries where required fields are missing
       .map((bankAccount) => ({
         merchantId,
@@ -870,7 +881,7 @@ export class MerchantService {
 
   async createRejectionReasons(
     merchantId: string,
-    rejectionReasons: Array<{ section: string; reason: string }>,
+    rejectionReasons: Array<{ section: string; reason: string }>
   ) {
     if (!rejectionReasons || rejectionReasons.length === 0) {
       return [];
@@ -879,13 +890,13 @@ export class MerchantService {
       where: { id: merchantId },
     });
     if (!merchant) {
-      throw new Error('Merchant not found');
+      throw new Error("Merchant not found");
     }
     const merchantEmail = merchant.authorizedEmail;
     const merchantName = merchant.businessName;
     const rejectionReasonsData = rejectionReasons
       .map((rejectionReason) => `${rejectionReason.section}: ${rejectionReason.reason}`)
-      .join('\n');
+      .join("\n");
     // insert into rejection reasons
     await prisma.rejectionReason.create({
       data: {
@@ -905,8 +916,8 @@ export class MerchantService {
 
     emailService.sendTemplateEmail({
       to: merchantEmail!,
-      templateName: 'documentRejection',
-      subject: 'Action Required – Some of Your splitr Merchant Documents Need Attention',
+      templateName: "documentRejection",
+      subject: "Action Required – Some of Your splitr Merchant Documents Need Attention",
       data: {
         merchant_name: merchantName,
         rejectionReasons: rejectionReasons,
@@ -941,7 +952,7 @@ export class MerchantService {
     });
 
     if (!merchant) {
-      throw new Error('Merchant not found');
+      throw new Error("Merchant not found");
     }
 
     return merchant;
@@ -956,15 +967,15 @@ export class MerchantService {
       const count = await prisma.merchant.count({
         where: {
           isDeleted: false,
-          applicationStatus: 'Approved',
-          verificationStatus: 'Approved',
-          documentStatus: 'Approved',
+          applicationStatus: "Approved",
+          verificationStatus: "Approved",
+          documentStatus: "Approved",
         },
       });
       return count;
     } catch (error) {
-      console.error('Error getting total active merchants:', error);
-      throw new Error('Failed to get total active merchants');
+      console.error("Error getting total active merchants:", error);
+      throw new Error("Failed to get total active merchants");
     }
   }
 }

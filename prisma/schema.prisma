@@ -360,6 +360,11 @@ model Merchant {
   stripeConnectAccountId     String?                             @unique
   merchantFeesRates          MerchantFeesRate[]
 
+  provinceCode   String?
+  province       TaxMatrix?    @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
+  merchantTierId String?
+  merchantTier   MerchantTier? @relation(fields: [merchantTierId], references: [id], onDelete: SetNull)
+
   @@map("merchant")
 }
 
@@ -683,9 +688,19 @@ model MerchantTransaction {
   status          TransactionStatus       @default(Pending)
   isSettled       Boolean                 @default(false)
   discountStatus  DiscountStatus          @default(Closed)
-  groupReference  String?
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+
+  taxRate                Decimal               @default(0)
+  productConfigurationId String?
+  productConfiguration   ProductConfiguration? @relation(fields: [productConfigurationId], references: [id], onDelete: SetNull)
+  provinceCode           String?
+  province               TaxMatrix?            @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
+  merchantTierId         String?
+  merchantTier           MerchantTier?         @relation(fields: [merchantTierId], references: [id], onDelete: SetNull)
+  chargeRate             Decimal               @default(0)
+
+  groupReference String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("merchant_transaction")
 }
@@ -1352,20 +1367,21 @@ enum ProductType {
 
 /// Configurable financing products (e.g. Pay in 4, Monthly Flex) with their tenure, limits and rate.
 model ProductConfiguration {
-  id                      String                   @id @default(uuid())
-  productType             ProductType              @default(MONTHLY_FLEX)
-  code                    String                   @unique @db.VarChar(50)
-  productName             String                   @db.VarChar(150)
-  tenure                  Int
-  minimumFinance          Decimal                  @db.Decimal(15, 2)
-  maximumFinance          Decimal                  @db.Decimal(15, 2)
-  rate                    Decimal                  @db.Decimal(10, 4) // rate as a percentage, e.g. 2.5 for 2.5%
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  loans                   Loan[]
-  merchantFeesRates       MerchantFeesRate[]
+  id                       String                    @id @default(uuid())
+  productType              ProductType               @default(MONTHLY_FLEX)
+  code                     String                    @unique @db.VarChar(50)
+  productName              String                    @db.VarChar(150)
+  tenure                   Int
+  minimumFinance           Decimal                   @db.Decimal(15, 2)
+  maximumFinance           Decimal                   @db.Decimal(15, 2)
+  rate                     Decimal                   @db.Decimal(10, 4) // rate as a percentage, e.g. 2.5 for 2.5%
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  loans                    Loan[]
+  merchantFeesRates        MerchantFeesRate[]
   rollingReserves          RollingReserve[]
   merchantDefaultFeesRates MerchantDefaultFeesRate[]
+  merchantTransactions     MerchantTransaction[]
 
   @@index([code])
   @@map("product_configuration")
@@ -1387,15 +1403,17 @@ model MerchantFeesRate {
 }
 
 model MerchantTier {
-  id                    String                         @id @default(uuid())
-  label                 String
-  description           String?
+  id                       String                         @id @default(uuid())
+  label                    String
+  description              String?
   tCutOff                  TCutOff?
   rollingReserves          RollingReserve[]
   merchantDefaultFeesRates MerchantDefaultFeesRate[]
   instantPayoutSettings    MerchantInstantPayoutSettings?
-  createdAt             DateTime                       @default(now())
-  updatedAt             DateTime                       @updatedAt
+  merchants                Merchant[]
+  createdAt                DateTime                       @default(now())
+  updatedAt                DateTime                       @updatedAt
+  merchantTransactions     MerchantTransaction[]
 
   @@map("merchant_tier")
 }
@@ -1458,13 +1476,15 @@ model MerchantDefaultFeesRate {
 }
 
 model TaxMatrix {
-  id           String   @id @default(uuid())
-  provinceCode String   @unique @db.VarChar(10)
-  province     String
-  gstRate      Decimal  @db.Decimal(10, 4)
-  psrRate      Decimal  @db.Decimal(10, 4)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                   String                @id @default(uuid())
+  provinceCode         String                @unique @db.VarChar(10)
+  province             String
+  gstRate              Decimal               @db.Decimal(10, 4)
+  psrRate              Decimal               @db.Decimal(10, 4)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  merchantTransactions MerchantTransaction[]
+  merchants            Merchant[]
 
   @@map("tax_matrix")
 }

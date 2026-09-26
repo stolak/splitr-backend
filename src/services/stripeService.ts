@@ -370,6 +370,7 @@ export class StripeService {
       ...(company?.phone || businessProfile?.support_phone
         ? { businessPhone: company?.phone || businessProfile?.support_phone || undefined }
         : {}),
+      ...(company?.address?.state ? { provinceCode: company.address.state } : {}),
       ...(businessProfile?.url ? { officeWebsite: businessProfile.url } : {}),
       ...(registrationAddress ? { registrationAddress } : {}),
       ...(businessProfile?.name ? { authorizedPerson: businessProfile.name } : {}),
