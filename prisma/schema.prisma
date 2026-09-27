@@ -359,6 +359,7 @@ model Merchant {
   paystackTransfers          PaystackTransfer[]
   stripeConnectAccountId     String?                             @unique
   merchantFeesRates          MerchantFeesRate[]
+  settlements                Settlement[]
 
   provinceCode   String?
   province       TaxMatrix?    @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
@@ -1487,4 +1488,35 @@ model TaxMatrix {
   merchants            Merchant[]
 
   @@map("tax_matrix")
+}
+
+enum SettlementRecordType {
+  gross
+  merchantFees
+  Tax
+  Refund
+  DisputDebit
+  DisputCredit
+  CreditAdjustment
+  DebitAdjustment
+  ReserveRelease
+  ReserveContribution
+}
+
+model Settlement {
+  id                   String               @id @default(uuid())
+  merchantId           String
+  merchant             Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  debit                Decimal              @default(0) @db.Decimal(15, 2)
+  credit               Decimal              @default(0) @db.Decimal(15, 2)
+  remarks              String               @db.VarChar(500)
+  settlementRecordType SettlementRecordType
+  batchReference       String               @db.VarChar(100)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([merchantId])
+  @@index([batchReference])
+  @@index([settlementRecordType])
+  @@map("settlement")
 }

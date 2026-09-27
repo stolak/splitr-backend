@@ -4,6 +4,7 @@ import { authService } from "./authService";
 import { emailService } from "./emailService";
 
 import prisma from "../utils/prisma";
+import { merchantPricingService } from "./merchantPricingService";
 
 export interface CreateMerchantInput {
   businessName: string;
@@ -25,6 +26,8 @@ export interface CreateMerchantInput {
   businessPhone: string;
   officeWebsite: string;
   password: string;
+  merchantTierId?: string;
+  provinceCode?: string;
 }
 
 export interface UpdateMerchantInput {
@@ -495,6 +498,7 @@ export class MerchantService {
       throw new Error("Contact person email already exists with a user");
     }
     // Create merchant first
+    const defaultTier = await merchantPricingService.getDefaultTier();
     const merchant = await prisma.merchant
       .create({
         data: {
@@ -518,6 +522,8 @@ export class MerchantService {
           officeWebsite: input.officeWebsite,
           merchantCharge: process.env.MERCHANT_CHARGE || 0,
           businessType: input.businessType,
+          merchantTierId: input.merchantTierId || defaultTier?.id,
+          ...(input.provinceCode ? { provinceCode: input.provinceCode } : {}),
         },
         select: merchantSelect,
       })

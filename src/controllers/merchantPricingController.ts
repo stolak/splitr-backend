@@ -103,6 +103,18 @@ export class MerchantPricingController {
     }
   }
 
+  async getDefaultTier(_req: Request, res: Response) {
+    try {
+      const data = await merchantPricingService.getDefaultTier();
+      if (!data) {
+        return res.status(404).json({ success: false, message: "Merchant tier not found" });
+      }
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async createTier(req: Request, res: Response) {
     try {
       const data = await merchantPricingService.createTier(req.body ?? {});

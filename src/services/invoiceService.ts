@@ -2347,6 +2347,7 @@ export class InvoiceService {
       description: "Loan invoice created and paid",
       status: TransactionStatus.Completed,
       transactionDate: new Date(),
+      productConfigurationId: product.productConfigurationId,
     });
     await revenueService.createRevenue({
       merchantId: invoice.merchantId ?? "",

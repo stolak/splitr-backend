@@ -14,6 +14,7 @@ import { paystackMerchantTransferRecipientService } from "./paystackMerchantTran
 import { paystackService } from "./paystackService";
 import { tierService } from "./tierService";
 import { stripeService } from "./stripeService";
+import { merchantPricingService } from "./merchantPricingService";
 const revenueService = new RevenueService();
 // ==================== INTERFACES ====================
 
@@ -32,6 +33,9 @@ export interface CreateMerchantTransactionInput {
   transactionDate: Date;
   description: string;
   status?: TransactionStatus;
+  merchantTierId?: string;
+  provinceCode?: string;
+  productConfigurationId?: string;
 }
 
 export interface UpdateMerchantTransactionInput {
@@ -41,6 +45,13 @@ export interface UpdateMerchantTransactionInput {
   transactionDate?: Date;
   description?: string;
   status?: TransactionStatus;
+  merchantTierId?: string;
+  provinceCode?: string;
+  productConfigurationId?: string;
+  isSettled?: boolean;
+  isSettledDate?: Date;
+  chargeRate?: number;
+  taxRate?: number;
 }
 
 export class MerchantTransactionService {
@@ -84,6 +95,23 @@ export class MerchantTransactionService {
           throw new Error("Invoice does not belong to this merchant");
         }
       }
+      const defaultTier = await merchantPricingService.getDefaultTier();
+      const merchantTierId = merchant.merchantTierId || defaultTier?.id;
+      // const merchantFee= await merchantPricingService.getMerchantFee(merchantTierId, input.productConfigurationId);
+      const merchantProductFee = await prisma.merchantFeesRate.findFirst({
+        where: {
+          merchantId: input.merchantId,
+          productConfigurationId: input.productConfigurationId,
+        },
+      });
+      const merchantDefaultFee = await prisma.merchantDefaultFeesRate.findFirst({
+        where: {
+          merchantTierId,
+          productConfigurationId: input.productConfigurationId,
+        },
+      });
+      const merchantDefaultFeeRate = merchantDefaultFee?.rate || 0;
+      const merchantProductFeeRate = merchantProductFee?.rate || merchantDefaultFeeRate;
 
       const transaction = await prisma.merchantTransaction.create({
         data: {
@@ -96,6 +124,12 @@ export class MerchantTransactionService {
           transactionDate: input.transactionDate,
           description: input.description,
           status: input.status || TransactionStatus.Pending,
+          ...(merchant.merchantTierId ? { merchantTierId: merchant.merchantTierId } : {}),
+          ...(merchant.provinceCode ? { provinceCode: merchant.provinceCode } : {}),
+          ...(input.productConfigurationId
+            ? { productConfigurationId: input.productConfigurationId }
+            : {}),
+          ...(merchantProductFeeRate ? { chargeRate: merchantProductFeeRate } : {}),
         },
         include: {
           merchant: {

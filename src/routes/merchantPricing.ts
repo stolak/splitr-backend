@@ -224,6 +224,26 @@ merchantTierRoutes.post("/", auth, fees.createTier.bind(fees));
 
 /**
  * @swagger
+ * /api/v1/merchant-tiers/default:
+ *   get:
+ *     summary: Get the default merchant tier
+ *     description: >
+ *       Returns the merchant tier whose label matches DEFAULT_MERCHANT_TIER_LABEL.
+ *       When that variable is unset or blank, the label is B.
+ *       The result is cached in memory for 30 minutes and refreshed when tier data changes.
+ *     tags: [MerchantTier]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Default merchant tier retrieved successfully
+ *       404:
+ *         description: Merchant tier not found
+ */
+merchantTierRoutes.get("/default", auth, fees.getDefaultTier.bind(fees));
+
+/**
+ * @swagger
  * /api/v1/merchant-tiers/{id}:
  *   get:
  *     summary: Get a merchant tier by id

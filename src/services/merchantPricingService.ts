@@ -10,6 +10,37 @@ const productSelect = {
 } as const;
 const tierSelect = { id: true, label: true } as const;
 
+const MERCHANT_PRICING_CACHE_TTL_MS = 30 * 60 * 1000;
+
+type MerchantPricingCacheEntry = {
+  data: unknown;
+  expiresAt: number;
+};
+
+const merchantPricingCache = new Map<string, MerchantPricingCacheEntry>();
+
+function defaultMerchantTierLabel(): string {
+  return process.env.DEFAULT_MERCHANT_TIER_LABEL?.trim() || "B";
+}
+
+function clearMerchantPricingCache(): void {
+  merchantPricingCache.clear();
+}
+
+async function cachedRead<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const entry = merchantPricingCache.get(key);
+  if (entry && Date.now() < entry.expiresAt) {
+    return entry.data as T;
+  }
+
+  const data = await load();
+  merchantPricingCache.set(key, {
+    data,
+    expiresAt: Date.now() + MERCHANT_PRICING_CACHE_TTL_MS,
+  });
+  return data;
+}
+
 const tierInclude = {
   tCutOff: true,
   rollingReserves: {
@@ -79,7 +110,9 @@ function asNumber(value: Prisma.Decimal | number | string): number {
 
 async function write<T>(action: () => Promise<T>): Promise<T> {
   try {
-    return await action();
+    const result = await action();
+    clearMerchantPricingCache();
+    return result;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
@@ -101,11 +134,13 @@ function mapReserve<T extends { rate: Prisma.Decimal }>(record: T) {
   return { ...record, rate: asNumber(record.rate) };
 }
 
-function mapInstant<T extends {
-  baseRate: Prisma.Decimal;
-  surchargeRate: Prisma.Decimal;
-  maxPayoutPercentage: Prisma.Decimal;
-}>(record: T) {
+function mapInstant<
+  T extends {
+    baseRate: Prisma.Decimal;
+    surchargeRate: Prisma.Decimal;
+    maxPayoutPercentage: Prisma.Decimal;
+  },
+>(record: T) {
   return {
     ...record,
     baseRate: asNumber(record.baseRate),
@@ -118,15 +153,17 @@ function mapDefaultFees<T extends { rate: Prisma.Decimal }>(record: T) {
   return { ...record, rate: asNumber(record.rate) };
 }
 
-function mapTier<T extends {
-  rollingReserves?: Array<{ rate: Prisma.Decimal }>;
-  merchantDefaultFeesRates?: Array<{ rate: Prisma.Decimal }>;
-  instantPayoutSettings?: {
-    baseRate: Prisma.Decimal;
-    surchargeRate: Prisma.Decimal;
-    maxPayoutPercentage: Prisma.Decimal;
-  } | null;
-}>(record: T) {
+function mapTier<
+  T extends {
+    rollingReserves?: Array<{ rate: Prisma.Decimal }>;
+    merchantDefaultFeesRates?: Array<{ rate: Prisma.Decimal }>;
+    instantPayoutSettings?: {
+      baseRate: Prisma.Decimal;
+      surchargeRate: Prisma.Decimal;
+      maxPayoutPercentage: Prisma.Decimal;
+    } | null;
+  },
+>(record: T) {
   return {
     ...record,
     rollingReserves: record.rollingReserves?.map((reserve) => mapReserve(reserve)),
@@ -163,31 +200,38 @@ export class MerchantPricingService {
   }
 
   async listFeesRates(filters: { merchantId?: string; productConfigurationId?: string }) {
-    const records = await prisma.merchantFeesRate.findMany({
-      where: {
-        ...(filters.merchantId && { merchantId: filters.merchantId }),
-        ...(filters.productConfigurationId && {
-          productConfigurationId: filters.productConfigurationId,
-        }),
-      },
-      include: {
-        merchant: { select: merchantSelect },
-        productConfiguration: { select: productSelect },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    return records.map((record) => mapFeesRate(record));
+    return cachedRead(
+      `feesRates:${filters.merchantId ?? ""}:${filters.productConfigurationId ?? ""}`,
+      async () => {
+        const records = await prisma.merchantFeesRate.findMany({
+          where: {
+            ...(filters.merchantId && { merchantId: filters.merchantId }),
+            ...(filters.productConfigurationId && {
+              productConfigurationId: filters.productConfigurationId,
+            }),
+          },
+          include: {
+            merchant: { select: merchantSelect },
+            productConfiguration: { select: productSelect },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        return records.map((record) => mapFeesRate(record));
+      }
+    );
   }
 
   async getFeesRate(id: string) {
-    const record = await prisma.merchantFeesRate.findUnique({
-      where: { id },
-      include: {
-        merchant: { select: merchantSelect },
-        productConfiguration: { select: productSelect },
-      },
+    return cachedRead(`feesRate:${id}`, async () => {
+      const record = await prisma.merchantFeesRate.findUnique({
+        where: { id },
+        include: {
+          merchant: { select: merchantSelect },
+          productConfiguration: { select: productSelect },
+        },
+      });
+      return record ? mapFeesRate(record) : null;
     });
-    return record ? mapFeesRate(record) : null;
   }
 
   async createFeesRate(input: {
@@ -235,7 +279,9 @@ export class MerchantPricingService {
     if (!existing) throw new Error("Merchant fees rate not found");
 
     const merchantId =
-      input.merchantId === undefined ? existing.merchantId : requireText(input.merchantId, "merchantId");
+      input.merchantId === undefined
+        ? existing.merchantId
+        : requireText(input.merchantId, "merchantId");
     const productConfigurationId =
       input.productConfigurationId === undefined
         ? existing.productConfigurationId
@@ -294,23 +340,43 @@ export class MerchantPricingService {
     });
     if (!existing) throw new Error("Merchant fees rate not found");
     await prisma.merchantFeesRate.delete({ where: { id } });
+    clearMerchantPricingCache();
     return { id };
   }
 
   async listTiers() {
-    const records = await prisma.merchantTier.findMany({
-      include: tierInclude,
-      orderBy: { label: "asc" },
+    return cachedRead("tiers", async () => {
+      const records = await prisma.merchantTier.findMany({
+        include: tierInclude,
+        orderBy: { label: "asc" },
+      });
+      return records.map((record) => mapTier(record));
     });
-    return records.map((record) => mapTier(record));
   }
 
   async getTier(id: string) {
-    const record = await prisma.merchantTier.findUnique({
-      where: { id },
-      include: tierInclude,
+    return cachedRead(`tier:${id}`, async () => {
+      const record = await prisma.merchantTier.findUnique({
+        where: { id },
+        include: tierInclude,
+      });
+      return record ? mapTier(record) : null;
     });
-    return record ? mapTier(record) : null;
+  }
+
+  /**
+   * Merchant tier whose label matches DEFAULT_MERCHANT_TIER_LABEL, or "B" when unset.
+   */
+  async getDefaultTier() {
+    const label = defaultMerchantTierLabel();
+    return cachedRead(`defaultTier:${label}`, async () => {
+      const record = await prisma.merchantTier.findFirst({
+        where: { label },
+        include: tierInclude,
+        orderBy: { createdAt: "asc" },
+      });
+      return record ? mapTier(record) : null;
+    });
   }
 
   async createTier(input: { label?: unknown; description?: unknown }) {
@@ -363,29 +429,36 @@ export class MerchantPricingService {
     });
     if (!existing) throw new Error("Merchant tier not found");
     await prisma.merchantTier.delete({ where: { id } });
+    clearMerchantPricingCache();
     return { id };
   }
 
   async listCutOffs(merchantTierId?: string) {
-    return prisma.tCutOff.findMany({
-      where: merchantTierId ? { merchantTierId } : undefined,
-      include: { merchantTier: { select: tierSelect } },
-      orderBy: [{ dayPlus: "asc" }, { label: "asc" }],
-    });
+    return cachedRead(`cutOffs:${merchantTierId ?? ""}`, () =>
+      prisma.tCutOff.findMany({
+        where: merchantTierId ? { merchantTierId } : undefined,
+        include: { merchantTier: { select: tierSelect } },
+        orderBy: [{ dayPlus: "asc" }, { label: "asc" }],
+      })
+    );
   }
 
   async getCutOff(id: string) {
-    return prisma.tCutOff.findUnique({
-      where: { id },
-      include: { merchantTier: { select: tierSelect } },
-    });
+    return cachedRead(`cutOff:${id}`, () =>
+      prisma.tCutOff.findUnique({
+        where: { id },
+        include: { merchantTier: { select: tierSelect } },
+      })
+    );
   }
 
   async getCutOffByTier(merchantTierId: string) {
-    return prisma.tCutOff.findUnique({
-      where: { merchantTierId },
-      include: { merchantTier: { select: tierSelect } },
-    });
+    return cachedRead(`cutOffByTier:${merchantTierId}`, () =>
+      prisma.tCutOff.findUnique({
+        where: { merchantTierId },
+        include: { merchantTier: { select: tierSelect } },
+      })
+    );
   }
 
   async createCutOff(input: {
@@ -477,67 +550,77 @@ export class MerchantPricingService {
     });
     if (!existing) throw new Error("T cut off not found");
     await prisma.tCutOff.delete({ where: { id } });
+    clearMerchantPricingCache();
     return { id };
   }
 
   async listReserves(filters: { merchantTierId?: string; productConfigurationId?: string }) {
-    const records = await prisma.rollingReserve.findMany({
-      where: {
-        ...(filters.merchantTierId && { merchantTierId: filters.merchantTierId }),
-        ...(filters.productConfigurationId && {
-          productConfigurationId: filters.productConfigurationId,
-        }),
-      },
-      include: {
-        merchantTier: { select: tierSelect },
-        productConfiguration: { select: productSelect },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    return records.map((record) => mapReserve(record));
+    return cachedRead(
+      `reserves:${filters.merchantTierId ?? ""}:${filters.productConfigurationId ?? ""}`,
+      async () => {
+        const records = await prisma.rollingReserve.findMany({
+          where: {
+            ...(filters.merchantTierId && { merchantTierId: filters.merchantTierId }),
+            ...(filters.productConfigurationId && {
+              productConfigurationId: filters.productConfigurationId,
+            }),
+          },
+          include: {
+            merchantTier: { select: tierSelect },
+            productConfiguration: { select: productSelect },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        return records.map((record) => mapReserve(record));
+      }
+    );
   }
 
   async listReservesByTier() {
-    const tiers = await prisma.merchantTier.findMany({
-      orderBy: { label: "asc" },
-      include: {
-        rollingReserves: {
-          include: {
-            productConfiguration: {
-              select: { productName: true, productType: true, tenure: true },
+    return cachedRead("reservesByTier", async () => {
+      const tiers = await prisma.merchantTier.findMany({
+        orderBy: { label: "asc" },
+        include: {
+          rollingReserves: {
+            include: {
+              productConfiguration: {
+                select: { productName: true, productType: true, tenure: true },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    return tiers.map((tier) => ({
-      tier: tier.label,
-      data: [...tier.rollingReserves]
-        .sort((left, right) => {
-          const typeOrder = left.productConfiguration.productType.localeCompare(
-            right.productConfiguration.productType
-          );
-          if (typeOrder !== 0) return typeOrder;
-          return left.productConfiguration.tenure - right.productConfiguration.tenure;
-        })
-        .map((reserve) => ({
-          id: reserve.id,
-          product: reserve.productConfiguration.productName,
-          rate: Number(reserve.rate),
-        })),
-    }));
+      return tiers.map((tier) => ({
+        tier: tier.label,
+        data: [...tier.rollingReserves]
+          .sort((left, right) => {
+            const typeOrder = left.productConfiguration.productType.localeCompare(
+              right.productConfiguration.productType
+            );
+            if (typeOrder !== 0) return typeOrder;
+            return left.productConfiguration.tenure - right.productConfiguration.tenure;
+          })
+          .map((reserve) => ({
+            id: reserve.id,
+            product: reserve.productConfiguration.productName,
+            rate: Number(reserve.rate),
+          })),
+      }));
+    });
   }
 
   async getReserve(id: string) {
-    const record = await prisma.rollingReserve.findUnique({
-      where: { id },
-      include: {
-        merchantTier: { select: tierSelect },
-        productConfiguration: { select: productSelect },
-      },
+    return cachedRead(`reserve:${id}`, async () => {
+      const record = await prisma.rollingReserve.findUnique({
+        where: { id },
+        include: {
+          merchantTier: { select: tierSelect },
+          productConfiguration: { select: productSelect },
+        },
+      });
+      return record ? mapReserve(record) : null;
     });
-    return record ? mapReserve(record) : null;
   }
 
   async createReserve(input: {
@@ -646,32 +729,39 @@ export class MerchantPricingService {
     });
     if (!existing) throw new Error("Rolling reserve not found");
     await prisma.rollingReserve.delete({ where: { id } });
+    clearMerchantPricingCache();
     return { id };
   }
 
   async listInstantSettings(merchantTierId?: string) {
-    const records = await prisma.merchantInstantPayoutSettings.findMany({
-      where: merchantTierId ? { merchantTierId } : undefined,
-      include: { merchantTier: { select: tierSelect } },
-      orderBy: { createdAt: "desc" },
+    return cachedRead(`instantSettings:list:${merchantTierId ?? ""}`, async () => {
+      const records = await prisma.merchantInstantPayoutSettings.findMany({
+        where: merchantTierId ? { merchantTierId } : undefined,
+        include: { merchantTier: { select: tierSelect } },
+        orderBy: { createdAt: "desc" },
+      });
+      return records.map((record) => mapInstant(record));
     });
-    return records.map((record) => mapInstant(record));
   }
 
   async getInstantSettings(id: string) {
-    const record = await prisma.merchantInstantPayoutSettings.findUnique({
-      where: { id },
-      include: { merchantTier: { select: tierSelect } },
+    return cachedRead(`instantSettings:id:${id}`, async () => {
+      const record = await prisma.merchantInstantPayoutSettings.findUnique({
+        where: { id },
+        include: { merchantTier: { select: tierSelect } },
+      });
+      return record ? mapInstant(record) : null;
     });
-    return record ? mapInstant(record) : null;
   }
 
   async getInstantSettingsByTier(merchantTierId: string) {
-    const record = await prisma.merchantInstantPayoutSettings.findUnique({
-      where: { merchantTierId },
-      include: { merchantTier: { select: tierSelect } },
+    return cachedRead(`instantSettings:tier:${merchantTierId}`, async () => {
+      const record = await prisma.merchantInstantPayoutSettings.findUnique({
+        where: { merchantTierId },
+        include: { merchantTier: { select: tierSelect } },
+      });
+      return record ? mapInstant(record) : null;
     });
-    return record ? mapInstant(record) : null;
   }
 
   async createInstantSettings(input: {
@@ -778,67 +868,80 @@ export class MerchantPricingService {
     });
     if (!existing) throw new Error("Instant payout settings not found");
     await prisma.merchantInstantPayoutSettings.delete({ where: { id } });
+    clearMerchantPricingCache();
     return { id };
   }
 
-  async listDefaultFeesRates(filters: { merchantTierId?: string; productConfigurationId?: string }) {
-    const records = await prisma.merchantDefaultFeesRate.findMany({
-      where: {
-        ...(filters.merchantTierId && { merchantTierId: filters.merchantTierId }),
-        ...(filters.productConfigurationId && {
-          productConfigurationId: filters.productConfigurationId,
-        }),
-      },
-      include: {
-        merchantTier: { select: tierSelect },
-        productConfiguration: { select: productSelect },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    return records.map((record) => mapDefaultFees(record));
+  async listDefaultFeesRates(filters: {
+    merchantTierId?: string;
+    productConfigurationId?: string;
+  }) {
+    return cachedRead(
+      `defaultFees:${filters.merchantTierId ?? ""}:${filters.productConfigurationId ?? ""}`,
+      async () => {
+        const records = await prisma.merchantDefaultFeesRate.findMany({
+          where: {
+            ...(filters.merchantTierId && { merchantTierId: filters.merchantTierId }),
+            ...(filters.productConfigurationId && {
+              productConfigurationId: filters.productConfigurationId,
+            }),
+          },
+          include: {
+            merchantTier: { select: tierSelect },
+            productConfiguration: { select: productSelect },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        return records.map((record) => mapDefaultFees(record));
+      }
+    );
   }
 
   async listDefaultFeesRatesByTier() {
-    const tiers = await prisma.merchantTier.findMany({
-      orderBy: { label: "asc" },
-      include: {
-        merchantDefaultFeesRates: {
-          include: {
-            productConfiguration: {
-              select: { productName: true, productType: true, tenure: true },
+    return cachedRead("defaultFeesByTier", async () => {
+      const tiers = await prisma.merchantTier.findMany({
+        orderBy: { label: "asc" },
+        include: {
+          merchantDefaultFeesRates: {
+            include: {
+              productConfiguration: {
+                select: { productName: true, productType: true, tenure: true },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    return tiers.map((tier) => ({
-      tier: tier.label,
-      data: [...tier.merchantDefaultFeesRates]
-        .sort((left, right) => {
-          const typeOrder = left.productConfiguration.productType.localeCompare(
-            right.productConfiguration.productType
-          );
-          if (typeOrder !== 0) return typeOrder;
-          return left.productConfiguration.tenure - right.productConfiguration.tenure;
-        })
-        .map((fee) => ({
-          id: fee.id,
-          product: fee.productConfiguration.productName,
-          rate: Number(fee.rate),
-        })),
-    }));
+      return tiers.map((tier) => ({
+        tier: tier.label,
+        data: [...tier.merchantDefaultFeesRates]
+          .sort((left, right) => {
+            const typeOrder = left.productConfiguration.productType.localeCompare(
+              right.productConfiguration.productType
+            );
+            if (typeOrder !== 0) return typeOrder;
+            return left.productConfiguration.tenure - right.productConfiguration.tenure;
+          })
+          .map((fee) => ({
+            id: fee.id,
+            product: fee.productConfiguration.productName,
+            rate: Number(fee.rate),
+          })),
+      }));
+    });
   }
 
   async getDefaultFeesRate(id: string) {
-    const record = await prisma.merchantDefaultFeesRate.findUnique({
-      where: { id },
-      include: {
-        merchantTier: { select: tierSelect },
-        productConfiguration: { select: productSelect },
-      },
+    return cachedRead(`defaultFeesRate:${id}`, async () => {
+      const record = await prisma.merchantDefaultFeesRate.findUnique({
+        where: { id },
+        include: {
+          merchantTier: { select: tierSelect },
+          productConfiguration: { select: productSelect },
+        },
+      });
+      return record ? mapDefaultFees(record) : null;
     });
-    return record ? mapDefaultFees(record) : null;
   }
 
   async createDefaultFeesRate(input: {
@@ -947,6 +1050,7 @@ export class MerchantPricingService {
     });
     if (!existing) throw new Error("Default fees rate not found");
     await prisma.merchantDefaultFeesRate.delete({ where: { id } });
+    clearMerchantPricingCache();
     return { id };
   }
 }

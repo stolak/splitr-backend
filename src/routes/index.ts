@@ -60,6 +60,7 @@ import {
   merchantDefaultFeesRateRoutes,
 } from "./merchantPricing";
 import taxMatrixRoutes from "./taxMatrix";
+import settlementRoutes from "./settlement";
 import { Router } from "express";
 
 const router = Router();
@@ -123,6 +124,7 @@ router.use("/rolling-reserves", rollingReserveRoutes);
 router.use("/merchant-instant-payout-settings", merchantInstantPayoutSettingsRoutes);
 router.use("/merchant-default-fees-rates", merchantDefaultFeesRateRoutes);
 router.use("/tax-matrices", taxMatrixRoutes);
+router.use("/settlements", settlementRoutes);
 
 /**
  * @swagger
