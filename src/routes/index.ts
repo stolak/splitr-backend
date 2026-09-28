@@ -61,6 +61,7 @@ import {
 } from "./merchantPricing";
 import taxMatrixRoutes from "./taxMatrix";
 import settlementRoutes from "./settlement";
+import nextSettlementScheduleRoutes from "./nextSettlementSchedule";
 import {
   merchantReserveContributionRoutes,
   merchantReserveReleaseRoutes,
@@ -129,6 +130,7 @@ router.use("/merchant-instant-payout-settings", merchantInstantPayoutSettingsRou
 router.use("/merchant-default-fees-rates", merchantDefaultFeesRateRoutes);
 router.use("/tax-matrices", taxMatrixRoutes);
 router.use("/settlements", settlementRoutes);
+router.use("/next-settlement-schedule", nextSettlementScheduleRoutes);
 router.use("/merchant-reserve-releases", merchantReserveReleaseRoutes);
 router.use("/merchant-reserve-contributions", merchantReserveContributionRoutes);
 

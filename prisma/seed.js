@@ -277,6 +277,8 @@ async function main() {
         agreedToTermsAt: new Date("2023-01-15T10:30:00Z"),
         agreedToTermsBy: merchantUser2.id,
         isDeleted: false,
+        stripeConnectAccountId: "acct_1Tqr1K213KwDOd5a",
+        provinceCode: "MB",
       },
     });
 

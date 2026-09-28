@@ -1514,6 +1514,8 @@ model Settlement {
   batchReference       String               @db.VarChar(100)
   isSettled            Boolean              @default(false)
   settledDate          DateTime?
+  nextSettlementDate   DateTime?
+  nextPayOutDate       DateTime?
   settlementReference  String?              @db.VarChar(100)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
@@ -1565,4 +1567,14 @@ model MerchantReserveContribution {
   @@index([merchantId])
   @@index([batchReference])
   @@map("merchant_reserve_contribution")
+}
+
+model nextSettlementSchedule {
+  id                 String   @id @default("next_settlement_schedule")
+  nextSettlementDate DateTime
+  nextPayOutDate     DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("next_settlement_schedule")
 }
