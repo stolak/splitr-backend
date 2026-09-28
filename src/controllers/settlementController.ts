@@ -58,6 +58,19 @@ export class SettlementController {
     }
   }
 
+  async computePendingSettlement(req: Request, res: Response) {
+    try {
+      const merchantId = queryString(req.query.merchantId);
+      if (!merchantId) {
+        return res.status(400).json({ success: false, message: "merchantId is required" });
+      }
+      const data = await settlementService.computeMarchanetPendingSettlement({ merchantId });
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const data = await settlementService.getById(req.params.id);
@@ -73,6 +86,9 @@ export class SettlementController {
   async create(req: Request, res: Response) {
     try {
       const data = await settlementService.create(req.body ?? {});
+      if (!data) {
+        return this.ok(res, null, "Settlement skipped because debit and credit are both zero");
+      }
       return this.ok(res, data, "Settlement created successfully", 201);
     } catch (error) {
       return this.fail(res, error);

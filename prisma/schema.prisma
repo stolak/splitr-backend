@@ -361,10 +361,12 @@ model Merchant {
   merchantFeesRates          MerchantFeesRate[]
   settlements                Settlement[]
 
-  provinceCode   String?
-  province       TaxMatrix?    @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
-  merchantTierId String?
-  merchantTier   MerchantTier? @relation(fields: [merchantTierId], references: [id], onDelete: SetNull)
+  provinceCode                 String?
+  province                     TaxMatrix?                    @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
+  merchantTierId               String?
+  merchantTier                 MerchantTier?                 @relation(fields: [merchantTierId], references: [id], onDelete: SetNull)
+  merchantReserveReleases      MerchantReserveRelease[]
+  merchantReserveContributions MerchantReserveContribution[]
 
   @@map("merchant")
 }
@@ -1495,12 +1497,10 @@ enum SettlementRecordType {
   merchantFees
   Tax
   Refund
-  DisputDebit
-  DisputCredit
-  CreditAdjustment
-  DebitAdjustment
-  ReserveRelease
-  ReserveContribution
+  Dispute
+  Adjustment
+  Reserve
+  CallUpWithhold
 }
 
 model Settlement {
@@ -1519,4 +1519,47 @@ model Settlement {
   @@index([batchReference])
   @@index([settlementRecordType])
   @@map("settlement")
+}
+
+model MerchantReserveRelease {
+  id               String        @id @default(uuid())
+  merchantId       String
+  merchant         Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  amount           Decimal       @default(0) @db.Decimal(15, 2)
+  remarks          String        @db.VarChar(500)
+  reserveReference String        @db.VarChar(100)
+  releaseReference String?       @db.VarChar(100)
+  reservedDate     DateTime      @default(now())
+  releasedDate     DateTime?
+  reserveStatus    ReserveStatus
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([merchantId])
+  @@index([reserveReference])
+  @@index([releaseReference])
+  @@map("merchant_reserve_release")
+}
+
+enum ReserveStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model MerchantReserveContribution {
+  id               String        @id @default(uuid())
+  merchantId       String
+  merchant         Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  amount           Decimal       @default(0) @db.Decimal(15, 2)
+  remarks          String        @db.VarChar(500)
+  batchReference   String        @db.VarChar(100)
+  contributionDate DateTime      @default(now())
+  reserveStatus    ReserveStatus
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([merchantId])
+  @@index([batchReference])
+  @@map("merchant_reserve_contribution")
 }

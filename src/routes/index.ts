@@ -61,6 +61,10 @@ import {
 } from "./merchantPricing";
 import taxMatrixRoutes from "./taxMatrix";
 import settlementRoutes from "./settlement";
+import {
+  merchantReserveContributionRoutes,
+  merchantReserveReleaseRoutes,
+} from "./merchantReserve";
 import { Router } from "express";
 
 const router = Router();
@@ -125,6 +129,8 @@ router.use("/merchant-instant-payout-settings", merchantInstantPayoutSettingsRou
 router.use("/merchant-default-fees-rates", merchantDefaultFeesRateRoutes);
 router.use("/tax-matrices", taxMatrixRoutes);
 router.use("/settlements", settlementRoutes);
+router.use("/merchant-reserve-releases", merchantReserveReleaseRoutes);
+router.use("/merchant-reserve-contributions", merchantReserveContributionRoutes);
 
 /**
  * @swagger

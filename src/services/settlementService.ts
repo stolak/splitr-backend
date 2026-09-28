@@ -1,6 +1,15 @@
-import { Prisma, SettlementRecordType } from "@prisma/client";
+import {
+  Prisma,
+  SettlementRecordType,
+  TransactionStatus,
+  MerchantTransactionType,
+  ReserveStatus,
+} from "@prisma/client";
 import prisma from "../utils/prisma";
 import { roundUpTo2Decimals } from "../utils/helper";
+import { merchantPricingService } from "./merchantPricingService";
+import { merchantReserveReleaseService } from "./merchantReserveService";
+import { taxMatrixService } from "./taxMatrixService";
 
 export const SETTLEMENT_RECORD_TYPES = Object.values(SettlementRecordType);
 
@@ -18,7 +27,10 @@ function requireText(value: unknown, field: string, maxLength: number): string {
 }
 
 function requireRecordType(value: unknown): SettlementRecordType {
-  if (typeof value !== "string" || !SETTLEMENT_RECORD_TYPES.includes(value as SettlementRecordType)) {
+  if (
+    typeof value !== "string" ||
+    !SETTLEMENT_RECORD_TYPES.includes(value as SettlementRecordType)
+  ) {
     throw new Error(`settlementRecordType must be one of ${SETTLEMENT_RECORD_TYPES.join(", ")}`);
   }
   return value as SettlementRecordType;
@@ -96,6 +108,9 @@ export class SettlementService {
     const batchReference = requireText(input.batchReference, "batchReference", 100);
     const debit = requireAmount(input.debit ?? 0, "debit");
     const credit = requireAmount(input.credit ?? 0, "credit");
+    if (debit === 0 && credit === 0) {
+      return null;
+    }
 
     const merchant = await prisma.merchant.findUnique({
       where: { id: merchantId },
@@ -185,6 +200,123 @@ export class SettlementService {
     if (!existing) throw new Error("Settlement not found");
     await prisma.settlement.delete({ where: { id } });
     return { id };
+  }
+  async computeMarchanetPendingSettlement(input: { merchantId: string }) {
+    const merchant = await prisma.merchant.findUnique({ where: { id: input.merchantId } });
+    if (!merchant) throw new Error("Merchant not found");
+    const defaultTier = await merchantPricingService.getDefaultTier();
+    const merchantTierId = merchant.merchantTierId || defaultTier?.id || "";
+    const provinceCode = merchant.provinceCode;
+    if (!provinceCode)
+      throw new Error("Province code not found for merchant Merchant must update his province");
+    // get province tax rate
+    const provinceTax = await taxMatrixService.getByProvinceCode(provinceCode);
+    if (!provinceTax)
+      throw new Error("Province tax rate not found for merchant Merchant must update his province");
+    const taxRate = provinceTax.gstRate + provinceTax.psrRate;
+
+    // get mercahnt reserve rate
+    const merchantTier = await merchantPricingService.getTier(merchantTierId);
+    if (!merchantTier)
+      throw new Error("Merchant tier not found for merchant Merchant must update his tier");
+    console.log(merchantTier.rollingReserves);
+    // const reserveRate = merchantTier.rollingReserves;
+    // if (!merchantFee) throw new Error("Merchant fee not found");
+    const transactions = await prisma.merchantTransaction.findMany({
+      where: {
+        merchantId: input.merchantId,
+        transactionType: MerchantTransactionType.InvoiceCredit,
+        status: TransactionStatus.Completed,
+        isSettled: false,
+      },
+      select: {
+        productConfigurationId: true,
+        credit: true,
+        chargeRate: true,
+      },
+    });
+
+    const totals = new Map<string | null, { amount: number; merchantFee: number }>();
+    for (const transaction of transactions) {
+      const productConfigurationId = transaction.productConfigurationId;
+      const lineAmount = Number(transaction.credit);
+      const lineFee = lineAmount * Number(transaction.chargeRate) * 0.01;
+      const current = totals.get(productConfigurationId) ?? { amount: 0, merchantFee: 0 };
+      totals.set(productConfigurationId, {
+        amount: current.amount + lineAmount,
+        merchantFee: current.merchantFee + lineFee,
+      });
+    }
+
+    const result = [...totals.entries()].map(([productConfigurationId, group]) => ({
+      productConfigurationId,
+      amount: roundUpTo2Decimals(group.amount),
+      merchantFee: roundUpTo2Decimals(group.merchantFee),
+    }));
+
+    const grossAmount = roundUpTo2Decimals(result.reduce((acc, curr) => acc + curr.amount, 0));
+    const grossFee = roundUpTo2Decimals(result.reduce((acc, curr) => acc + curr.merchantFee, 0));
+    const batchReference = `MARCHANET_PENDING_SETTLEMENT_${Date.now()}`;
+
+    const taxAmount = roundUpTo2Decimals(grossAmount * taxRate * 0.01);
+    const reserveRate = 0.05;
+    const reserveAmount = roundUpTo2Decimals(grossAmount * reserveRate * 0.01);
+    this.create({
+      merchantId: input.merchantId,
+      debit: 0,
+      credit: grossAmount,
+      remarks: `Marchanet Pending Settlement ${Date.now()}`,
+      settlementRecordType: SettlementRecordType.gross,
+      batchReference,
+    });
+
+    this.create({
+      merchantId: input.merchantId,
+      debit: grossFee,
+      credit: 0,
+      remarks: `Marchanet fees on ${batchReference}`,
+      settlementRecordType: SettlementRecordType.merchantFees,
+      batchReference,
+    });
+    this.create({
+      merchantId: input.merchantId,
+      debit: taxAmount,
+      credit: 0,
+      remarks: `Marchanet tax on ${batchReference}`,
+      settlementRecordType: SettlementRecordType.Tax,
+      batchReference,
+    });
+    this.create({
+      merchantId: input.merchantId,
+      debit: reserveAmount,
+      credit: 0,
+      remarks: `Marchanet reserve on ${batchReference}`,
+      settlementRecordType: SettlementRecordType.Reserve,
+      batchReference,
+    });
+
+    await merchantReserveReleaseService.create({
+      merchantId: input.merchantId,
+      amount: reserveAmount,
+      remarks: `Marchanet reserve on ${batchReference}`,
+      reserveReference: batchReference,
+      reserveStatus: ReserveStatus.PENDING,
+    });
+
+    // update merchant transactions to settled and isSettled to true
+    await prisma.merchantTransaction.updateMany({
+      where: {
+        merchantId: input.merchantId,
+        transactionType: MerchantTransactionType.InvoiceCredit,
+        status: TransactionStatus.Completed,
+        isSettled: false,
+      },
+      data: {
+        isSettled: true,
+        groupReference: batchReference,
+      },
+    });
+    return { success: true };
   }
 }
 

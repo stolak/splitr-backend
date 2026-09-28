@@ -34,7 +34,7 @@ const controller = settlementController;
  *         name: settlementRecordType
  *         schema:
  *           type: string
- *           enum: [gross, merchantFees, Tax, Refund, DisputDebit, DisputCredit, CreditAdjustment, DebitAdjustment, ReserveRelease, ReserveContribution]
+ *           enum: [gross, merchantFees, Tax, Refund, Dispute, Adjustment, ReserveRelease, ReserveContribution]
  *     responses:
  *       200:
  *         description: Settlements retrieved successfully
@@ -68,7 +68,7 @@ const controller = settlementController;
  *                 example: Gross settlement for batch B-1001
  *               settlementRecordType:
  *                 type: string
- *                 enum: [gross, merchantFees, Tax, Refund, DisputDebit, DisputCredit, CreditAdjustment, DebitAdjustment, ReserveRelease, ReserveContribution]
+ *                 enum: [gross, merchantFees, Tax, Refund, Dispute, Adjustment, ReserveRelease, ReserveContribution]
  *                 example: gross
  *               batchReference:
  *                 type: string
@@ -83,6 +83,31 @@ const controller = settlementController;
  */
 router.get("/", auth, controller.list.bind(controller));
 router.post("/", auth, controller.create.bind(controller));
+
+/**
+ * @swagger
+ * /api/v1/settlements/pending:
+ *   get:
+ *     summary: Compute a merchant's pending settlement by product
+ *     description: >
+ *       Testing endpoint. No authentication.
+ *       Groups unsettled completed invoice credits by product and sums credit times chargeRate.
+ *     tags: [Settlement]
+ *     parameters:
+ *       - in: query
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Pending settlement totals by product configuration
+ *       400:
+ *         description: merchantId is required
+ *       404:
+ *         description: Merchant or merchant fee not found
+ */
+router.get("/pending", controller.computePendingSettlement.bind(controller));
 
 /**
  * @swagger
@@ -131,7 +156,7 @@ router.post("/", auth, controller.create.bind(controller));
  *                 type: string
  *               settlementRecordType:
  *                 type: string
- *                 enum: [gross, merchantFees, Tax, Refund, DisputDebit, DisputCredit, CreditAdjustment, DebitAdjustment, ReserveRelease, ReserveContribution]
+ *                 enum: [gross, merchantFees, Tax, Refund, Dispute, Adjustment, ReserveRelease, ReserveContribution]
  *               batchReference:
  *                 type: string
  *     responses:
