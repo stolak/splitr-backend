@@ -302,6 +302,33 @@ export class SettlementService {
       batchReference,
     });
 
+    // get all mature reserve releases
+    const matureReserveReleases = await merchantReserveReleaseService.list({
+      merchantId: input.merchantId,
+      reserveStatus: ReserveStatus.PENDING,
+      releasedDate: {
+        lte: new Date(Date.now()),
+      },
+    });
+    this.create({
+      merchantId: input.merchantId,
+      debit: matureReserveReleases.reduce((acc, curr) => acc + Number(curr.amount), 0),
+      credit: 0,
+      remarks: `Total mature reserve releases ${matureReserveReleases.length}`,
+      settlementRecordType: SettlementRecordType.Reserve,
+      batchReference,
+    });
+    if (matureReserveReleases.length > 0) {
+      // set all mature reserve releases status to released
+      await merchantReserveReleaseService.updateMany({
+        where: {
+          id: { in: matureReserveReleases.map((r) => r.id) },
+        },
+        data: {
+          reserveStatus: ReserveStatus.COMPLETED,
+        },
+      });
+    }
     await merchantReserveReleaseService.create({
       merchantId: input.merchantId,
       amount: reserveAmount,

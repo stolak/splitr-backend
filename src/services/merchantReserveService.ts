@@ -85,6 +85,7 @@ export class MerchantReserveReleaseService {
     reserveReference?: string;
     releaseReference?: string;
     reserveStatus?: ReserveStatus;
+    releasedDate?: Prisma.DateTimeNullableFilter;
   }) {
     const records = await prisma.merchantReserveRelease.findMany({
       where: {
@@ -92,6 +93,7 @@ export class MerchantReserveReleaseService {
         ...(filters.reserveReference && { reserveReference: filters.reserveReference }),
         ...(filters.releaseReference && { releaseReference: filters.releaseReference }),
         ...(filters.reserveStatus && { reserveStatus: filters.reserveStatus }),
+        ...(filters.releasedDate && { releasedDate: filters.releasedDate }),
       },
       include: { merchant: { select: merchantSelect } },
       orderBy: { createdAt: "desc" },
@@ -207,6 +209,16 @@ export class MerchantReserveReleaseService {
       include: { merchant: { select: merchantSelect } },
     });
     return mapAmount(record);
+  }
+
+  async updateMany(input: {
+    where: Prisma.MerchantReserveReleaseWhereInput;
+    data: Prisma.MerchantReserveReleaseUpdateManyMutationInput;
+  }) {
+    return prisma.merchantReserveRelease.updateMany({
+      where: input.where,
+      data: input.data,
+    });
   }
 
   async delete(id: string) {
