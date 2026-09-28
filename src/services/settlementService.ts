@@ -219,7 +219,7 @@ export class SettlementService {
     const merchantTier = await merchantPricingService.getTier(merchantTierId);
     if (!merchantTier)
       throw new Error("Merchant tier not found for merchant Merchant must update his tier");
-    console.log(merchantTier.rollingReserves);
+    console.log(merchantTier);
     // const reserveRate = merchantTier.rollingReserves;
     // if (!merchantFee) throw new Error("Merchant fee not found");
     const transactions = await prisma.merchantTransaction.findMany({
@@ -258,15 +258,22 @@ export class SettlementService {
     const grossFee = roundUpTo2Decimals(result.reduce((acc, curr) => acc + curr.merchantFee, 0));
     const batchReference = `MARCHANET_PENDING_SETTLEMENT_${Date.now()}`;
 
-    const taxAmount = roundUpTo2Decimals(grossAmount * taxRate * 0.01);
-    const reserveRate = 0.05;
-    const reserveAmount = roundUpTo2Decimals(grossAmount * reserveRate * 0.01);
+    const taxAmount = roundUpTo2Decimals(grossFee * taxRate * 0.01);
+    const reserveAmount = roundUpTo2Decimals(
+      result.reduce((acc, curr) => {
+        const rate =
+          merchantTier.rollingReserves.find(
+            (r) => r.productConfigurationId === curr.productConfigurationId
+          )?.rate || 0;
+        return acc + roundUpTo2Decimals(curr.amount * Number(rate) * 0.01);
+      }, 0)
+    );
     this.create({
       merchantId: input.merchantId,
       debit: 0,
       credit: grossAmount,
-      remarks: `Marchanet Pending Settlement ${Date.now()}`,
-      settlementRecordType: SettlementRecordType.gross,
+      remarks: `Gross amount due for settlement as at ${Date.now()}`,
+      settlementRecordType: SettlementRecordType.Gross,
       batchReference,
     });
 
@@ -274,15 +281,15 @@ export class SettlementService {
       merchantId: input.merchantId,
       debit: grossFee,
       credit: 0,
-      remarks: `Marchanet fees on ${batchReference}`,
-      settlementRecordType: SettlementRecordType.merchantFees,
+      remarks: `Total Marchanet fees on ${grossAmount}`,
+      settlementRecordType: SettlementRecordType.MerchantFees,
       batchReference,
     });
     this.create({
       merchantId: input.merchantId,
       debit: taxAmount,
       credit: 0,
-      remarks: `Marchanet tax on ${batchReference}`,
+      remarks: `Total  tax on merchant fees ${grossFee}`,
       settlementRecordType: SettlementRecordType.Tax,
       batchReference,
     });
@@ -290,7 +297,7 @@ export class SettlementService {
       merchantId: input.merchantId,
       debit: reserveAmount,
       credit: 0,
-      remarks: `Marchanet reserve on ${batchReference}`,
+      remarks: `Total reserve on merchant Gross ${grossAmount}`,
       settlementRecordType: SettlementRecordType.Reserve,
       batchReference,
     });
@@ -298,9 +305,12 @@ export class SettlementService {
     await merchantReserveReleaseService.create({
       merchantId: input.merchantId,
       amount: reserveAmount,
-      remarks: `Marchanet reserve on ${batchReference}`,
+      remarks: `Reserve on merchant Gross ${grossAmount} ${merchantTier.tCutOff?.rollingMaturityDay} days`,
       reserveReference: batchReference,
       reserveStatus: ReserveStatus.PENDING,
+      releasedDate: new Date(
+        Date.now() + (merchantTier.tCutOff?.rollingMaturityDay || 0) * 24 * 60 * 60 * 1000
+      ),
     });
 
     // update merchant transactions to settled and isSettled to true

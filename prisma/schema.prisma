@@ -1493,8 +1493,8 @@ model TaxMatrix {
 }
 
 enum SettlementRecordType {
-  gross
-  merchantFees
+  Gross
+  MerchantFees
   Tax
   Refund
   Dispute
