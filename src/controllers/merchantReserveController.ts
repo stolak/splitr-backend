@@ -83,6 +83,9 @@ export class MerchantReserveReleaseController extends ReserveController {
   async create(req: Request, res: Response) {
     try {
       const data = await merchantReserveReleaseService.create(req.body ?? {});
+      if (!data) {
+        return this.ok(res, null, "Merchant reserve release skipped because amount is not greater than zero");
+      }
       return this.ok(res, data, "Merchant reserve release created successfully", 201);
     } catch (error) {
       return this.fail(res, error);

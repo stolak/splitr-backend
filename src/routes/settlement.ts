@@ -111,6 +111,89 @@ router.get("/pending", controller.computePendingSettlement.bind(controller));
 
 /**
  * @swagger
+ * /api/v1/settlements/unsettled-balance:
+ *   get:
+ *     summary: Get a merchant's unsettled settlement balance
+ *     description: Returns sum(credit - debit) for settlements where isSettled is false.
+ *     tags: [Settlement]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Unsettled balance retrieved successfully
+ *       400:
+ *         description: merchantId is required
+ */
+router.get("/unsettled-balance", auth, controller.getUnsettledBalance.bind(controller));
+
+/**
+ * @swagger
+ * /api/v1/settlements/instant:
+ *   post:
+ *     summary: Run instant settlement for a merchant
+ *     description: >
+ *       Computes pending settlement, then applies instant payout charges and withholdings
+ *       against the unsettled balance.
+ *     tags: [Settlement]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [merchantId]
+ *             properties:
+ *               merchantId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Instant settlement completed successfully
+ *       400:
+ *         description: merchantId is required
+ *       404:
+ *         description: Merchant not found
+ */
+router.post("/instant", auth, controller.instantSettlement.bind(controller));
+
+/**
+ * @swagger
+ * /api/v1/settlements/batch/{batchReference}:
+ *   delete:
+ *     summary: Delete settlements by batch reference
+ *     description: Deletes every settlement row that matches the given batchReference.
+ *     tags: [Settlement]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: batchReference
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Settlements deleted successfully
+ *       400:
+ *         description: batchReference is required
+ *       404:
+ *         description: Settlement not found
+ */
+router.delete(
+  "/batch/:batchReference",
+  auth,
+  controller.removeByBatchReference.bind(controller)
+);
+
+/**
+ * @swagger
  * /api/v1/settlements/{id}:
  *   get:
  *     summary: Get a settlement by id

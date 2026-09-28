@@ -1512,6 +1512,9 @@ model Settlement {
   remarks              String               @db.VarChar(500)
   settlementRecordType SettlementRecordType
   batchReference       String               @db.VarChar(100)
+  isSettled            Boolean              @default(false)
+  settledDate          DateTime?
+  settlementReference  String?              @db.VarChar(100)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 

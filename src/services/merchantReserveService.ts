@@ -124,7 +124,13 @@ export class MerchantReserveReleaseService {
     const reserveReference = requireText(input.reserveReference, "reserveReference", 100);
     const releaseReference = optionalText(input.releaseReference, "releaseReference", 100);
     const reserveStatus = requireStatus(input.reserveStatus);
-    const amount = requireAmount(input.amount ?? 0, "amount");
+    const rawAmount = input.amount ?? 0;
+    const parsedAmount =
+      typeof rawAmount === "string" && rawAmount.trim() !== "" ? Number(rawAmount) : rawAmount;
+    if (typeof parsedAmount === "number" && Number.isFinite(parsedAmount) && parsedAmount <= 0) {
+      return null;
+    }
+    const amount = requireAmount(rawAmount, "amount");
     const reservedDate =
       input.reservedDate === undefined ? undefined : requireDate(input.reservedDate, "reservedDate");
     const releasedDate = optionalDate(input.releasedDate, "releasedDate");

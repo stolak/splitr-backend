@@ -71,6 +71,33 @@ export class SettlementController {
     }
   }
 
+  async getUnsettledBalance(req: Request, res: Response) {
+    try {
+      const merchantId = queryString(req.query.merchantId);
+      if (!merchantId) {
+        return res.status(400).json({ success: false, message: "merchantId is required" });
+      }
+      const balance = await settlementService.getUnsettledBalance(merchantId);
+      return this.ok(res, { merchantId, balance });
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
+  async instantSettlement(req: Request, res: Response) {
+    try {
+      const merchantId =
+        queryString(req.body?.merchantId) ?? queryString(req.query.merchantId);
+      if (!merchantId) {
+        return res.status(400).json({ success: false, message: "merchantId is required" });
+      }
+      const data = await settlementService.instantSettleMent({ merchantId });
+      return this.ok(res, data, "Instant settlement completed successfully");
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const data = await settlementService.getById(req.params.id);
@@ -108,6 +135,19 @@ export class SettlementController {
     try {
       const data = await settlementService.delete(req.params.id);
       return this.ok(res, data, "Settlement deleted successfully");
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
+  async removeByBatchReference(req: Request, res: Response) {
+    try {
+      const batchReference = queryString(req.params.batchReference);
+      if (!batchReference) {
+        return res.status(400).json({ success: false, message: "batchReference is required" });
+      }
+      const data = await settlementService.deleteByBatchReference(batchReference);
+      return this.ok(res, data, "Settlements deleted successfully");
     } catch (error) {
       return this.fail(res, error);
     }
