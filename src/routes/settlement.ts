@@ -86,6 +86,82 @@ router.post("/", auth, controller.create.bind(controller));
 
 /**
  * @swagger
+ * /api/v1/settlements/settled:
+ *   get:
+ *     summary: List settled settlements grouped by settlementReference
+ *     description: >
+ *       Returns settlements where isSettled is true and settledDate is within the given range,
+ *       grouped by settlementReference.
+ *     tags: [Settlement]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: merchantId
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Settled settlements retrieved successfully
+ *       400:
+ *         description: Invalid or missing date range
+ */
+router.get("/settled", auth, controller.listSettledGrouped.bind(controller));
+
+/**
+ * @swagger
+ * /api/v1/settlements/merchant-dashboard:
+ *   get:
+ *     summary: Merchant settlement dashboard
+ *     description: >
+ *       Returns merchant transactions, reserve releases, pending settlements,
+ *       next payout items, and settled groups for a merchant.
+ *       When startDate/endDate are omitted, defaults to the last 7 days through tomorrow.
+ *     tags: [Settlement]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *     responses:
+ *       200:
+ *         description: Merchant settlement dashboard retrieved successfully
+ *       400:
+ *         description: Validation failed
+ */
+router.get(
+  "/merchant-dashboard",
+  auth,
+  controller.merchantSettlementDashboard.bind(controller)
+);
+
+/**
+ * @swagger
  * /api/v1/settlements/pending:
  *   get:
  *     summary: Compute a merchant's pending settlement by product

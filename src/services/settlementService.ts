@@ -11,12 +11,35 @@ import { roundUpTo2Decimals } from "../utils/helper";
 import { merchantPricingService } from "./merchantPricingService";
 import { merchantReserveReleaseService } from "./merchantReserveService";
 import { taxMatrixService } from "./taxMatrixService";
+import { nextSettlementScheduleService } from "./nextSettlementScheduleService";
 
 export const SETTLEMENT_RECORD_TYPES = Object.values(SettlementRecordType);
 
+export type CreateSettlementInput = {
+  merchantId: string;
+  remarks: string;
+  settlementRecordType: SettlementRecordType;
+  batchReference: string;
+  debit?: number;
+  credit?: number;
+  nextPayOutDate?: Date | string | null;
+  nextSettlementDate?: Date | string | null;
+};
+
+export type UpdateSettlementInput = {
+  merchantId?: string;
+  remarks?: string;
+  settlementRecordType?: SettlementRecordType;
+  batchReference?: string;
+  debit?: number;
+  credit?: number;
+  nextPayOutDate?: Date | string | null;
+  nextSettlementDate?: Date | string | null;
+};
+
 const merchantSelect = { id: true, businessName: true, splitrId: true } as const;
 
-function requireText(value: unknown, field: string, maxLength: number): string {
+function requireText(value: string | undefined, field: string, maxLength: number): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${field} is required`);
   }
@@ -27,24 +50,22 @@ function requireText(value: unknown, field: string, maxLength: number): string {
   return trimmed;
 }
 
-function requireRecordType(value: unknown): SettlementRecordType {
-  if (
-    typeof value !== "string" ||
-    !SETTLEMENT_RECORD_TYPES.includes(value as SettlementRecordType)
-  ) {
+function requireRecordType(value: SettlementRecordType | undefined): SettlementRecordType {
+  if (!value || !SETTLEMENT_RECORD_TYPES.includes(value)) {
     throw new Error(`settlementRecordType must be one of ${SETTLEMENT_RECORD_TYPES.join(", ")}`);
   }
-  return value as SettlementRecordType;
+  return value;
 }
 
-function optionalRecordType(value: unknown): SettlementRecordType | undefined {
+function optionalRecordType(
+  value: SettlementRecordType | undefined
+): SettlementRecordType | undefined {
   if (value === undefined) return undefined;
   return requireRecordType(value);
 }
 
-function requireAmount(value: unknown, field: string): number {
-  const parsed = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
-  if (parsed === undefined) return 0;
+function requireAmount(value: number | undefined, field: string): number {
+  const parsed = value ?? 0;
   if (typeof parsed !== "number" || !Number.isFinite(parsed)) {
     throw new Error(`${field} must be a number`);
   }
@@ -54,9 +75,19 @@ function requireAmount(value: unknown, field: string): number {
   return roundUpTo2Decimals(parsed);
 }
 
-function optionalAmount(value: unknown, field: string): number | undefined {
+function optionalAmount(value: number | undefined, field: string): number | undefined {
   if (value === undefined) return undefined;
   return requireAmount(value, field);
+}
+
+function optionalDate(value: Date | string | null | undefined, field: string): Date | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === "string") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  throw new Error(`${field} must be a valid date`);
 }
 
 function mapSettlement<T extends { debit: Prisma.Decimal; credit: Prisma.Decimal }>(record: T) {
@@ -68,6 +99,16 @@ function mapSettlement<T extends { debit: Prisma.Decimal; credit: Prisma.Decimal
 }
 
 export class SettlementService {
+  private async resolveMerchantTier(merchant: { merchantTierId: string | null }) {
+    const defaultTier = await merchantPricingService.getDefaultTier();
+    const merchantTierId = merchant.merchantTierId || defaultTier?.id || "";
+    const merchantTier = await merchantPricingService.getTier(merchantTierId);
+    if (!merchantTier) {
+      throw new Error("Merchant tier not found for merchant Merchant must update his tier");
+    }
+    return merchantTier;
+  }
+
   async list(filters: {
     merchantId?: string;
     settlementRecordType?: SettlementRecordType;
@@ -85,6 +126,55 @@ export class SettlementService {
       orderBy: { createdAt: "desc" },
     });
     return records.map((record) => mapSettlement(record));
+  }
+
+  async listSettledGroupedByReference(filters: {
+    startDate: Date;
+    endDate: Date;
+    merchantId?: string;
+  }) {
+    if (filters.startDate.getTime() > filters.endDate.getTime()) {
+      throw new Error("startDate must be before or equal to endDate");
+    }
+
+    const records = await prisma.settlement.findMany({
+      where: {
+        isSettled: true,
+        settlementReference: { not: null },
+        settledDate: {
+          gte: filters.startDate,
+          lte: filters.endDate,
+        },
+        ...(filters.merchantId && { merchantId: filters.merchantId }),
+      },
+      orderBy: [{ settledDate: "desc" }, { createdAt: "asc" }],
+    });
+
+    const groups = new Map<
+      string,
+      {
+        settlementReference: string;
+        settledDate: Date | null;
+        data: ReturnType<typeof mapSettlement>[];
+      }
+    >();
+
+    for (const record of records) {
+      const settlementReference = record.settlementReference as string;
+      const mapped = mapSettlement(record);
+      const existing = groups.get(settlementReference);
+      if (!existing) {
+        groups.set(settlementReference, {
+          settlementReference,
+          settledDate: record.settledDate,
+          data: [mapped],
+        });
+        continue;
+      }
+      existing.data.push(mapped);
+    }
+
+    return [...groups.values()];
   }
 
   async getById(id: string) {
@@ -105,20 +195,15 @@ export class SettlementService {
     return roundUpTo2Decimals(credit - debit);
   }
 
-  async create(input: {
-    merchantId?: unknown;
-    debit?: unknown;
-    credit?: unknown;
-    remarks?: unknown;
-    settlementRecordType?: unknown;
-    batchReference?: unknown;
-  }) {
+  async create(input: CreateSettlementInput) {
     const merchantId = requireText(input.merchantId, "merchantId", 191);
     const remarks = requireText(input.remarks, "remarks", 500);
     const settlementRecordType = requireRecordType(input.settlementRecordType);
     const batchReference = requireText(input.batchReference, "batchReference", 100);
-    const debit = requireAmount(input.debit ?? 0, "debit");
-    const credit = requireAmount(input.credit ?? 0, "credit");
+    const debit = requireAmount(input.debit, "debit");
+    const credit = requireAmount(input.credit, "credit");
+    const nextPayOutDate = optionalDate(input.nextPayOutDate, "nextPayOutDate");
+    const nextSettlementDate = optionalDate(input.nextSettlementDate, "nextSettlementDate");
     if (debit === 0 && credit === 0) {
       return null;
     }
@@ -137,23 +222,15 @@ export class SettlementService {
         remarks,
         settlementRecordType,
         batchReference,
+        nextPayOutDate,
+        nextSettlementDate,
       },
       include: { merchant: { select: merchantSelect } },
     });
     return mapSettlement(record);
   }
 
-  async update(
-    id: string,
-    input: {
-      merchantId?: unknown;
-      debit?: unknown;
-      credit?: unknown;
-      remarks?: unknown;
-      settlementRecordType?: unknown;
-      batchReference?: unknown;
-    }
-  ) {
+  async update(id: string, input: UpdateSettlementInput) {
     const existing = await prisma.settlement.findUnique({ where: { id } });
     if (!existing) throw new Error("Settlement not found");
 
@@ -168,6 +245,8 @@ export class SettlementService {
         : requireText(input.batchReference, "batchReference", 100);
     const debit = optionalAmount(input.debit, "debit");
     const credit = optionalAmount(input.credit, "credit");
+    const nextPayOutDate = optionalDate(input.nextPayOutDate, "nextPayOutDate");
+    const nextSettlementDate = optionalDate(input.nextSettlementDate, "nextSettlementDate");
 
     if (
       merchantId === undefined &&
@@ -175,7 +254,9 @@ export class SettlementService {
       settlementRecordType === undefined &&
       batchReference === undefined &&
       debit === undefined &&
-      credit === undefined
+      credit === undefined &&
+      nextPayOutDate === undefined &&
+      nextSettlementDate === undefined
     ) {
       throw new Error("At least one field is required");
     }
@@ -197,6 +278,8 @@ export class SettlementService {
         ...(batchReference !== undefined && { batchReference }),
         ...(debit !== undefined && { debit }),
         ...(credit !== undefined && { credit }),
+        ...(nextPayOutDate !== undefined && { nextPayOutDate }),
+        ...(nextSettlementDate !== undefined && { nextSettlementDate }),
       },
       include: { merchant: { select: merchantSelect } },
     });
@@ -226,8 +309,7 @@ export class SettlementService {
   async computeMarchanetPendingSettlement(input: { merchantId: string }) {
     const merchant = await prisma.merchant.findUnique({ where: { id: input.merchantId } });
     if (!merchant) throw new Error("Merchant not found");
-    const defaultTier = await merchantPricingService.getDefaultTier();
-    const merchantTierId = merchant.merchantTierId || defaultTier?.id || "";
+    const merchantTier = await this.resolveMerchantTier(merchant);
     const provinceCode = merchant.provinceCode;
     if (!provinceCode)
       throw new Error("Province code not found for merchant Merchant must update his province");
@@ -238,10 +320,6 @@ export class SettlementService {
     const taxRate = provinceTax.gstRate + provinceTax.psrRate;
 
     // get mercahnt reserve rate
-    const merchantTier = await merchantPricingService.getTier(merchantTierId);
-    if (!merchantTier)
-      throw new Error("Merchant tier not found for merchant Merchant must update his tier");
-    console.log(merchantTier);
     // const reserveRate = merchantTier.rollingReserves;
     // if (!merchantFee) throw new Error("Merchant fee not found");
     const transactions = await prisma.merchantTransaction.findMany({
@@ -252,6 +330,7 @@ export class SettlementService {
         isSettled: false,
       },
       select: {
+        id: true,
         productConfigurationId: true,
         credit: true,
         chargeRate: true,
@@ -279,17 +358,29 @@ export class SettlementService {
     const grossAmount = roundUpTo2Decimals(result.reduce((acc, curr) => acc + curr.amount, 0));
     const grossFee = roundUpTo2Decimals(result.reduce((acc, curr) => acc + curr.merchantFee, 0));
     const batchReference = `MARCHANET_PENDING_SETTLEMENT_${Date.now()}`;
+    const nextSettlementDate = await nextSettlementScheduleService.get();
 
     const taxAmount = roundUpTo2Decimals(grossFee * taxRate * 0.01);
-    const reserveAmount = roundUpTo2Decimals(
-      result.reduce((acc, curr) => {
-        const rate =
-          merchantTier.rollingReserves.find(
-            (r) => r.productConfigurationId === curr.productConfigurationId
-          )?.rate || 0;
-        return acc + roundUpTo2Decimals(curr.amount * Number(rate) * 0.01);
-      }, 0)
-    );
+    const rollingMaturityDay = merchantTier.tCutOff?.rollingMaturityDay || 0;
+    const releasedDate = new Date(Date.now() + rollingMaturityDay * 24 * 60 * 60 * 1000);
+    let reserveAmount = 0;
+    for (const curr of result) {
+      const mt = merchantTier.rollingReserves.find(
+        (r) => r.productConfigurationId === curr.productConfigurationId
+      );
+      const rate = mt?.rate || 0;
+      const lineReserve = roundUpTo2Decimals(curr.amount * Number(rate) * 0.01);
+      reserveAmount = roundUpTo2Decimals(reserveAmount + lineReserve);
+      await merchantReserveReleaseService.create({
+        merchantId: input.merchantId,
+        amount: lineReserve,
+        remarks: `Reserve for  ${mt?.productConfiguration.productName}: ${curr.amount} X ${rate}%`,
+        reserveReference: batchReference,
+        reserveStatus: ReserveStatus.PENDING,
+        releasedDate,
+        reserveType: ReserveType.ReserveRelease,
+      });
+    }
     this.create({
       merchantId: input.merchantId,
       debit: 0,
@@ -297,6 +388,8 @@ export class SettlementService {
       remarks: `Gross amount due for settlement as at ${Date.now()}`,
       settlementRecordType: SettlementRecordType.Gross,
       batchReference,
+      nextPayOutDate: nextSettlementDate.nextPayOutDate,
+      nextSettlementDate: nextSettlementDate.nextSettlementDate,
     });
 
     this.create({
@@ -306,6 +399,8 @@ export class SettlementService {
       remarks: `Total Marchanet fees on ${grossAmount}`,
       settlementRecordType: SettlementRecordType.MerchantFees,
       batchReference,
+      nextPayOutDate: nextSettlementDate.nextPayOutDate,
+      nextSettlementDate: nextSettlementDate.nextSettlementDate,
     });
     this.create({
       merchantId: input.merchantId,
@@ -314,6 +409,8 @@ export class SettlementService {
       remarks: `Total  tax on merchant fees ${grossFee}`,
       settlementRecordType: SettlementRecordType.Tax,
       batchReference,
+      nextPayOutDate: nextSettlementDate.nextPayOutDate,
+      nextSettlementDate: nextSettlementDate.nextSettlementDate,
     });
     this.create({
       merchantId: input.merchantId,
@@ -322,6 +419,8 @@ export class SettlementService {
       remarks: `Total reserve on merchant Gross ${grossAmount}`,
       settlementRecordType: SettlementRecordType.Reserve,
       batchReference,
+      nextPayOutDate: nextSettlementDate.nextPayOutDate,
+      nextSettlementDate: nextSettlementDate.nextSettlementDate,
     });
 
     // get all mature reserve releases
@@ -339,6 +438,8 @@ export class SettlementService {
       remarks: `Total mature reserve releases ${matureReserveReleases.length}`,
       settlementRecordType: SettlementRecordType.Reserve,
       batchReference,
+      nextPayOutDate: nextSettlementDate.nextPayOutDate,
+      nextSettlementDate: nextSettlementDate.nextSettlementDate,
     });
     if (matureReserveReleases.length > 0) {
       // set all mature reserve releases status to released
@@ -351,20 +452,11 @@ export class SettlementService {
         },
       });
     }
-    await merchantReserveReleaseService.create({
-      merchantId: input.merchantId,
-      amount: reserveAmount,
-      remarks: `Reserve on merchant Gross ${grossAmount} ${merchantTier.tCutOff?.rollingMaturityDay} days`,
-      reserveReference: batchReference,
-      reserveStatus: ReserveStatus.PENDING,
-      releasedDate: new Date(
-        Date.now() + (merchantTier.tCutOff?.rollingMaturityDay || 0) * 24 * 60 * 60 * 1000
-      ),
-    });
 
     // update merchant transactions to settled and isSettled to true
     await prisma.merchantTransaction.updateMany({
       where: {
+        id: { in: transactions.map((t) => t.id) },
         merchantId: input.merchantId,
         transactionType: MerchantTransactionType.InvoiceCredit,
         status: TransactionStatus.Completed,
@@ -422,6 +514,32 @@ export class SettlementService {
 
     return { success: true, batchReference };
   }
+
+  async pendingSettlements(input: { merchantId: string }) {
+    const pendingSettlements = await prisma.settlement.findMany({
+      where: {
+        merchantId: input.merchantId,
+        isSettled: false,
+      },
+    });
+    return pendingSettlements;
+  }
+  async pendingSettlementsReadyForPayment(input: { merchantId: string }) {
+    const nextSettlementDate = await nextSettlementScheduleService.get();
+    const pendingSettlements = await prisma.settlement.findMany({
+      where: {
+        merchantId: input.merchantId,
+        isSettled: false,
+        nextPayOutDate: {
+          lte: nextSettlementDate.nextPayOutDate,
+        },
+        nextSettlementDate: {
+          lte: nextSettlementDate.nextSettlementDate,
+        },
+      },
+    });
+    return pendingSettlements;
+  }
   async merchantSettlementDashboud(input: {
     merchantId: string;
     dateRange?: { startDate: Date; endDate: Date };
@@ -430,26 +548,60 @@ export class SettlementService {
     const endDate = input.dateRange?.endDate || new Date(Date.now() + 24 * 60 * 60 * 1000);
     const startDate = input.dateRange?.startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     // get merchant transactions between startDate and endDate where transactionType is InvoiceCredit and status is Completed and isSettled is false
-    const merchantTransactions = await prisma.merchantTransaction.findMany({
-      where: {
-        merchantId: input.merchantId,
-        transactionType: MerchantTransactionType.InvoiceCredit,
-        status: TransactionStatus.Completed,
-        // isSettled: false,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
+    const merchant = await prisma.merchant.findUnique({ where: { id: input.merchantId } });
+    if (!merchant) throw new Error("Merchant not found");
+
+    const [
+      merchantTransactions,
+      reserveReleases,
+      pendingSettlements,
+      pendingSettlementsReadyForPayment,
+      settledTransactions,
+      merchantTier,
+    ] = await Promise.all([
+      prisma.merchantTransaction.findMany({
+        where: {
+          merchantId: input.merchantId,
+          transactionType: MerchantTransactionType.InvoiceCredit,
+          status: TransactionStatus.Completed,
+          // isSettled: false,
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
         },
-      },
-    });
+      }),
+      prisma.merchantReserveRelease.findMany({
+        where: {
+          merchantId: input.merchantId,
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+      }),
+      this.pendingSettlements({ merchantId: input.merchantId }),
+      this.pendingSettlementsReadyForPayment({ merchantId: input.merchantId }),
+      this.listSettledGroupedByReference({ merchantId: input.merchantId, startDate, endDate }),
+      this.resolveMerchantTier({ merchantTierId: merchant?.merchantTierId || null }),
+    ]);
 
     return {
-      nextPayment: 3400,
-      callupEligibility: 6000,
-      rollingReserved: {},
-      settlementTransaction: [],
-      nextPayOut: [],
-      merchantTransaction: [],
+      nextPayment: roundUpTo2Decimals(
+        pendingSettlementsReadyForPayment.reduce(
+          (acc, curr) => acc + Number(curr.credit) - +Number(curr.debit),
+          0
+        )
+      ),
+      callupEligibility: roundUpTo2Decimals(
+        pendingSettlements.reduce((acc, curr) => acc + Number(curr.credit) - +Number(curr.debit), 0)
+      ),
+      reserveReleases,
+      settledTransactions,
+      pendingSettlements,
+      nextPayOut: pendingSettlementsReadyForPayment,
+      merchantTransactions,
+      merchantTier,
     };
   }
 }

@@ -1,6 +1,11 @@
 import { Request, Response } from "express";
 import { SettlementRecordType } from "@prisma/client";
-import { SETTLEMENT_RECORD_TYPES, settlementService } from "../services/settlementService";
+import {
+  SETTLEMENT_RECORD_TYPES,
+  settlementService,
+  CreateSettlementInput,
+  UpdateSettlementInput,
+} from "../services/settlementService";
 
 function queryString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -58,6 +63,37 @@ export class SettlementController {
     }
   }
 
+  async listSettledGrouped(req: Request, res: Response) {
+    try {
+      const startDateRaw = queryString(req.query.startDate);
+      const endDateRaw = queryString(req.query.endDate);
+      if (!startDateRaw || !endDateRaw) {
+        return res.status(400).json({
+          success: false,
+          message: "startDate and endDate are required",
+        });
+      }
+
+      const startDate = new Date(startDateRaw);
+      const endDate = new Date(endDateRaw);
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "startDate and endDate must be valid dates",
+        });
+      }
+
+      const data = await settlementService.listSettledGroupedByReference({
+        startDate,
+        endDate,
+        merchantId: queryString(req.query.merchantId),
+      });
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async computePendingSettlement(req: Request, res: Response) {
     try {
       const merchantId = queryString(req.query.merchantId);
@@ -98,6 +134,45 @@ export class SettlementController {
     }
   }
 
+  async merchantSettlementDashboard(req: Request, res: Response) {
+    try {
+      const merchantId = queryString(req.query.merchantId);
+      if (!merchantId) {
+        return res.status(400).json({ success: false, message: "merchantId is required" });
+      }
+
+      const startDateRaw = queryString(req.query.startDate);
+      const endDateRaw = queryString(req.query.endDate);
+      let dateRange: { startDate: Date; endDate: Date } | undefined;
+
+      if (startDateRaw || endDateRaw) {
+        if (!startDateRaw || !endDateRaw) {
+          return res.status(400).json({
+            success: false,
+            message: "startDate and endDate are both required when providing a date range",
+          });
+        }
+        const startDate = new Date(startDateRaw);
+        const endDate = new Date(endDateRaw);
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: "startDate and endDate must be valid dates",
+          });
+        }
+        dateRange = { startDate, endDate };
+      }
+
+      const data = await settlementService.merchantSettlementDashboud({
+        merchantId,
+        ...(dateRange && { dateRange }),
+      });
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const data = await settlementService.getById(req.params.id);
@@ -112,7 +187,7 @@ export class SettlementController {
 
   async create(req: Request, res: Response) {
     try {
-      const data = await settlementService.create(req.body ?? {});
+      const data = await settlementService.create((req.body ?? {}) as CreateSettlementInput);
       if (!data) {
         return this.ok(res, null, "Settlement skipped because debit and credit are both zero");
       }
@@ -124,7 +199,10 @@ export class SettlementController {
 
   async update(req: Request, res: Response) {
     try {
-      const data = await settlementService.update(req.params.id, req.body ?? {});
+      const data = await settlementService.update(
+        req.params.id,
+        (req.body ?? {}) as UpdateSettlementInput
+      );
       return this.ok(res, data, "Settlement updated successfully");
     } catch (error) {
       return this.fail(res, error);
