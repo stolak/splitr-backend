@@ -4,6 +4,7 @@ import {
   TransactionStatus,
   MerchantTransactionType,
   ReserveStatus,
+  ReserveType,
 } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { roundUpTo2Decimals } from "../utils/helper";
@@ -414,11 +415,42 @@ export class SettlementService {
         remarks: `Instant settlement witholding on ${unsettledBalance}`,
         reserveReference: batchReference,
         reserveStatus: ReserveStatus.PENDING,
+        reserveType: ReserveType.InstantCallUp,
         releasedDate: new Date(Date.now()),
       });
     }
 
     return { success: true, batchReference };
+  }
+  async merchantSettlementDashboud(input: {
+    merchantId: string;
+    dateRange?: { startDate: Date; endDate: Date };
+  }) {
+    // if dateRange is not provided, use the current date+1 day for endDate and aweek ago date for startDate
+    const endDate = input.dateRange?.endDate || new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const startDate = input.dateRange?.startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // get merchant transactions between startDate and endDate where transactionType is InvoiceCredit and status is Completed and isSettled is false
+    const merchantTransactions = await prisma.merchantTransaction.findMany({
+      where: {
+        merchantId: input.merchantId,
+        transactionType: MerchantTransactionType.InvoiceCredit,
+        status: TransactionStatus.Completed,
+        // isSettled: false,
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    });
+
+    return {
+      nextPayment: 3400,
+      callupEligibility: 6000,
+      rollingReserved: {},
+      settlementTransaction: [],
+      nextPayOut: [],
+      merchantTransaction: [],
+    };
   }
 }
 

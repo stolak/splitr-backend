@@ -1,8 +1,9 @@
-import { Prisma, ReserveStatus } from "@prisma/client";
+import { Prisma, ReserveStatus, ReserveType } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { roundUpTo2Decimals } from "../utils/helper";
 
 export const RESERVE_STATUSES = Object.values(ReserveStatus);
+export const RESERVE_TYPE = Object.values(ReserveType);
 
 const merchantSelect = { id: true, businessName: true, splitrId: true } as const;
 
@@ -28,6 +29,12 @@ function requireStatus(value: unknown): ReserveStatus {
     throw new Error(`reserveStatus must be one of ${RESERVE_STATUSES.join(", ")}`);
   }
   return value as ReserveStatus;
+}
+function requirereserveType(value: unknown): ReserveType {
+  if (typeof value !== "string" || !RESERVE_TYPE.includes(value as ReserveType)) {
+    throw new Error(`reserveType must be one of ${RESERVE_TYPE.join(", ")}`);
+  }
+  return value as ReserveType;
 }
 
 function optionalStatus(value: unknown): ReserveStatus | undefined {
@@ -118,12 +125,14 @@ export class MerchantReserveReleaseService {
     reservedDate?: unknown;
     releasedDate?: unknown;
     reserveStatus?: unknown;
+    reserveType?: unknown;
   }) {
     const merchantId = requireText(input.merchantId, "merchantId", 191);
     const remarks = requireText(input.remarks, "remarks", 500);
     const reserveReference = requireText(input.reserveReference, "reserveReference", 100);
     const releaseReference = optionalText(input.releaseReference, "releaseReference", 100);
     const reserveStatus = requireStatus(input.reserveStatus);
+    const reserveType = requirereserveType(input.reserveType);
     const rawAmount = input.amount ?? 0;
     const parsedAmount =
       typeof rawAmount === "string" && rawAmount.trim() !== "" ? Number(rawAmount) : rawAmount;
@@ -132,7 +141,9 @@ export class MerchantReserveReleaseService {
     }
     const amount = requireAmount(rawAmount, "amount");
     const reservedDate =
-      input.reservedDate === undefined ? undefined : requireDate(input.reservedDate, "reservedDate");
+      input.reservedDate === undefined
+        ? undefined
+        : requireDate(input.reservedDate, "reservedDate");
     const releasedDate = optionalDate(input.releasedDate, "releasedDate");
 
     await assertMerchant(merchantId);
@@ -147,6 +158,7 @@ export class MerchantReserveReleaseService {
         ...(releaseReference !== undefined && { releaseReference }),
         ...(reservedDate !== undefined && { reservedDate }),
         ...(releasedDate !== undefined && { releasedDate }),
+        ...(reserveType !== undefined && { reserveType }),
       },
       include: { merchant: { select: merchantSelect } },
     });
@@ -171,7 +183,8 @@ export class MerchantReserveReleaseService {
 
     const merchantId =
       input.merchantId === undefined ? undefined : requireText(input.merchantId, "merchantId", 191);
-    const remarks = input.remarks === undefined ? undefined : requireText(input.remarks, "remarks", 500);
+    const remarks =
+      input.remarks === undefined ? undefined : requireText(input.remarks, "remarks", 500);
     const reserveReference =
       input.reserveReference === undefined
         ? undefined
@@ -180,7 +193,9 @@ export class MerchantReserveReleaseService {
     const reserveStatus = optionalStatus(input.reserveStatus);
     const amount = optionalAmount(input.amount, "amount");
     const reservedDate =
-      input.reservedDate === undefined ? undefined : requireDate(input.reservedDate, "reservedDate");
+      input.reservedDate === undefined
+        ? undefined
+        : requireDate(input.reservedDate, "reservedDate");
     const releasedDate = optionalDate(input.releasedDate, "releasedDate");
 
     if (
@@ -314,7 +329,8 @@ export class MerchantReserveContributionService {
 
     const merchantId =
       input.merchantId === undefined ? undefined : requireText(input.merchantId, "merchantId", 191);
-    const remarks = input.remarks === undefined ? undefined : requireText(input.remarks, "remarks", 500);
+    const remarks =
+      input.remarks === undefined ? undefined : requireText(input.remarks, "remarks", 500);
     const batchReference =
       input.batchReference === undefined
         ? undefined

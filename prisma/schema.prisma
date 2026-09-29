@@ -1537,6 +1537,7 @@ model MerchantReserveRelease {
   reservedDate     DateTime      @default(now())
   releasedDate     DateTime?
   reserveStatus    ReserveStatus
+  reserveType      ReserveType   @default(ReserveRelease)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -1544,6 +1545,11 @@ model MerchantReserveRelease {
   @@index([reserveReference])
   @@index([releaseReference])
   @@map("merchant_reserve_release")
+}
+
+enum ReserveType {
+  InstantCallUp
+  ReserveRelease
 }
 
 enum ReserveStatus {
