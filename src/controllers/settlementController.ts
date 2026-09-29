@@ -107,6 +107,19 @@ export class SettlementController {
     }
   }
 
+  async simulatePendingSettlement(req: Request, res: Response) {
+    try {
+      const merchantId = queryString(req.query.merchantId);
+      if (!merchantId) {
+        return res.status(400).json({ success: false, message: "merchantId is required" });
+      }
+      const data = await settlementService.simulateMarchanetPendingSettlement({ merchantId });
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async getUnsettledBalance(req: Request, res: Response) {
     try {
       const merchantId = queryString(req.query.merchantId);

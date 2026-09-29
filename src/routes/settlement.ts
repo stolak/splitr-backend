@@ -187,6 +187,31 @@ router.get("/pending", controller.computePendingSettlement.bind(controller));
 
 /**
  * @swagger
+ * /api/v1/settlements/pending/simulate:
+ *   get:
+ *     summary: Simulate pending settlement without writing
+ *     description: >
+ *       Reads unsettled invoice credits and builds the settlement and reserve-release
+ *       payloads that compute would insert. Does not create or update any records.
+ *     tags: [Settlement]
+ *     parameters:
+ *       - in: query
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Simulated pending settlement payloads
+ *       400:
+ *         description: merchantId is required
+ *       404:
+ *         description: Merchant or related configuration not found
+ */
+router.get("/pending/simulate", controller.simulatePendingSettlement.bind(controller));
+
+/**
+ * @swagger
  * /api/v1/settlements/unsettled-balance:
  *   get:
  *     summary: Get a merchant's unsettled settlement balance

@@ -306,25 +306,21 @@ export class SettlementService {
     }
     return { batchReference: reference, deletedCount: result.count };
   }
-  async computeMarchanetPendingSettlement(input: { merchantId: string }) {
-    const merchant = await prisma.merchant.findUnique({ where: { id: input.merchantId } });
+  private async buildMarchanetPendingSettlementDraft(merchantId: string) {
+    const merchant = await prisma.merchant.findUnique({ where: { id: merchantId } });
     if (!merchant) throw new Error("Merchant not found");
     const merchantTier = await this.resolveMerchantTier(merchant);
     const provinceCode = merchant.provinceCode;
     if (!provinceCode)
       throw new Error("Province code not found for merchant Merchant must update his province");
-    // get province tax rate
     const provinceTax = await taxMatrixService.getByProvinceCode(provinceCode);
     if (!provinceTax)
       throw new Error("Province tax rate not found for merchant Merchant must update his province");
     const taxRate = provinceTax.gstRate + provinceTax.psrRate;
 
-    // get mercahnt reserve rate
-    // const reserveRate = merchantTier.rollingReserves;
-    // if (!merchantFee) throw new Error("Merchant fee not found");
     const transactions = await prisma.merchantTransaction.findMany({
       where: {
-        merchantId: input.merchantId,
+        merchantId,
         transactionType: MerchantTransactionType.InvoiceCredit,
         status: TransactionStatus.Completed,
         isSettled: false,
@@ -359,93 +355,143 @@ export class SettlementService {
     const grossFee = roundUpTo2Decimals(result.reduce((acc, curr) => acc + curr.merchantFee, 0));
     const batchReference = `MARCHANET_PENDING_SETTLEMENT_${Date.now()}`;
     const nextSettlementDate = await nextSettlementScheduleService.get();
-
     const taxAmount = roundUpTo2Decimals(grossFee * taxRate * 0.01);
     const rollingMaturityDay = merchantTier.tCutOff?.rollingMaturityDay || 0;
     const releasedDate = new Date(Date.now() + rollingMaturityDay * 24 * 60 * 60 * 1000);
+
+    const reserveReleases: Array<{
+      merchantId: string;
+      amount: number;
+      remarks: string;
+      reserveReference: string;
+      reserveStatus: ReserveStatus;
+      releasedDate: Date;
+      reserveType: ReserveType;
+    }> = [];
     let reserveAmount = 0;
     for (const curr of result) {
-      const mt = merchantTier.rollingReserves.find(
+      const mt = merchantTier.rollingReserves?.find(
         (r) => r.productConfigurationId === curr.productConfigurationId
       );
       const rate = mt?.rate || 0;
       const lineReserve = roundUpTo2Decimals(curr.amount * Number(rate) * 0.01);
       reserveAmount = roundUpTo2Decimals(reserveAmount + lineReserve);
-      await merchantReserveReleaseService.create({
-        merchantId: input.merchantId,
-        amount: lineReserve,
-        remarks: `Reserve for  ${mt?.productConfiguration.productName}: ${curr.amount} X ${rate}%`,
-        reserveReference: batchReference,
-        reserveStatus: ReserveStatus.PENDING,
-        releasedDate,
-        reserveType: ReserveType.ReserveRelease,
-      });
+      if (lineReserve > 0) {
+        reserveReleases.push({
+          merchantId,
+          amount: lineReserve,
+          remarks: `Reserve for  ${mt?.productConfiguration?.productName}: ${curr.amount} X ${rate}%`,
+          reserveReference: batchReference,
+          reserveStatus: ReserveStatus.PENDING,
+          releasedDate,
+          reserveType: ReserveType.ReserveRelease,
+        });
+      }
     }
-    this.create({
-      merchantId: input.merchantId,
-      debit: 0,
-      credit: grossAmount,
-      remarks: `Gross amount due for settlement as at ${Date.now()}`,
-      settlementRecordType: SettlementRecordType.Gross,
-      batchReference,
-      nextPayOutDate: nextSettlementDate.nextPayOutDate,
-      nextSettlementDate: nextSettlementDate.nextSettlementDate,
-    });
 
-    this.create({
-      merchantId: input.merchantId,
-      debit: grossFee,
-      credit: 0,
-      remarks: `Total Marchanet fees on ${grossAmount}`,
-      settlementRecordType: SettlementRecordType.MerchantFees,
+    const settlementBase = {
+      merchantId,
       batchReference,
       nextPayOutDate: nextSettlementDate.nextPayOutDate,
       nextSettlementDate: nextSettlementDate.nextSettlementDate,
-    });
-    this.create({
-      merchantId: input.merchantId,
-      debit: taxAmount,
-      credit: 0,
-      remarks: `Total  tax on merchant fees ${grossFee}`,
-      settlementRecordType: SettlementRecordType.Tax,
-      batchReference,
-      nextPayOutDate: nextSettlementDate.nextPayOutDate,
-      nextSettlementDate: nextSettlementDate.nextSettlementDate,
-    });
-    this.create({
-      merchantId: input.merchantId,
-      debit: reserveAmount,
-      credit: 0,
-      remarks: `Total reserve on merchant Gross ${grossAmount}`,
-      settlementRecordType: SettlementRecordType.Reserve,
-      batchReference,
-      nextPayOutDate: nextSettlementDate.nextPayOutDate,
-      nextSettlementDate: nextSettlementDate.nextSettlementDate,
-    });
+    };
 
-    // get all mature reserve releases
+    const settlementCandidates: CreateSettlementInput[] = [
+      {
+        ...settlementBase,
+        debit: 0,
+        credit: grossAmount,
+        remarks: `Gross amount due for settlement as at ${Date.now()}`,
+        settlementRecordType: SettlementRecordType.Gross,
+      },
+      {
+        ...settlementBase,
+        debit: grossFee,
+        credit: 0,
+        remarks: `Total Marchanet fees on ${grossAmount}`,
+        settlementRecordType: SettlementRecordType.MerchantFees,
+      },
+      {
+        ...settlementBase,
+        debit: taxAmount,
+        credit: 0,
+        remarks: `Total  tax on merchant fees ${grossFee}`,
+        settlementRecordType: SettlementRecordType.Tax,
+      },
+      {
+        ...settlementBase,
+        debit: reserveAmount,
+        credit: 0,
+        remarks: `Total reserve on merchant Gross ${grossAmount}`,
+        settlementRecordType: SettlementRecordType.Reserve,
+      },
+    ];
+
     const matureReserveReleases = await merchantReserveReleaseService.list({
-      merchantId: input.merchantId,
+      merchantId,
       reserveStatus: ReserveStatus.PENDING,
       releasedDate: {
         lte: new Date(Date.now()),
       },
     });
-    this.create({
-      merchantId: input.merchantId,
+    settlementCandidates.push({
+      ...settlementBase,
       debit: matureReserveReleases.reduce((acc, curr) => acc + Number(curr.amount), 0),
       credit: 0,
       remarks: `Total mature reserve releases ${matureReserveReleases.length}`,
       settlementRecordType: SettlementRecordType.Reserve,
-      batchReference,
-      nextPayOutDate: nextSettlementDate.nextPayOutDate,
-      nextSettlementDate: nextSettlementDate.nextSettlementDate,
     });
-    if (matureReserveReleases.length > 0) {
-      // set all mature reserve releases status to released
+
+    const settlements = settlementCandidates.filter(
+      (row) => (row.debit ?? 0) !== 0 || (row.credit ?? 0) !== 0
+    );
+
+    return {
+      merchantTier,
+      batchReference,
+      settlements,
+      reserveReleases,
+      matureReserveReleaseIds: matureReserveReleases.map((r) => r.id),
+      transactionIds: transactions.map((t) => t.id),
+      productTotals: result,
+      totals: {
+        grossAmount,
+        grossFee,
+        taxAmount,
+        reserveAmount,
+      },
+    };
+  }
+
+  async simulateMarchanetPendingSettlement(input: { merchantId: string }) {
+    const draft = await this.buildMarchanetPendingSettlementDraft(input.merchantId);
+    return {
+      success: true as const,
+      merchantTier: draft.merchantTier,
+      batchReference: draft.batchReference,
+      settlements: draft.settlements,
+      reserveReleases: draft.reserveReleases,
+      matureReserveReleaseIds: draft.matureReserveReleaseIds,
+      transactionIds: draft.transactionIds,
+      productTotals: draft.productTotals,
+      totals: draft.totals,
+    };
+  }
+
+  async computeMarchanetPendingSettlement(input: { merchantId: string }) {
+    const draft = await this.buildMarchanetPendingSettlementDraft(input.merchantId);
+
+    for (const reserveRelease of draft.reserveReleases) {
+      await merchantReserveReleaseService.create(reserveRelease);
+    }
+    for (const settlement of draft.settlements) {
+      await this.create(settlement);
+    }
+
+    if (draft.matureReserveReleaseIds.length > 0) {
       await merchantReserveReleaseService.updateMany({
         where: {
-          id: { in: matureReserveReleases.map((r) => r.id) },
+          id: { in: draft.matureReserveReleaseIds },
         },
         data: {
           reserveStatus: ReserveStatus.COMPLETED,
@@ -453,21 +499,23 @@ export class SettlementService {
       });
     }
 
-    // update merchant transactions to settled and isSettled to true
-    await prisma.merchantTransaction.updateMany({
-      where: {
-        id: { in: transactions.map((t) => t.id) },
-        merchantId: input.merchantId,
-        transactionType: MerchantTransactionType.InvoiceCredit,
-        status: TransactionStatus.Completed,
-        isSettled: false,
-      },
-      data: {
-        isSettled: true,
-        groupReference: batchReference,
-      },
-    });
-    return { success: true, merchantTier };
+    if (draft.transactionIds.length > 0) {
+      await prisma.merchantTransaction.updateMany({
+        where: {
+          id: { in: draft.transactionIds },
+          merchantId: input.merchantId,
+          transactionType: MerchantTransactionType.InvoiceCredit,
+          status: TransactionStatus.Completed,
+          isSettled: false,
+        },
+        data: {
+          isSettled: true,
+          groupReference: draft.batchReference,
+        },
+      });
+    }
+
+    return { success: true, merchantTier: draft.merchantTier };
   }
   async instantSettleMent(input: { merchantId: string }) {
     const settlement = await this.computeMarchanetPendingSettlement({
