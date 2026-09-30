@@ -598,14 +598,18 @@ export class SettlementService {
     // get merchant transactions between startDate and endDate where transactionType is InvoiceCredit and status is Completed and isSettled is false
     const merchant = await prisma.merchant.findUnique({ where: { id: input.merchantId } });
     if (!merchant) throw new Error("Merchant not found");
-
+    // const simulateMarchanetPendingSettlement = await this.simulateMarchanetPendingSettlement({
+    //   merchantId: input.merchantId,
+    // });
     const [
       merchantTransactions,
+
       reserveReleases,
       pendingSettlements,
       pendingSettlementsReadyForPayment,
       settledTransactions,
       merchantTier,
+      simulateMarchanetPendingSettlement,
     ] = await Promise.all([
       prisma.merchantTransaction.findMany({
         where: {
@@ -632,18 +636,37 @@ export class SettlementService {
       this.pendingSettlementsReadyForPayment({ merchantId: input.merchantId }),
       this.listSettledGroupedByReference({ merchantId: input.merchantId, startDate, endDate }),
       this.resolveMerchantTier({ merchantTierId: merchant?.merchantTierId || null }),
+      this.simulateMarchanetPendingSettlement({ merchantId: input.merchantId }),
     ]);
 
+    const unprocessScheduledSettlements = {
+      grossSale: simulateMarchanetPendingSettlement.settlements
+        .filter((s) => s.settlementRecordType === SettlementRecordType.Gross)
+        .reduce((acc, curr) => acc + Number(curr.credit), 0),
+      paymentDue: simulateMarchanetPendingSettlement.settlements.reduce(
+        (acc, curr) => acc + Number(curr.credit) - +Number(curr.debit),
+        0
+      ),
+    };
+
+    const processScheduledSettlements = {
+      grossSale: pendingSettlementsReadyForPayment
+        .filter((s) => s.settlementRecordType === SettlementRecordType.Gross)
+        .reduce((acc, curr) => acc + Number(curr.credit), 0),
+      paymentDue: pendingSettlementsReadyForPayment.reduce(
+        (acc, curr) => acc + Number(curr.credit) - +Number(curr.debit),
+        0
+      ),
+    };
+
     return {
-      nextPayment: roundUpTo2Decimals(
-        pendingSettlementsReadyForPayment.reduce(
-          (acc, curr) => acc + Number(curr.credit) - +Number(curr.debit),
-          0
-        )
-      ),
-      callupEligibility: roundUpTo2Decimals(
-        pendingSettlements.reduce((acc, curr) => acc + Number(curr.credit) - +Number(curr.debit), 0)
-      ),
+      nextPayment: processScheduledSettlements,
+      unprocessScheduledSettlements,
+      callupEligibility: {
+        grossSale: processScheduledSettlements.grossSale + unprocessScheduledSettlements.grossSale,
+        paymentDue:
+          processScheduledSettlements.paymentDue + unprocessScheduledSettlements.paymentDue,
+      },
       reserveReleases,
       settledTransactions,
       pendingSettlements,
