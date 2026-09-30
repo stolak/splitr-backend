@@ -382,7 +382,7 @@ export class SettlementService {
           amount: lineReserve,
           remarks: `Reserve for  ${mt?.productConfiguration?.productName}: ${curr.amount} X ${rate}%`,
           reserveReference: batchReference,
-          reserveStatus: ReserveStatus.PENDING,
+          reserveStatus: ReserveStatus.RESERVED,
           releasedDate,
           reserveType: ReserveType.ReserveRelease,
         });
@@ -429,7 +429,7 @@ export class SettlementService {
 
     const matureReserveReleases = await merchantReserveReleaseService.list({
       merchantId,
-      reserveStatus: ReserveStatus.PENDING,
+      reserveStatus: ReserveStatus.RESERVED,
       releasedDate: {
         lte: new Date(Date.now()),
       },
@@ -494,7 +494,7 @@ export class SettlementService {
           id: { in: draft.matureReserveReleaseIds },
         },
         data: {
-          reserveStatus: ReserveStatus.COMPLETED,
+          reserveStatus: ReserveStatus.RELEASED,
         },
       });
     }
@@ -554,7 +554,7 @@ export class SettlementService {
         amount: witholdingAmount,
         remarks: `Instant settlement witholding on ${unsettledBalance}`,
         reserveReference: batchReference,
-        reserveStatus: ReserveStatus.PENDING,
+        reserveStatus: ReserveStatus.RESERVED,
         reserveType: ReserveType.InstantCallUp,
         releasedDate: new Date(Date.now()),
       });
@@ -653,19 +653,28 @@ export class SettlementService {
       grossSale: pendingSettlementsReadyForPayment
         .filter((s) => s.settlementRecordType === SettlementRecordType.Gross)
         .reduce((acc, curr) => acc + Number(curr.credit), 0),
+
       paymentDue: pendingSettlementsReadyForPayment.reduce(
         (acc, curr) => acc + Number(curr.credit) - +Number(curr.debit),
         0
       ),
+      instantPayout: pendingSettlementsReadyForPayment
+        .filter(
+          (s) =>
+            s.settlementRecordType === SettlementRecordType.InstantPayout ||
+            s.settlementRecordType === SettlementRecordType.InstantPayoutFee
+        )
+        .reduce((acc, curr) => acc + Number(curr.debit), 0),
     };
 
     return {
       nextPayment: processScheduledSettlements,
       unprocessScheduledSettlements,
       callupEligibility: {
-        grossSale: processScheduledSettlements.grossSale + unprocessScheduledSettlements.grossSale,
+        grossSale: processScheduledSettlements.grossSale,
         paymentDue:
-          processScheduledSettlements.paymentDue + unprocessScheduledSettlements.paymentDue,
+          processScheduledSettlements.paymentDue + processScheduledSettlements.instantPayout,
+        instantPaidOutAmount: processScheduledSettlements.instantPayout,
       },
       reserveReleases,
       settledTransactions,

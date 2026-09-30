@@ -1501,6 +1501,8 @@ enum SettlementRecordType {
   Adjustment
   Reserve
   CallUpWithhold
+  InstantPayout
+  InstantPayoutFee
 }
 
 model Settlement {
@@ -1536,7 +1538,7 @@ model MerchantReserveRelease {
   releaseReference String?       @db.VarChar(100)
   reservedDate     DateTime      @default(now())
   releasedDate     DateTime?
-  reserveStatus    ReserveStatus
+  reserveStatus    ReserveStatus @default(RESERVED)
   reserveType      ReserveType   @default(ReserveRelease)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -1553,9 +1555,10 @@ enum ReserveType {
 }
 
 enum ReserveStatus {
-  PENDING
-  COMPLETED
-  FAILED
+  RESERVED
+  RELEASED
+  MATURED
+  CANCELLED
 }
 
 model MerchantReserveContribution {
