@@ -984,7 +984,186 @@ export class StripeService {
   /**
    * Create a Stripe Issuing virtual card for a buyer with an allocated spending limit.
    */
+  // this include mock data for the cardholder and card
   async createVirtualCard(input: CreateVirtualCardInput) {
+    if (!input.buyerId) {
+      throw new Error("buyerId is required");
+    }
+
+    if (
+      typeof input.amountCents !== "number" ||
+      !Number.isFinite(input.amountCents) ||
+      input.amountCents <= 0
+    ) {
+      throw new Error("A positive amountCents is required");
+    }
+
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: input.buyerId },
+    });
+
+    if (!buyer) {
+      throw new Error("Buyer not found");
+    }
+
+    const name = [buyer.firstName, buyer.lastName].filter(Boolean).join(" ").trim() || buyer.email;
+
+    const email = buyer.email;
+
+    const currency = (input.currency || STRIPE_DEFAULT_CURRENCY).toLowerCase();
+
+    const country = (input.billing?.country || STRIPE_CONNECT_COUNTRY || "CA").toUpperCase();
+
+    const line1 =
+      input.billing?.line1 ||
+      buyer.address ||
+      [buyer.houseNo, buyer.address].filter(Boolean).join(" ").trim();
+
+    const city = input.billing?.city || buyer.city;
+
+    const state = input.billing?.state || buyer.provinceCode || buyer.state;
+
+    const postalCode = input.billing?.postalCode || buyer.postalCode;
+
+    if (!line1 || !city || !state || !postalCode) {
+      throw new Error(
+        "Buyer billing address is incomplete. Provide billing.line1, city, state, and postalCode."
+      );
+    }
+
+    const amountCents = Math.round(input.amountCents);
+
+    let cardholder: any;
+    let card: any;
+
+    // ==========================================
+    // DEVELOPMENT MOCK
+    // ==========================================
+
+    const USE_STRIPE_ISSUING_MOCK = process.env.USE_STRIPE_ISSUING_MOCK === "true";
+
+    if (USE_STRIPE_ISSUING_MOCK) {
+      console.log("Using MOCK Stripe Issuing");
+
+      cardholder = {
+        id: `ich_mock_${crypto.randomUUID()}`,
+        object: "issuing.cardholder",
+        name,
+        email,
+        phone_number: buyer.phoneNumber ?? null,
+        type: "individual",
+        billing: {
+          address: {
+            line1,
+            line2: input.billing?.line2 || buyer.houseNo || null,
+            city,
+            state,
+            postal_code: postalCode,
+            country,
+          },
+        },
+        status: "active",
+        created: Math.floor(Date.now() / 1000),
+        livemode: false,
+      };
+
+      card = {
+        id: `ic_mock_${crypto.randomUUID()}`,
+        object: "issuing.card",
+        cardholder: cardholder.id,
+        type: "virtual",
+        status: "active",
+        currency,
+        spending_controls: {
+          spending_limits: [
+            {
+              amount: amountCents,
+              interval: "all_time",
+            },
+          ],
+        },
+        livemode: false,
+        created: Math.floor(Date.now() / 1000),
+      };
+    }
+
+    // ==========================================
+    // REAL STRIPE
+    // ==========================================
+    else {
+      cardholder = await getStripe().issuing.cardholders.create({
+        name,
+        email,
+        type: "individual",
+        billing: {
+          address: {
+            line1,
+            ...(input.billing?.line2 || buyer.houseNo
+              ? {
+                  line2: input.billing?.line2 || buyer.houseNo || undefined,
+                }
+              : {}),
+            city,
+            state,
+            postal_code: postalCode,
+            country,
+          },
+        },
+        ...(buyer.phoneNumber
+          ? {
+              phone_number: buyer.phoneNumber,
+            }
+          : {}),
+      });
+
+      card = await getStripe().issuing.cards.create({
+        cardholder: cardholder.id,
+        currency,
+        type: "virtual",
+        status: "active",
+        spending_controls: {
+          spending_limits: [
+            {
+              amount: amountCents,
+              interval: "all_time",
+            },
+          ],
+        },
+      });
+    }
+
+    // ==========================================
+    // YOUR DATABASE
+    // ==========================================
+
+    const stripeCard = await prisma.stripeCard.create({
+      data: {
+        stripeCardholderId: cardholder.id,
+        stripeCardId: card.id,
+        allocatedAmount: amountCents,
+        currency,
+        used: false,
+        buyerId: buyer.id,
+      },
+    });
+
+    return {
+      id: stripeCard.id,
+      stripeCardholderId: cardholder.id,
+      stripeCardId: card.id,
+      allocatedAmount: stripeCard.allocatedAmount,
+      currency: stripeCard.currency,
+      used: stripeCard.used,
+      buyerId: stripeCard.buyerId,
+      createdAt: stripeCard.createdAt,
+
+      // Stripe-like objects
+      cardholder,
+      card,
+    };
+  }
+
+  async createVirtualCardActual(input: CreateVirtualCardInput) {
     if (!input.buyerId) {
       throw new Error("buyerId is required");
     }
@@ -1019,7 +1198,24 @@ export class StripeService {
         "Buyer billing address is incomplete. Provide billing.line1, city, state, and postalCode."
       );
     }
-
+    console.log("Debugging 1", {
+      name,
+      email,
+      type: "individual",
+      billing: {
+        address: {
+          line1,
+          ...(input.billing?.line2 || buyer.houseNo
+            ? { line2: input.billing?.line2 || buyer.houseNo || undefined }
+            : {}),
+          city,
+          state,
+          postal_code: postalCode,
+          country,
+        },
+      },
+      ...(buyer.phoneNumber ? { phone_number: buyer.phoneNumber } : {}),
+    });
     const cardholder = await getStripe().issuing.cardholders.create({
       name,
       email,
@@ -1039,6 +1235,7 @@ export class StripeService {
       ...(buyer.phoneNumber ? { phone_number: buyer.phoneNumber } : {}),
     });
 
+    console.log("Debugging 2");
     const card = await getStripe().issuing.cards.create({
       cardholder: cardholder.id,
       currency,
@@ -1054,6 +1251,7 @@ export class StripeService {
       },
     });
 
+    console.log("Debugging 3");
     const stripeCard = await prisma.stripeCard.create({
       data: {
         stripeCardholderId: cardholder.id,
@@ -1065,6 +1263,7 @@ export class StripeService {
       },
     });
 
+    console.log("Debugging 4");
     return {
       id: stripeCard.id,
       stripeCardholderId: cardholder.id,
