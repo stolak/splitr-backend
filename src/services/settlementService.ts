@@ -194,7 +194,24 @@ export class SettlementService {
     const debit = Number(totals._sum.debit ?? 0);
     return roundUpTo2Decimals(credit - debit);
   }
-
+  async unclosedSettlementDetailsByMerchantId(merchantId: string) {
+    const records = await prisma.settlement.findMany({
+      where: { merchantId, isSettled: false },
+      include: { merchant: { select: merchantSelect } },
+    });
+    console.log("records", records);
+    return {
+      total: records.reduce((acc, curr) => acc + Number(curr.credit) - Number(curr.debit), 0),
+      paidOutAmount: records
+        .filter(
+          (record) =>
+            record.settlementRecordType === SettlementRecordType.InstantPayout ||
+            record.settlementRecordType === SettlementRecordType.InstantPayoutFee
+        )
+        .reduce((acc, curr) => acc + Number(curr.debit), 0),
+      records: records.map((record) => mapSettlement(record)),
+    };
+  }
   async create(input: CreateSettlementInput) {
     const merchantId = requireText(input.merchantId, "merchantId", 191);
     const remarks = requireText(input.remarks, "remarks", 500);
@@ -517,7 +534,69 @@ export class SettlementService {
 
     return { success: true, merchantTier: draft.merchantTier };
   }
-  async instantSettleMent(input: { merchantId: string }) {
+  async instantSettlement(input: { merchantId: string; amount: number }) {
+    const amount = roundUpTo2Decimals(requireAmount(input.amount, "amount"));
+    const merchant = await prisma.merchant.findUnique({ where: { id: input.merchantId } });
+    if (!merchant) throw new Error("Merchant not found");
+    const merchantTier = await this.resolveMerchantTier(merchant);
+    const unsettledBalance = await this.unclosedSettlementDetailsByMerchantId(input.merchantId);
+    const batchReference =
+      unsettledBalance.records[0]?.batchReference ??
+      `${input.merchantId}_INSTANT_SETTLEMENT_${Date.now()}`;
+    if (unsettledBalance.total > 0) {
+      const instantSettlementSettings = merchantTier.instantPayoutSettings;
+      const instantPayoutChargeRate =
+        Number(instantSettlementSettings?.baseRate) +
+        Number(instantSettlementSettings?.surchargeRate);
+      const maxPayoutAmount = roundUpTo2Decimals(
+        Number(unsettledBalance.total + unsettledBalance.paidOutAmount) *
+          Number(instantSettlementSettings?.maxPayoutPercentage) *
+          0.01
+      );
+      const possiblePayoutAmount = maxPayoutAmount - unsettledBalance.paidOutAmount;
+      console.log("unsettledBalance.total", unsettledBalance.total);
+      console.log("maxPayoutAmount", maxPayoutAmount);
+      console.log("unsettledBalance.paidOutAmount", unsettledBalance.paidOutAmount);
+      console.log("possiblePayoutAmount", possiblePayoutAmount);
+      console.log("amount", amount);
+      if (possiblePayoutAmount < amount) {
+        throw new Error(`Amount is greater than possible payout amount ${possiblePayoutAmount}`);
+      }
+      const chargeAmount = roundUpTo2Decimals(amount * instantPayoutChargeRate * 0.01);
+      const payoutAmount = roundUpTo2Decimals(amount - chargeAmount);
+
+      console.log("chargeAmount", chargeAmount);
+      console.log("payoutAmount", payoutAmount);
+      console.log("batchReference", batchReference);
+      console.log("merchantId", input.merchantId);
+      console.log("settlementRecordType", SettlementRecordType.MerchantFees);
+      console.log("remarks", `Instant settlement charge on ${amount}`);
+      console.log("debit", chargeAmount);
+      console.log("credit", 0);
+      console.log("settlementRecordType", SettlementRecordType.InstantPayout);
+      console.log("remarks", `Instant settlement payout on ${amount}`);
+      await this.create({
+        merchantId: input.merchantId,
+        debit: chargeAmount,
+        credit: 0,
+        remarks: `Instant settlement charge on ${amount}`,
+        settlementRecordType: SettlementRecordType.MerchantFees,
+        batchReference,
+      });
+      await this.create({
+        merchantId: input.merchantId,
+        debit: payoutAmount,
+        credit: 0,
+        remarks: `Instant settlement payout on ${amount}`,
+        settlementRecordType: SettlementRecordType.InstantPayout,
+        batchReference,
+      });
+    }
+
+    return { success: true, batchReference };
+  }
+
+  async instantSettleMentOld(input: { merchantId: string }) {
     const settlement = await this.computeMarchanetPendingSettlement({
       merchantId: input.merchantId,
     });
@@ -578,12 +657,12 @@ export class SettlementService {
       where: {
         merchantId: input.merchantId,
         isSettled: false,
-        nextPayOutDate: {
-          lte: nextSettlementDate.nextPayOutDate,
-        },
-        nextSettlementDate: {
-          lte: nextSettlementDate.nextSettlementDate,
-        },
+        // nextPayOutDate: {
+        //   lte: nextSettlementDate.nextPayOutDate,
+        // },
+        // nextSettlementDate: {
+        //   lte: nextSettlementDate.nextSettlementDate,
+        // },
       },
     });
     return pendingSettlements;

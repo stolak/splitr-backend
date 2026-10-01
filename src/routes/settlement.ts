@@ -239,26 +239,37 @@ router.get("/unsettled-balance", auth, controller.getUnsettledBalance.bind(contr
  *   post:
  *     summary: Run instant settlement for a merchant
  *     description: >
- *       Computes pending settlement, then applies instant payout charges and withholdings
- *       against the unsettled balance.
+ *       Applies instant payout charges and withholdings for the given amount.
+ *       merchantId and amount may be sent in the JSON body or as query parameters.
  *     tags: [Settlement]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: merchantId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: amount
+ *         schema:
+ *           type: number
  *     requestBody:
- *       required: true
+ *       required: false
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [merchantId]
  *             properties:
  *               merchantId:
  *                 type: string
+ *               amount:
+ *                 type: number
+ *                 example: 500
  *     responses:
  *       200:
  *         description: Instant settlement completed successfully
  *       400:
- *         description: merchantId is required
+ *         description: merchantId is required, or amount is not a number greater than 0
  *       404:
  *         description: Merchant not found
  */

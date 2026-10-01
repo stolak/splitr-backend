@@ -135,12 +135,20 @@ export class SettlementController {
 
   async instantSettlement(req: Request, res: Response) {
     try {
-      const merchantId =
-        queryString(req.body?.merchantId) ?? queryString(req.query.merchantId);
+      const merchantId = queryString(req.body?.merchantId) ?? queryString(req.query.merchantId);
+      const rawAmount = req.body?.amount;
+      const amount =
+        typeof rawAmount === "string" && rawAmount.trim() !== "" ? Number(rawAmount) : Number(rawAmount);
       if (!merchantId) {
         return res.status(400).json({ success: false, message: "merchantId is required" });
       }
-      const data = await settlementService.instantSettleMent({ merchantId });
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "amount must be a number greater than 0",
+        });
+      }
+      const data = await settlementService.instantSettlement({ merchantId, amount });
       return this.ok(res, data, "Instant settlement completed successfully");
     } catch (error) {
       return this.fail(res, error);
