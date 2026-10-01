@@ -559,28 +559,18 @@ export class SettlementService {
       console.log("unsettledBalance.paidOutAmount", unsettledBalance.paidOutAmount);
       console.log("possiblePayoutAmount", possiblePayoutAmount);
       console.log("amount", amount);
-      if (possiblePayoutAmount < amount) {
+      if (possiblePayoutAmount < amount && Math.abs(possiblePayoutAmount - amount) > 0.1) {
         throw new Error(`Amount is greater than possible payout amount ${possiblePayoutAmount}`);
       }
       const chargeAmount = roundUpTo2Decimals(amount * instantPayoutChargeRate * 0.01);
       const payoutAmount = roundUpTo2Decimals(amount - chargeAmount);
 
-      console.log("chargeAmount", chargeAmount);
-      console.log("payoutAmount", payoutAmount);
-      console.log("batchReference", batchReference);
-      console.log("merchantId", input.merchantId);
-      console.log("settlementRecordType", SettlementRecordType.MerchantFees);
-      console.log("remarks", `Instant settlement charge on ${amount}`);
-      console.log("debit", chargeAmount);
-      console.log("credit", 0);
-      console.log("settlementRecordType", SettlementRecordType.InstantPayout);
-      console.log("remarks", `Instant settlement payout on ${amount}`);
       await this.create({
         merchantId: input.merchantId,
         debit: chargeAmount,
         credit: 0,
         remarks: `Instant settlement charge on ${amount}`,
-        settlementRecordType: SettlementRecordType.MerchantFees,
+        settlementRecordType: SettlementRecordType.InstantPayoutFee,
         batchReference,
       });
       await this.create({
