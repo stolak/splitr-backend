@@ -274,8 +274,7 @@ export class PlaidService {
     if (address?.street2) data.houseNo = address.street2;
     if (address?.city) data.city = address.city;
     if (address?.region) {
-      data.province = address.region;
-      data.state = address.region;
+      data.provinceCode = address.region;
     }
     if (address?.postal_code) data.postalCode = address.postal_code;
 

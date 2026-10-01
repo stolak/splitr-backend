@@ -224,7 +224,7 @@ model Buyer {
   lastName      String?
   DOB           String?
   phoneNumber   String?
-  email         String  @unique
+  email         String     @unique
   address       String?
   gender        String?
   idType        String?
@@ -233,7 +233,8 @@ model Buyer {
   sinExpiryDate String?
   photo         String?
   state         String?
-  province      String?
+  provinceCode  String?
+  province      TaxMatrix? @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
   city          String?
   houseNo       String?
   postalCode    String?
@@ -855,6 +856,8 @@ model Invoice {
   merchant            Merchant?        @relation(fields: [merchantId], references: [id], onDelete: Restrict)
   categoryId          String?
   category            InvoiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  provinceCode        String?
+  province            TaxMatrix?       @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
 
   items                Item[]
   status               InvoiceStatus         @default(Pending)
@@ -1484,10 +1487,13 @@ model TaxMatrix {
   province             String
   gstRate              Decimal               @db.Decimal(10, 4)
   psrRate              Decimal               @db.Decimal(10, 4)
+  timeZone             String                @db.VarChar(100)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   merchantTransactions MerchantTransaction[]
   merchants            Merchant[]
+  buyers               Buyer[]
+  invoices             Invoice[]
 
   @@map("tax_matrix")
 }

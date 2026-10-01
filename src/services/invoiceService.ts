@@ -79,6 +79,7 @@ export interface CreateInvoiceInput {
   buyerId?: string;
   merchantId: string;
   categoryId?: string;
+  provinceCode?: string;
   items: CreateItemInput[];
   status?: InvoiceStatus;
   type?: InvoiceType;
@@ -93,6 +94,7 @@ export interface UpdateInvoiceInput {
   amount?: number;
   buyerId?: string;
   categoryId?: string | null;
+  provinceCode?: string | null;
   status?: InvoiceStatus;
   type?: InvoiceType;
   items?: UpdateItemInput[];
@@ -134,6 +136,16 @@ const invoiceSelect = {
   buyerId: true,
   merchantId: true,
   categoryId: true,
+  provinceCode: true,
+  province: {
+    select: {
+      provinceCode: true,
+      province: true,
+      gstRate: true,
+      psrRate: true,
+      timeZone: true,
+    },
+  },
   status: true,
   type: true,
   returnStatus: true,
@@ -169,6 +181,29 @@ const itemSelect = {
 } as const;
 
 const INTERST_RATE = process.env.INTERST_RATE || 7.5;
+
+async function resolveProvinceCode(provinceCode?: string | null) {
+  if (provinceCode === undefined) return undefined;
+  if (provinceCode === null || provinceCode.trim() === "") return null;
+  const code = provinceCode.trim().toUpperCase();
+  const tax = await prisma.taxMatrix.findUnique({
+    where: { provinceCode: code },
+    select: { provinceCode: true },
+  });
+  if (!tax) throw new Error("Province code not found");
+  return tax.provinceCode;
+}
+
+const invoiceProvinceInclude = {
+  select: {
+    provinceCode: true,
+    province: true,
+    gstRate: true,
+    psrRate: true,
+    timeZone: true,
+  },
+} as const;
+
 // ==================== INVOICE SERVICE ====================
 
 export class InvoiceService {
@@ -214,6 +249,18 @@ export class InvoiceService {
       if (!input.items || input.items.length === 0) {
         throw new Error("Invoice must have at least one item");
       }
+      const provinceCode = await resolveProvinceCode(
+        input.provinceCode ??
+          (input.buyerId
+            ? (
+                await prisma.buyer.findUnique({
+                  where: { id: input.buyerId },
+                  select: { provinceCode: true },
+                })
+              )?.provinceCode
+            : undefined) ??
+          merchant.provinceCode
+      );
       const amount =
         input.items.length > 0
           ? input.items.reduce((acc: number, item: CreateItemInput) => acc + item.amount, 0)
@@ -231,6 +278,7 @@ export class InvoiceService {
           buyerId: input.buyerId,
           merchantId: input.merchantId,
           categoryId: input.categoryId,
+          ...(provinceCode ? { provinceCode } : {}),
           status: input.status || InvoiceStatus.Pending,
           type: input.type || InvoiceType.Purchase,
           items: {
@@ -246,6 +294,7 @@ export class InvoiceService {
           category: {
             select: invoiceCategorySelect,
           },
+          province: invoiceProvinceInclude,
           buyer: {
             select: {
               id: true,
@@ -960,6 +1009,9 @@ export class InvoiceService {
       if (input.amount !== undefined) updateData.amount = input.amount;
       if (input.buyerId !== undefined) updateData.buyerId = input.buyerId;
       if (input.categoryId !== undefined) updateData.categoryId = input.categoryId;
+      if (input.provinceCode !== undefined) {
+        updateData.provinceCode = await resolveProvinceCode(input.provinceCode);
+      }
       if (input.status !== undefined) updateData.status = input.status;
       if (input.type !== undefined) updateData.type = input.type;
       if (input.returnStatus !== undefined) updateData.returnStatus = input.returnStatus;
@@ -988,6 +1040,7 @@ export class InvoiceService {
           category: {
             select: invoiceCategorySelect,
           },
+          province: invoiceProvinceInclude,
           buyer: {
             select: {
               id: true,

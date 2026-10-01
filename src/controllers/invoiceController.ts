@@ -62,6 +62,10 @@ import {
  *               categoryId:
  *                 type: string
  *                 description: Optional invoice category ID
+ *               provinceCode:
+ *                 type: string
+ *                 example: ON
+ *                 description: Optional tax matrix province code. Defaults to the buyer province, then the merchant province.
  *               status:
  *                 type: string
  *                 enum: [Pending, Paid, Cancelled]
@@ -305,6 +309,11 @@ import {
  *                 description: >
  *                   Optional invoice category ID. Pass a valid category id to assign,
  *                   or null to clear the category on the invoice.
+ *               provinceCode:
+ *                 type: string
+ *                 nullable: true
+ *                 example: ON
+ *                 description: Tax matrix province code. Pass null to clear it.
  *               status:
  *                 type: string
  *                 enum: [Pending, Paid, Cancelled]

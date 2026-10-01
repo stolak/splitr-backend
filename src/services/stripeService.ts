@@ -1011,7 +1011,7 @@ export class StripeService {
       buyer.address ||
       [buyer.houseNo, buyer.address].filter(Boolean).join(" ").trim();
     const city = input.billing?.city || buyer.city;
-    const state = input.billing?.state || buyer.province || buyer.state;
+    const state = input.billing?.state || buyer.provinceCode || buyer.state;
     const postalCode = input.billing?.postalCode || buyer.postalCode;
 
     if (!line1 || !city || !state || !postalCode) {

@@ -13,6 +13,19 @@ function requireProvinceCode(value: unknown): string {
   return code;
 }
 
+function requireTimeZone(value: unknown): string {
+  const timeZone = requireText(value, "timeZone");
+  if (timeZone.length > 100) {
+    throw new Error("timeZone must be at most 100 characters");
+  }
+  return timeZone;
+}
+
+function optionalTimeZone(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return requireTimeZone(value);
+}
+
 function requireNumber(value: unknown, field: string): number {
   const parsed = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
   if (typeof parsed !== "number" || !Number.isFinite(parsed)) {
@@ -70,11 +83,13 @@ export class TaxMatrixService {
     province?: unknown;
     gstRate?: unknown;
     psrRate?: unknown;
+    timeZone?: unknown;
   }) {
     const provinceCode = requireProvinceCode(input.provinceCode);
     const province = requireText(input.province, "province");
     const gstRate = requireNumber(input.gstRate, "gstRate");
     const psrRate = requireNumber(input.psrRate, "psrRate");
+    const timeZone = requireTimeZone(input.timeZone);
 
     const duplicate = await prisma.taxMatrix.findUnique({
       where: { provinceCode },
@@ -86,7 +101,7 @@ export class TaxMatrixService {
 
     const record = await write(() =>
       prisma.taxMatrix.create({
-        data: { provinceCode, province, gstRate, psrRate },
+        data: { provinceCode, province, gstRate, psrRate, timeZone },
       })
     );
     return mapTaxMatrix(record);
@@ -99,6 +114,7 @@ export class TaxMatrixService {
       province?: unknown;
       gstRate?: unknown;
       psrRate?: unknown;
+      timeZone?: unknown;
     }
   ) {
     const existing = await prisma.taxMatrix.findUnique({ where: { id } });
@@ -109,12 +125,14 @@ export class TaxMatrixService {
     const province = input.province === undefined ? undefined : requireText(input.province, "province");
     const gstRate = optionalNumber(input.gstRate, "gstRate");
     const psrRate = optionalNumber(input.psrRate, "psrRate");
+    const timeZone = optionalTimeZone(input.timeZone);
 
     if (
       provinceCode === undefined &&
       province === undefined &&
       gstRate === undefined &&
-      psrRate === undefined
+      psrRate === undefined &&
+      timeZone === undefined
     ) {
       throw new Error("At least one field is required");
     }
@@ -137,6 +155,7 @@ export class TaxMatrixService {
           ...(province !== undefined && { province }),
           ...(gstRate !== undefined && { gstRate }),
           ...(psrRate !== undefined && { psrRate }),
+          ...(timeZone !== undefined && { timeZone }),
         },
       })
     );

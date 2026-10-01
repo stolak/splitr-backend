@@ -1343,19 +1343,19 @@ async function main() {
 
     console.log("\n🍁 Seeding tax matrix...");
     const taxMatrices = [
-      { provinceCode: "AB", province: "Alberta", gstRate: 5, psrRate: 0 },
-      { provinceCode: "BC", province: "British Columbia", gstRate: 5, psrRate: 7 },
-      { provinceCode: "MB", province: "Manitoba", gstRate: 5, psrRate: 7 },
-      { provinceCode: "NB", province: "New Brunswick", gstRate: 15, psrRate: 0 },
-      { provinceCode: "NL", province: "Newfoundland and Labrador", gstRate: 15, psrRate: 0 },
-      { provinceCode: "NT", province: "Northwest Territories", gstRate: 5, psrRate: 0 },
-      { provinceCode: "NS", province: "Nova Scotia", gstRate: 14, psrRate: 0 },
-      { provinceCode: "NU", province: "Nunavut", gstRate: 5, psrRate: 0 },
-      { provinceCode: "ON", province: "Ontario", gstRate: 13, psrRate: 0 },
-      { provinceCode: "PE", province: "Prince Edward Island", gstRate: 15, psrRate: 0 },
-      { provinceCode: "QC", province: "Quebec", gstRate: 5, psrRate: 9.98 },
-      { provinceCode: "SK", province: "Saskatchewan", gstRate: 5, psrRate: 6 },
-      { provinceCode: "YT", province: "Yukon", gstRate: 5, psrRate: 0 },
+      { provinceCode: "AB", province: "Alberta", gstRate: 5, psrRate: 0, timeZone: "America/Edmonton" },
+      { provinceCode: "BC", province: "British Columbia", gstRate: 5, psrRate: 7, timeZone: "America/Vancouver" },
+      { provinceCode: "MB", province: "Manitoba", gstRate: 5, psrRate: 7, timeZone: "America/Winnipeg" },
+      { provinceCode: "NB", province: "New Brunswick", gstRate: 15, psrRate: 0, timeZone: "America/Moncton" },
+      { provinceCode: "NL", province: "Newfoundland and Labrador", gstRate: 15, psrRate: 0, timeZone: "America/St_Johns" },
+      { provinceCode: "NT", province: "Northwest Territories", gstRate: 5, psrRate: 0, timeZone: "America/Yellowknife" },
+      { provinceCode: "NS", province: "Nova Scotia", gstRate: 14, psrRate: 0, timeZone: "America/Halifax" },
+      { provinceCode: "NU", province: "Nunavut", gstRate: 5, psrRate: 0, timeZone: "America/Iqaluit" },
+      { provinceCode: "ON", province: "Ontario", gstRate: 13, psrRate: 0, timeZone: "America/Toronto" },
+      { provinceCode: "PE", province: "Prince Edward Island", gstRate: 15, psrRate: 0, timeZone: "America/Halifax" },
+      { provinceCode: "QC", province: "Quebec", gstRate: 5, psrRate: 9.98, timeZone: "America/Toronto" },
+      { provinceCode: "SK", province: "Saskatchewan", gstRate: 5, psrRate: 6, timeZone: "America/Regina" },
+      { provinceCode: "YT", province: "Yukon", gstRate: 5, psrRate: 0, timeZone: "America/Whitehorse" },
     ];
 
     for (const row of taxMatrices) {
@@ -1365,6 +1365,7 @@ async function main() {
           province: row.province,
           gstRate: row.gstRate,
           psrRate: row.psrRate,
+          timeZone: row.timeZone,
         },
         create: row,
       });

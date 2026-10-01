@@ -17,7 +17,7 @@ export interface CreateBuyerInput {
   photo?: string;
   profileImageUrl?: string;
   state?: string;
-  province?: string;
+  provinceCode?: string;
   city?: string;
   houseNo?: string;
   postalCode?: string;
@@ -39,7 +39,7 @@ export interface UpdateBuyerInput {
   photo?: string;
   profileImageUrl?: string;
   state?: string;
-  province?: string;
+  provinceCode?: string;
   city?: string;
   houseNo?: string;
   postalCode?: string;
@@ -65,7 +65,16 @@ const buyerSelect = {
   DOB: true,
   photo: true,
   state: true,
-  province: true,
+  provinceCode: true,
+  province: {
+    select: {
+      provinceCode: true,
+      province: true,
+      gstRate: true,
+      psrRate: true,
+      timeZone: true,
+    },
+  },
   city: true,
   houseNo: true,
   postalCode: true,
@@ -75,6 +84,30 @@ const buyerSelect = {
   status: true,
   IsTermsAndConditionAccepted: true,
 } as const;
+
+function mapBuyer<T extends { province: { gstRate: unknown; psrRate: unknown } | null }>(buyer: T): T {
+  if (!buyer.province) return buyer;
+  return {
+    ...buyer,
+    province: {
+      ...buyer.province,
+      gstRate: Number(buyer.province.gstRate),
+      psrRate: Number(buyer.province.psrRate),
+    },
+  } as T;
+}
+
+async function resolveProvinceCode(provinceCode?: string | null) {
+  if (provinceCode === undefined) return undefined;
+  if (provinceCode === null || provinceCode.trim() === "") return null;
+  const code = provinceCode.trim().toUpperCase();
+  const tax = await prisma.taxMatrix.findUnique({
+    where: { provinceCode: code },
+    select: { provinceCode: true },
+  });
+  if (!tax) throw new Error("Province code not found");
+  return tax.provinceCode;
+}
 
 export class BuyerService {
   async createBuyer(input: CreateBuyerInput) {
@@ -118,6 +151,7 @@ export class BuyerService {
       throw new Error('User not created');
     }
     input.userId = newUser.data.user.id;
+    const provinceCode = await resolveProvinceCode(input.provinceCode);
     const buyer = await prisma.buyer.create({
       data: {
         splitrId: '',
@@ -135,7 +169,7 @@ export class BuyerService {
         sinExpiryDate: input.sinExpiryDate,
         photo: input.photo,
         state: input.state,
-        province: input.province,
+        ...(provinceCode ? { provinceCode } : {}),
         city: input.city,
         houseNo: input.houseNo,
         postalCode: input.postalCode,
@@ -147,7 +181,7 @@ export class BuyerService {
       select: buyerSelect,
     });
 
-    return buyer;
+    return mapBuyer(buyer);
   }
 
   async getBuyerById(id: string) {
@@ -158,7 +192,7 @@ export class BuyerService {
     if (!buyer) {
       throw new Error('Buyer not found');
     }
-    return buyer;
+    return mapBuyer(buyer);
   }
 
   async getBuyerByUserId(userId: string) {
@@ -169,7 +203,7 @@ export class BuyerService {
     if (!buyer) {
       throw new Error('Buyer not found');
     }
-    return buyer;
+    return mapBuyer(buyer);
   }
 
   async listBuyers() {
@@ -177,7 +211,7 @@ export class BuyerService {
       select: buyerSelect,
       orderBy: { createdAt: 'desc' },
     });
-    return buyers;
+    return buyers.map((buyer) => mapBuyer(buyer));
   }
 
   async updateBuyer(id: string, data: UpdateBuyerInput) {
@@ -217,12 +251,17 @@ export class BuyerService {
       }
     }
 
+    const { profileImageUrl: _profileImageUrl, provinceCode, ...buyerFields } = data;
+    const resolvedProvinceCode = await resolveProvinceCode(provinceCode);
     const buyer = await prisma.buyer.update({
       where: { id },
-      data,
+      data: {
+        ...buyerFields,
+        ...(resolvedProvinceCode !== undefined && { provinceCode: resolvedProvinceCode }),
+      },
       select: buyerSelect,
     });
-    return buyer;
+    return mapBuyer(buyer);
   }
 
   async deleteBuyer(id: string) {

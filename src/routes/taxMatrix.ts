@@ -37,7 +37,7 @@ const controller = taxMatrixController;
  *         application/json:
  *           schema:
  *             type: object
- *             required: [provinceCode, province, gstRate, psrRate]
+ *             required: [provinceCode, province, gstRate, psrRate, timeZone]
  *             properties:
  *               provinceCode:
  *                 type: string
@@ -51,6 +51,9 @@ const controller = taxMatrixController;
  *               psrRate:
  *                 type: number
  *                 example: 8
+ *               timeZone:
+ *                 type: string
+ *                 example: America/Toronto
  *     responses:
  *       201:
  *         description: Tax matrix created successfully
@@ -128,6 +131,9 @@ router.get("/province/:provinceCode", auth, controller.getByProvinceCode.bind(co
  *                 type: number
  *               psrRate:
  *                 type: number
+ *               timeZone:
+ *                 type: string
+ *                 example: America/Toronto
  *     responses:
  *       200:
  *         description: Tax matrix updated successfully

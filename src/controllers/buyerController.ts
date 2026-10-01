@@ -90,8 +90,24 @@ import { authService } from "../services/authService";
  *                           type: string
  *                         sinExpiryDate:
  *                           type: string
- *                         province:
+ *                         provinceCode:
  *                           type: string
+ *                           example: ON
+ *                         province:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             provinceCode:
+ *                               type: string
+ *                             province:
+ *                               type: string
+ *                             gstRate:
+ *                               type: number
+ *                             psrRate:
+ *                               type: number
+ *                             timeZone:
+ *                               type: string
+ *                               example: America/Toronto
  *                         city:
  *                           type: string
  *                         postalCode:
@@ -213,8 +229,9 @@ import { authService } from "../services/authService";
  *           type: string
  *         state:
  *           type: string
- *         province:
+ *         provinceCode:
  *           type: string
+ *           example: ON
  *         city:
  *           type: string
  *         houseNo:
@@ -253,8 +270,9 @@ import { authService } from "../services/authService";
  *           type: string
  *         state:
  *           type: string
- *         province:
+ *         provinceCode:
  *           type: string
+ *           example: ON
  *         city:
  *           type: string
  *         houseNo:
