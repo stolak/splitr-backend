@@ -18,6 +18,7 @@ export interface CreateBuyerInput {
   profileImageUrl?: string;
   state?: string;
   provinceCode?: string;
+  province?: string;
   city?: string;
   houseNo?: string;
   postalCode?: string;
@@ -40,6 +41,7 @@ export interface UpdateBuyerInput {
   profileImageUrl?: string;
   state?: string;
   provinceCode?: string;
+  province?: string;
   city?: string;
   houseNo?: string;
   postalCode?: string;
@@ -97,16 +99,34 @@ function mapBuyer<T extends { province: { gstRate: unknown; psrRate: unknown } |
   } as T;
 }
 
-async function resolveProvinceCode(provinceCode?: string | null) {
-  if (provinceCode === undefined) return undefined;
-  if (provinceCode === null || provinceCode.trim() === "") return null;
-  const code = provinceCode.trim().toUpperCase();
-  const tax = await prisma.taxMatrix.findUnique({
-    where: { provinceCode: code },
+export async function resolveProvinceCode(value?: string | null) {
+  if (value === undefined) return undefined;
+  if (value === null || value.trim() === "") return null;
+
+  const raw = value.trim();
+  const byCode = await prisma.taxMatrix.findUnique({
+    where: { provinceCode: raw.toUpperCase() },
     select: { provinceCode: true },
   });
-  if (!tax) throw new Error("Province code not found");
-  return tax.provinceCode;
+  if (byCode) return byCode.provinceCode;
+
+  const byName = await prisma.taxMatrix.findFirst({
+    where: { province: raw },
+    select: { provinceCode: true },
+  });
+  if (byName) return byName.provinceCode;
+
+  throw new Error("Province not found");
+}
+
+async function resolveProvinceInput(provinceCode?: string | null, province?: string | null) {
+  if (typeof provinceCode === "string" && provinceCode.trim() !== "") {
+    return resolveProvinceCode(provinceCode);
+  }
+  if (province !== undefined) {
+    return resolveProvinceCode(province);
+  }
+  return resolveProvinceCode(provinceCode);
 }
 
 export class BuyerService {
@@ -151,7 +171,7 @@ export class BuyerService {
       throw new Error('User not created');
     }
     input.userId = newUser.data.user.id;
-    const provinceCode = await resolveProvinceCode(input.provinceCode);
+    const provinceCode = await resolveProvinceInput(input.provinceCode, input.province);
     const buyer = await prisma.buyer.create({
       data: {
         splitrId: '',
@@ -251,8 +271,8 @@ export class BuyerService {
       }
     }
 
-    const { profileImageUrl: _profileImageUrl, provinceCode, ...buyerFields } = data;
-    const resolvedProvinceCode = await resolveProvinceCode(provinceCode);
+    const { profileImageUrl: _profileImageUrl, provinceCode, province, ...buyerFields } = data;
+    const resolvedProvinceCode = await resolveProvinceInput(provinceCode, province);
     const buyer = await prisma.buyer.update({
       where: { id },
       data: {

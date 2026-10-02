@@ -9,6 +9,7 @@ import {
 } from "plaid";
 import { getPlaidClient, getPlaidErrorMessage } from "../utils/plaid";
 import prisma from "../utils/prisma";
+import { resolveProvinceCode } from "./buyerService";
 import { plaidPost } from "../utils/plaid-rest";
 
 const PLAID_CLIENT_NAME = process.env.PLAID_CLIENT_NAME || "Splitr";
@@ -274,6 +275,7 @@ export class PlaidService {
     if (address?.street2) data.houseNo = address.street2;
     if (address?.city) data.city = address.city;
     if (address?.region) {
+      data.state = address.region;
       data.provinceCode = address.region;
     }
     if (address?.postal_code) data.postalCode = address.postal_code;
@@ -317,6 +319,16 @@ export class PlaidService {
     const verification = await this.getIdentityVerification(buyer.plaidIdentityVerificationId);
 
     const { data, kycSuccess } = this.mapIdentityVerificationToBuyerData(verification);
+
+    if (typeof data.provinceCode === "string") {
+      try {
+        const provinceCode = await resolveProvinceCode(data.provinceCode);
+        if (provinceCode) data.provinceCode = provinceCode;
+        else delete data.provinceCode;
+      } catch {
+        delete data.provinceCode;
+      }
+    }
 
     if (Object.keys(data).length === 0) {
       return {

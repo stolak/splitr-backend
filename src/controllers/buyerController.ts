@@ -232,6 +232,11 @@ import { authService } from "../services/authService";
  *         provinceCode:
  *           type: string
  *           example: ON
+ *           description: Tax matrix code. A province name such as British Columbia is also accepted.
+ *         province:
+ *           type: string
+ *           example: British Columbia
+ *           description: Province name. Stored as provinceCode. Ignored when provinceCode is set.
  *         city:
  *           type: string
  *         houseNo:
@@ -273,6 +278,11 @@ import { authService } from "../services/authService";
  *         provinceCode:
  *           type: string
  *           example: ON
+ *           description: Tax matrix code. A province name such as British Columbia is also accepted.
+ *         province:
+ *           type: string
+ *           example: British Columbia
+ *           description: Province name. Stored as provinceCode. Ignored when provinceCode is set.
  *         city:
  *           type: string
  *         houseNo:

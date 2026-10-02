@@ -1,6 +1,7 @@
 import axios, { Method } from "axios";
 import { PersonaInquiryStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
+import { resolveProvinceCode } from "./buyerService";
 
 const PERSONA_API_BASE_URL =
   process.env.PERSONA_API_BASE_URL || "https://api.withpersona.com/api/v1";
@@ -91,7 +92,7 @@ function mapPersonaFieldsToBuyerData(fields: PersonaInquiryFields | undefined) {
   if (city) data.city = city;
 
   if (province) {
-    data.province = province;
+    data.provinceCode = province;
     data.state = province;
   }
 
@@ -266,9 +267,20 @@ export class PersonaInquiryService {
         data: { isVerified: true },
       });
 
+      const buyerData = mapPersonaFieldsToBuyerData(personaFields);
+      if (typeof buyerData.provinceCode === "string") {
+        try {
+          const provinceCode = await resolveProvinceCode(buyerData.provinceCode);
+          if (provinceCode) buyerData.provinceCode = provinceCode;
+          else delete buyerData.provinceCode;
+        } catch {
+          delete buyerData.provinceCode;
+        }
+      }
+
       const buyer = await prisma.buyer.update({
         where: { id: inquiryRecord.buyerId },
-        data: mapPersonaFieldsToBuyerData(personaFields),
+        data: buyerData,
       });
 
       const record = await prisma.personaInquiry.update({

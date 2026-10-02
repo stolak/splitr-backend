@@ -263,7 +263,10 @@ export class InvoiceService {
       );
       const amount =
         input.items.length > 0
-          ? input.items.reduce((acc: number, item: CreateItemInput) => acc + item.amount, 0)
+          ? input.items.reduce(
+              (acc: number, item: CreateItemInput) => acc + item.amount * item.quantity,
+              0
+            )
           : input.amount;
       // Create invoice with items
       const invoice = await prisma.invoice.create({
