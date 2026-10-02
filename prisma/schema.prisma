@@ -269,6 +269,7 @@ model Buyer {
   plaidIdentityVerificationId       String?
   createdAt                         DateTime                            @default(now())
   updatedAt                         DateTime                            @updatedAt
+  stripeCardholder                  StripeCardholder?
 
   @@map("buyer")
 }
@@ -1205,15 +1206,16 @@ model StripeMandate {
 }
 
 model StripeCard {
-  id                 String   @id @default(uuid())
-  stripeCardholderId String?  @db.VarChar(100)
-  stripeCardId       String?  @db.VarChar(100)
+  id                 String            @id @default(uuid())
+  stripeCardholderId String?           @db.VarChar(100)
+  stripeCardId       String?           @db.VarChar(100)
   allocatedAmount    Int?
-  currency           String?  @db.VarChar(10)
-  used               Boolean  @default(false)
+  currency           String?           @db.VarChar(10)
+  used               Boolean           @default(false)
   buyerId            String?
-  buyer              Buyer?   @relation(fields: [buyerId], references: [id], onDelete: SetNull)
-  createdAt          DateTime @default(now())
+  buyer              Buyer?            @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  createdAt          DateTime          @default(now())
+  stripeCardholder   StripeCardholder? @relation(fields: [stripeCardholderId], references: [id])
 
   @@index([buyerId])
   @@index([stripeCardId])
@@ -1592,4 +1594,18 @@ model nextSettlementSchedule {
   updatedAt          DateTime @updatedAt
 
   @@map("next_settlement_schedule")
+}
+
+model StripeCardholder {
+  id           String       @id @default(uuid())
+  buyerId      String       @unique
+  buyer        Buyer        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  cardholderId String       @unique @db.VarChar(100)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  stripeCard   StripeCard[]
+
+  @@index([buyerId])
+  @@index([cardholderId])
+  @@map("stripe_cardholder")
 }

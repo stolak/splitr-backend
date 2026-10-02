@@ -1,0 +1,135 @@
+import { Prisma } from "@prisma/client";
+import prisma from "../utils/prisma";
+
+function requireText(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${field} is required`);
+  }
+  return value.trim();
+}
+
+function requireCardholderId(value: unknown): string {
+  const cardholderId = requireText(value, "cardholderId");
+  if (cardholderId.length > 100) {
+    throw new Error("cardholderId must be at most 100 characters");
+  }
+  return cardholderId;
+}
+
+function optionalCardholderId(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return requireCardholderId(value);
+}
+
+async function assertBuyer(buyerId: string) {
+  const buyer = await prisma.buyer.findUnique({
+    where: { id: buyerId },
+    select: { id: true },
+  });
+  if (!buyer) throw new Error("Buyer not found");
+}
+
+async function write<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(" ") : "";
+      if (String(target).includes("cardholderId")) {
+        throw new Error("A Stripe cardholder already exists for this cardholder id");
+      }
+      throw new Error("A Stripe cardholder already exists for this buyer");
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      throw new Error("Buyer not found");
+    }
+    throw error;
+  }
+}
+
+export class StripeCardholderService {
+  async list(buyerId?: string) {
+    return prisma.stripeCardholder.findMany({
+      where: buyerId ? { buyerId } : undefined,
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getById(id: string) {
+    return prisma.stripeCardholder.findUnique({ where: { id } });
+  }
+
+  async getByBuyerId(buyerId: string) {
+    return prisma.stripeCardholder.findUnique({ where: { buyerId } });
+  }
+
+  async create(input: { buyerId?: unknown; cardholderId?: unknown }) {
+    const buyerId = requireText(input.buyerId, "buyerId");
+    const cardholderId = requireCardholderId(input.cardholderId);
+    await assertBuyer(buyerId);
+
+    return write(() =>
+      prisma.stripeCardholder.create({
+        data: { buyerId, cardholderId },
+      })
+    );
+  }
+
+  async upsert(input: { buyerId?: unknown; cardholderId?: unknown }) {
+    const buyerId = requireText(input.buyerId, "buyerId");
+    const cardholderId = requireCardholderId(input.cardholderId);
+    await assertBuyer(buyerId);
+
+    const taken = await prisma.stripeCardholder.findUnique({
+      where: { cardholderId },
+      select: { buyerId: true },
+    });
+    if (taken && taken.buyerId !== buyerId) {
+      throw new Error("A Stripe cardholder already exists for this cardholder id");
+    }
+
+    return write(() =>
+      prisma.stripeCardholder.upsert({
+        where: { buyerId },
+        create: { buyerId, cardholderId },
+        update: { cardholderId },
+      })
+    );
+  }
+
+  async update(id: string, input: { buyerId?: unknown; cardholderId?: unknown }) {
+    const existing = await prisma.stripeCardholder.findUnique({ where: { id } });
+    if (!existing) throw new Error("Stripe cardholder not found");
+
+    const buyerId = input.buyerId === undefined ? undefined : requireText(input.buyerId, "buyerId");
+    const cardholderId = optionalCardholderId(input.cardholderId);
+
+    if (buyerId === undefined && cardholderId === undefined) {
+      throw new Error("At least one field is required");
+    }
+
+    if (buyerId) await assertBuyer(buyerId);
+
+    return write(() =>
+      prisma.stripeCardholder.update({
+        where: { id },
+        data: {
+          ...(buyerId !== undefined && { buyerId }),
+          ...(cardholderId !== undefined && { cardholderId }),
+        },
+      })
+    );
+  }
+
+  async delete(id: string) {
+    const existing = await prisma.stripeCardholder.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new Error("Stripe cardholder not found");
+    await prisma.stripeCardholder.delete({ where: { id } });
+    return { id };
+  }
+}
+
+export const stripeCardholderService = new StripeCardholderService();

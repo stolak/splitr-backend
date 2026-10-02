@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { DocumentStatus, MerchantStatus, StripeMandateStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { merchantService } from "./merchantService";
+import { stripeCardholderService } from "./stripeCardholderService";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_DEFAULT_CURRENCY = process.env.STRIPE_DEFAULT_CURRENCY || "cad";
@@ -1034,6 +1035,7 @@ export class StripeService {
     const amountCents = Math.round(input.amountCents);
 
     let cardholder: any;
+    let cardholderid: string;
     let card: any;
 
     // ==========================================
@@ -1091,31 +1093,45 @@ export class StripeService {
     // REAL STRIPE
     // ==========================================
     else {
-      cardholder = await getStripe().issuing.cardholders.create({
-        name,
-        email,
-        type: "individual",
-        billing: {
-          address: {
-            line1,
-            ...(input.billing?.line2 || buyer.houseNo
-              ? {
-                  line2: input.billing?.line2 || buyer.houseNo || undefined,
-                }
-              : {}),
-            city,
-            state,
-            postal_code: postalCode,
-            country,
+      // check if the cardholder already exists
+      const existingCardholder = await stripeCardholderService.getByBuyerId(buyer.id);
+      if (existingCardholder) {
+        cardholderid = existingCardholder.cardholderId;
+        cardholder = await getStripe().issuing.cardholders.retrieve(cardholderid);
+        if (!cardholder) {
+          throw new Error("Cardholder not found");
+        }
+      } else {
+        cardholder = await getStripe().issuing.cardholders.create({
+          name,
+          email,
+          type: "individual",
+          billing: {
+            address: {
+              line1,
+              ...(input.billing?.line2 || buyer.houseNo
+                ? {
+                    line2: input.billing?.line2 || buyer.houseNo || undefined,
+                  }
+                : {}),
+              city,
+              state,
+              postal_code: postalCode,
+              country,
+            },
           },
-        },
-        ...(buyer.phoneNumber
-          ? {
-              phone_number: buyer.phoneNumber,
-            }
-          : {}),
-      });
-
+          ...(buyer.phoneNumber
+            ? {
+                phone_number: buyer.phoneNumber,
+              }
+            : {}),
+        });
+        cardholderid = cardholder.id;
+        await stripeCardholderService.create({
+          buyerId: buyer.id,
+          cardholderId: cardholderid,
+        });
+      }
       card = await getStripe().issuing.cards.create({
         cardholder: cardholder.id,
         currency,
