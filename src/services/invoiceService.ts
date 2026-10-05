@@ -69,6 +69,17 @@ export interface UpdateItemInput {
   amount?: number;
 }
 
+export interface VirtualInvoiceExtraInput {
+  merchantName?: string | null;
+  merchantLogoUrl?: string | null;
+  screenshotUrl?: string | null;
+  invoiceUrl?: string | null;
+  invoiceNumber?: string | null;
+  invoiceDate?: Date | string | null;
+  invoiceAmount?: number | string | null;
+  itemDescription?: string | null;
+}
+
 export interface CreateInvoiceInput {
   customerName: string;
   customerEmail: string;
@@ -77,12 +88,13 @@ export interface CreateInvoiceInput {
   note?: string;
   amount: number;
   buyerId?: string;
-  merchantId: string;
+  merchantId?: string;
   categoryId?: string;
   provinceCode?: string;
   items: CreateItemInput[];
   status?: InvoiceStatus;
   type?: InvoiceType;
+  virtualInvoiceExtra?: VirtualInvoiceExtraInput | null;
 }
 
 export interface UpdateInvoiceInput {
@@ -108,6 +120,7 @@ export interface UpdateInvoiceInput {
   returnApprovedBy?: string;
   returnApprovedDate?: Date | string;
   returnInitiatedBy?: string;
+  virtualInvoiceExtra?: VirtualInvoiceExtraInput | null;
 }
 
 export interface UpdateInvoiceReturnInput {
@@ -194,6 +207,61 @@ async function resolveProvinceCode(provinceCode?: string | null) {
   return tax.provinceCode;
 }
 
+function optionalNullableText(value: string | null | undefined, field: string) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") throw new Error(`${field} must be a string`);
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function optionalNullableAmount(value: number | string | null | undefined) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const parsed = typeof value === "string" ? Number(value) : value;
+  if (typeof parsed !== "number" || !Number.isFinite(parsed)) {
+    throw new Error("invoiceAmount must be a number");
+  }
+  return parsed;
+}
+
+function optionalNullableDate(value: Date | string | null | undefined, field: string) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`${field} must be a valid date`);
+  return date;
+}
+
+function buildVirtualInvoiceExtraData(input: VirtualInvoiceExtraInput) {
+  return {
+    ...(input.merchantName !== undefined && {
+      merchantName: optionalNullableText(input.merchantName, "merchantName"),
+    }),
+    ...(input.merchantLogoUrl !== undefined && {
+      merchantLogoUrl: optionalNullableText(input.merchantLogoUrl, "merchantLogoUrl"),
+    }),
+    ...(input.screenshotUrl !== undefined && {
+      screenshotUrl: optionalNullableText(input.screenshotUrl, "screenshotUrl"),
+    }),
+    ...(input.invoiceUrl !== undefined && {
+      invoiceUrl: optionalNullableText(input.invoiceUrl, "invoiceUrl"),
+    }),
+    ...(input.invoiceNumber !== undefined && {
+      invoiceNumber: optionalNullableText(input.invoiceNumber, "invoiceNumber"),
+    }),
+    ...(input.invoiceDate !== undefined && {
+      invoiceDate: optionalNullableDate(input.invoiceDate, "invoiceDate"),
+    }),
+    ...(input.invoiceAmount !== undefined && {
+      invoiceAmount: optionalNullableAmount(input.invoiceAmount),
+    }),
+    ...(input.itemDescription !== undefined && {
+      itemDescription: optionalNullableText(input.itemDescription, "itemDescription"),
+    }),
+  };
+}
+
 const invoiceProvinceInclude = {
   select: {
     provinceCode: true,
@@ -215,9 +283,20 @@ export class InvoiceService {
   async createInvoice(input: CreateInvoiceInput) {
     console.log("Creating invoice", input);
     try {
+      const isVirtualCard = input.type === InvoiceType.VirtualCard;
+      const merchantId = isVirtualCard
+        ? process.env.VIRTUAL_CARD_MERCHANT_ID?.trim()
+        : input.merchantId;
+
+      if (!merchantId) {
+        throw new Error(
+          isVirtualCard ? "VIRTUAL_CARD_MERCHANT_ID is not set" : "Merchant ID is required"
+        );
+      }
+
       // Validate merchant exists
       const merchant = await prisma.merchant.findUnique({
-        where: { id: input.merchantId },
+        where: { id: merchantId },
       });
 
       if (!merchant) {
@@ -280,7 +359,7 @@ export class InvoiceService {
           note: input.note,
           amount: amount,
           buyerId: input.buyerId,
-          merchantId: input.merchantId,
+          merchantId,
           categoryId: input.categoryId,
           ...(provinceCode ? { provinceCode } : {}),
           status: input.status || InvoiceStatus.Pending,
@@ -292,9 +371,17 @@ export class InvoiceService {
               amount: item.amount,
             })),
           },
+          ...(input.virtualInvoiceExtra
+            ? {
+                virtualInvoiceExtra: {
+                  create: buildVirtualInvoiceExtraData(input.virtualInvoiceExtra),
+                },
+              }
+            : {}),
         },
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -390,6 +477,7 @@ export class InvoiceService {
         where: { id },
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -449,6 +537,7 @@ export class InvoiceService {
         where: { splitrId },
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -562,6 +651,7 @@ export class InvoiceService {
           take: limit,
           include: {
             items: true,
+          virtualInvoiceExtra: true,
             category: {
               select: invoiceCategorySelect,
             },
@@ -629,6 +719,7 @@ export class InvoiceService {
         where,
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -682,6 +773,7 @@ export class InvoiceService {
         },
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -726,6 +818,7 @@ export class InvoiceService {
         where,
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -774,6 +867,7 @@ export class InvoiceService {
         where,
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -897,6 +991,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
+          virtualInvoiceExtra: true,
       },
     });
 
@@ -1031,6 +1126,17 @@ export class InvoiceService {
         updateData.returnApprovedDate = new Date(input.returnApprovedDate);
       if (input.returnInitiatedBy !== undefined)
         updateData.returnInitiatedBy = input.returnInitiatedBy;
+      if (input.virtualInvoiceExtra === null) {
+        await prisma.virtualInvoiceExtra.deleteMany({ where: { invoiceId: id } });
+      } else if (input.virtualInvoiceExtra !== undefined) {
+        const extra = buildVirtualInvoiceExtraData(input.virtualInvoiceExtra);
+        updateData.virtualInvoiceExtra = {
+          upsert: {
+            create: extra,
+            update: extra,
+          },
+        };
+      }
       if (willReturn) updateData.status = InvoiceStatus.Cancelled;
       if (willReturn) {
         await loanService.penaltyEnforcement(new Date());
@@ -1041,6 +1147,7 @@ export class InvoiceService {
         data: updateData,
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           category: {
             select: invoiceCategorySelect,
           },
@@ -1271,6 +1378,7 @@ export class InvoiceService {
         data: { status },
         include: {
           items: true,
+          virtualInvoiceExtra: true,
           buyer: {
             select: {
               id: true,
@@ -1311,7 +1419,7 @@ export class InvoiceService {
     try {
       const existingInvoice = await prisma.invoice.findUnique({
         where: { id },
-        include: { items: true },
+        include: { items: true, virtualInvoiceExtra: true },
       });
 
       if (!existingInvoice) {
@@ -1406,6 +1514,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
+          virtualInvoiceExtra: true,
       },
     });
 
@@ -2358,6 +2467,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
+          virtualInvoiceExtra: true,
       },
     });
 
@@ -2461,6 +2571,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
+          virtualInvoiceExtra: true,
       },
     });
 

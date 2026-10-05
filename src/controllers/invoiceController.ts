@@ -34,7 +34,6 @@ import {
  *               - customerPhoneNumber
  *               - dueDate
  *               - amount
- *               - merchantId
  *               - items
  *             properties:
  *               customerName:
@@ -59,6 +58,7 @@ import {
  *                 description: Optional buyer ID
  *               merchantId:
  *                 type: string
+ *                 description: Required unless type is VirtualCard. VirtualCard uses VIRTUAL_CARD_MERCHANT_ID.
  *               categoryId:
  *                 type: string
  *                 description: Optional invoice category ID
@@ -72,7 +72,7 @@ import {
  *                 default: Pending
  *               type:
  *                 type: string
- *                 enum: [Purchase, Ecommerce, Shopping, Services, Invoice]
+ *                 enum: [Purchase, Ecommerce, Shopping, Services, Invoice, VirtualCard]
  *                 default: Purchase
  *               items:
  *                 type: array
@@ -92,6 +92,28 @@ import {
  *                     amount:
  *                       type: number
  *                       example: 50000
+ *               virtualInvoiceExtra:
+ *                 type: object
+ *                 nullable: true
+ *                 description: Optional one-to-one virtual invoice details. Omit to leave unset.
+ *                 properties:
+ *                   merchantName:
+ *                     type: string
+ *                   merchantLogoUrl:
+ *                     type: string
+ *                   screenshotUrl:
+ *                     type: string
+ *                   invoiceUrl:
+ *                     type: string
+ *                   invoiceNumber:
+ *                     type: string
+ *                   invoiceDate:
+ *                     type: string
+ *                     format: date-time
+ *                   invoiceAmount:
+ *                     type: number
+ *                   itemDescription:
+ *                     type: string
  *     responses:
  *       201:
  *         description: Invoice created successfully
@@ -132,7 +154,7 @@ import {
  *         name: type
  *         schema:
  *           type: string
- *           enum: [Purchase, Ecommerce, Shopping, Services, Invoice]
+ *           enum: [Purchase, Ecommerce, Shopping, Services, Invoice, VirtualCard]
  *       - in: query
  *         name: returnStatus
  *         schema:
@@ -319,7 +341,39 @@ import {
  *                 enum: [Pending, Paid, Cancelled]
  *               type:
  *                 type: string
- *                 enum: [Purchase, Ecommerce, Shopping, Services, Invoice]
+ *                 enum: [Purchase, Ecommerce, Shopping, Services, Invoice, VirtualCard]
+ *               virtualInvoiceExtra:
+ *                 type: object
+ *                 nullable: true
+ *                 description: >
+ *                   One-to-one virtual invoice details. Send an object to create or update them.
+ *                   Send null to remove them.
+ *                 properties:
+ *                   merchantName:
+ *                     type: string
+ *                     nullable: true
+ *                   merchantLogoUrl:
+ *                     type: string
+ *                     nullable: true
+ *                   screenshotUrl:
+ *                     type: string
+ *                     nullable: true
+ *                   invoiceUrl:
+ *                     type: string
+ *                     nullable: true
+ *                   invoiceNumber:
+ *                     type: string
+ *                     nullable: true
+ *                   invoiceDate:
+ *                     type: string
+ *                     format: date-time
+ *                     nullable: true
+ *                   invoiceAmount:
+ *                     type: number
+ *                     nullable: true
+ *                   itemDescription:
+ *                     type: string
+ *                     nullable: true
  *               returnStatus:
  *                 type: string
  *                 enum: [Active, Approved, Rejected, Refunded, Pending]
@@ -731,7 +785,8 @@ export class InvoiceController {
         });
       }
 
-      if (!input.merchantId && !req.user?.merchantId) {
+      const isVirtualCard = input.type === InvoiceType.VirtualCard;
+      if (!isVirtualCard && !input.merchantId && !req.user?.merchantId) {
         return res.status(400).json({
           success: false,
           message: "Merchant ID is required",
@@ -746,7 +801,7 @@ export class InvoiceController {
       }
       const result = await invoiceService.createInvoice({
         ...input,
-        merchantId: input.merchantId ?? req.user?.merchantId,
+        merchantId: isVirtualCard ? undefined : input.merchantId ?? req.user?.merchantId,
       });
 
       return res.status(201).json({
