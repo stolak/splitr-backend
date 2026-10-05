@@ -26,6 +26,10 @@ const controller = stripeCardholderController;
  *         name: buyerId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: isFake
+ *         schema:
+ *           type: boolean
  *     responses:
  *       200:
  *         description: Stripe cardholders retrieved successfully
@@ -49,6 +53,10 @@ const controller = stripeCardholderController;
  *               cardholderId:
  *                 type: string
  *                 example: ich_123
+ *               isFake:
+ *                 type: boolean
+ *                 description: Optional. Defaults to false when omitted.
+ *                 example: false
  *     responses:
  *       201:
  *         description: Stripe cardholder created successfully
@@ -82,6 +90,10 @@ router.post("/", auth, controller.create.bind(controller));
  *               cardholderId:
  *                 type: string
  *                 example: ich_123
+ *               isFake:
+ *                 type: boolean
+ *                 description: Optional. Updates the flag only when provided.
+ *                 example: false
  *     responses:
  *       200:
  *         description: Stripe cardholder upserted successfully
@@ -107,6 +119,10 @@ router.post("/", auth, controller.create.bind(controller));
  *               cardholderId:
  *                 type: string
  *                 example: ich_123
+ *               isFake:
+ *                 type: boolean
+ *                 description: Optional. Updates the flag only when provided.
+ *                 example: false
  *     responses:
  *       200:
  *         description: Stripe cardholder upserted successfully
@@ -182,6 +198,9 @@ router.get("/buyer/:buyerId", auth, controller.getByBuyerId.bind(controller));
  *               cardholderId:
  *                 type: string
  *                 example: ich_123
+ *               isFake:
+ *                 type: boolean
+ *                 example: false
  *     responses:
  *       200:
  *         description: Stripe cardholder updated successfully

@@ -1467,6 +1467,10 @@ export async function getBalance(req: Request, res: Response) {
  *                 type: string
  *                 format: uuid
  *                 description: Defaults to the authenticated buyer's ID
+ *               isFake:
+ *                 type: boolean
+ *                 description: Optional. Marks the saved card and new cardholder as fake. Defaults to false.
+ *                 example: false
  *               billing:
  *                 type: object
  *                 properties:
@@ -1501,7 +1505,11 @@ export async function createVirtualCard(req: Request, res: Response) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { amountCents, currency, buyerId: requestedBuyerId, billing } = req.body || {};
+    const { amountCents, currency, buyerId: requestedBuyerId, billing, isFake } = req.body || {};
+
+    if (isFake !== undefined && typeof isFake !== "boolean") {
+      return res.status(400).json({ message: "isFake must be a boolean" });
+    }
 
     if (amountCents === undefined) {
       return res.status(400).json({ message: "amountCents is required" });
@@ -1548,6 +1556,7 @@ export async function createVirtualCard(req: Request, res: Response) {
       amountCents: Number(amountCents),
       currency,
       billing,
+      ...(typeof isFake === "boolean" && { isFake }),
     });
 
     return res.status(201).json(result);

@@ -213,6 +213,7 @@ export class InvoiceService {
    * Create a new invoice with items
    */
   async createInvoice(input: CreateInvoiceInput) {
+    console.log("Creating invoice", input);
     try {
       // Validate merchant exists
       const merchant = await prisma.merchant.findUnique({

@@ -1,6 +1,13 @@
 import { Request, Response } from "express";
 import { stripeCardholderService } from "../services/stripeCardholderService";
 
+function optionalQueryBoolean(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error("isFake must be a boolean");
+}
+
 export class StripeCardholderController {
   private ok(res: Response, data: unknown, message?: string, status = 200) {
     return res.status(status).json({
@@ -28,7 +35,14 @@ export class StripeCardholderController {
   async list(req: Request, res: Response) {
     try {
       const buyerId = typeof req.query.buyerId === "string" ? req.query.buyerId.trim() : undefined;
-      return this.ok(res, await stripeCardholderService.list(buyerId || undefined));
+      const isFake = optionalQueryBoolean(req.query.isFake);
+      return this.ok(
+        res,
+        await stripeCardholderService.list({
+          buyerId: buyerId || undefined,
+          isFake,
+        })
+      );
     } catch (error) {
       return this.fail(res, error);
     }

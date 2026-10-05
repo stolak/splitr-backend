@@ -133,6 +133,7 @@ export interface CreateVirtualCardInput {
   buyerId: string;
   amountCents: number;
   currency?: string;
+  isFake?: boolean;
   billing?: {
     line1?: string;
     line2?: string;
@@ -1130,6 +1131,7 @@ export class StripeService {
         await stripeCardholderService.create({
           buyerId: buyer.id,
           cardholderId: cardholderid,
+          ...(input.isFake !== undefined && { isFake: input.isFake }),
         });
       }
       card = await getStripe().issuing.cards.create({
@@ -1160,6 +1162,7 @@ export class StripeService {
         currency,
         used: false,
         buyerId: buyer.id,
+        ...(input.isFake !== undefined && { isFake: input.isFake }),
       },
     });
 
@@ -1170,6 +1173,7 @@ export class StripeService {
       allocatedAmount: stripeCard.allocatedAmount,
       currency: stripeCard.currency,
       used: stripeCard.used,
+      isFake: stripeCard.isFake,
       buyerId: stripeCard.buyerId,
       createdAt: stripeCard.createdAt,
 
@@ -1276,6 +1280,7 @@ export class StripeService {
         currency,
         used: false,
         buyerId: buyer.id,
+        ...(input.isFake !== undefined && { isFake: input.isFake }),
       },
     });
 
@@ -1287,6 +1292,7 @@ export class StripeService {
       allocatedAmount: stripeCard.allocatedAmount,
       currency: stripeCard.currency,
       used: stripeCard.used,
+      isFake: stripeCard.isFake,
       buyerId: stripeCard.buyerId,
       createdAt: stripeCard.createdAt,
       cardholder,
