@@ -32,6 +32,7 @@ import { paystackTransferService } from "./paystackTransferService";
 import { paystackService } from "./paystackService";
 import { scoreService } from "./scoringService";
 import { roundUpTo2Decimals } from "../utils/helper";
+import { stripeService } from "./stripeService";
 export const FIRST_INSTALLMENT_NOW = process.env.FIRST_INSTALLMENT_NOW === "true";
 const loanSettingService = new LoanSettingService();
 const merchantTransactionService = new MerchantTransactionService();
@@ -664,7 +665,7 @@ export class InvoiceService {
           take: limit,
           include: {
             items: true,
-          virtualInvoiceExtra: true,
+            virtualInvoiceExtra: true,
             category: {
               select: invoiceCategorySelect,
             },
@@ -1004,7 +1005,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
-          virtualInvoiceExtra: true,
+        virtualInvoiceExtra: true,
       },
     });
 
@@ -1527,7 +1528,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
-          virtualInvoiceExtra: true,
+        virtualInvoiceExtra: true,
       },
     });
 
@@ -2434,6 +2435,10 @@ export class InvoiceService {
         merchantId: true,
         customerPhoneNumber: true,
         status: true,
+        type: true,
+        virtualInvoiceExtra: {
+          select: { invoiceAmount: true },
+        },
       },
     });
     if (!invoice) {
@@ -2480,7 +2485,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
-          virtualInvoiceExtra: true,
+        virtualInvoiceExtra: true,
       },
     });
 
@@ -2510,14 +2515,7 @@ export class InvoiceService {
     if (!loanResult.success) {
       throw new Error(loanResult.error || "Failed to create loan");
     }
-    // if FIRST_INSTALLMENT_NOW is true, Make the first installment payment now
-    //TODO: Implement this
-    // if (FIRST_INSTALLMENT_NOW) {
-    //   await this.makeFirstInstallmentPayment(loanResult.data?.id as string);
-    // }
 
-    // credit merchant wallet with the invoice amount
-    // TODO: Implement this
     await merchantTransactionService.createMerchantTransaction({
       merchantId: invoice.merchantId ?? "",
       invoiceRef: invoice.id,
@@ -2538,6 +2536,15 @@ export class InvoiceService {
       referenceIds: [invoice.id],
       transactionDate: new Date(),
     });
+    // if invoice type is virtualCard then create virtual card
+    if (invoice.type === InvoiceType.VirtualCard) {
+      await stripeService.createVirtualCard({
+        buyerId: buyerId,
+        amountCents: Number(invoice?.virtualInvoiceExtra?.invoiceAmount || invoice.amount) * 100,
+        currency: "CAD",
+        isFake: process.env.USE_STRIPE_ISSUING_MOCK === "true" ? true : false,
+      });
+    }
     return {
       success: true,
       message: "Loan invoice created successfully",
@@ -2584,7 +2591,7 @@ export class InvoiceService {
       data: updateData,
       include: {
         items: true,
-          virtualInvoiceExtra: true,
+        virtualInvoiceExtra: true,
       },
     });
 
