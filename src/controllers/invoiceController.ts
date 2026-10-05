@@ -29,9 +29,6 @@ import {
  *           schema:
  *             type: object
  *             required:
- *               - customerName
- *               - customerEmail
- *               - customerPhoneNumber
  *               - dueDate
  *               - amount
  *               - items
@@ -39,12 +36,15 @@ import {
  *               customerName:
  *                 type: string
  *                 example: "John Doe"
+ *                 description: Required when buyerId is omitted. Ignored when buyerId is set.
  *               customerEmail:
  *                 type: string
  *                 example: "john@example.com"
+ *                 description: Required when buyerId is omitted. Ignored when buyerId is set.
  *               customerPhoneNumber:
  *                 type: string
  *                 example: "+2348012345678"
+ *                 description: Required when buyerId is omitted. Ignored when buyerId is set.
  *               dueDate:
  *                 type: string
  *                 format: date-time
@@ -55,7 +55,7 @@ import {
  *                 example: 150000
  *               buyerId:
  *                 type: string
- *                 description: Optional buyer ID
+ *                 description: When set, customer name, email, and phone are taken from this buyer.
  *               merchantId:
  *                 type: string
  *                 description: Required unless type is VirtualCard. VirtualCard uses VIRTUAL_CARD_MERCHANT_ID.
@@ -770,8 +770,10 @@ export class InvoiceController {
     try {
       const input: CreateInvoiceInput = req.body;
 
-      // Validation
-      if (!input.customerName || !input.customerEmail || !input.customerPhoneNumber) {
+      if (
+        !input.buyerId &&
+        (!input.customerName || !input.customerEmail || !input.customerPhoneNumber)
+      ) {
         return res.status(400).json({
           success: false,
           message: "Customer name, email, and phone number are required",
