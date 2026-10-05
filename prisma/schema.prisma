@@ -1234,6 +1234,17 @@ model StripeCard {
   stripeCardId       String?           @db.VarChar(100)
   allocatedAmount    Int?
   currency           String?           @db.VarChar(10)
+  expirationDate     DateTime?
+  cardholderName     String?
+  cardholderEmail    String?
+  cardholderPhone    String?
+  cardholderAddress  String?
+  cardholderCity     String?
+  cardholderState    String?
+  cardholderZip      String?
+  cardholderCountry  String?
+  cardNumber         String?
+  cvv                String?
   used               Boolean           @default(false)
   buyerId            String?
   isFake             Boolean           @default(false)

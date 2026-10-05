@@ -1471,6 +1471,33 @@ export async function getBalance(req: Request, res: Response) {
  *                 type: boolean
  *                 description: Optional. Marks the saved card and new cardholder as fake. Defaults to false.
  *                 example: false
+ *               expirationDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Optional. Defaults to the Stripe card expiry when Stripe returns one.
+ *               cardholderName:
+ *                 type: string
+ *                 description: Optional. Defaults to the buyer name.
+ *               cardholderEmail:
+ *                 type: string
+ *               cardholderPhone:
+ *                 type: string
+ *               cardholderAddress:
+ *                 type: string
+ *               cardholderCity:
+ *                 type: string
+ *               cardholderState:
+ *                 type: string
+ *               cardholderZip:
+ *                 type: string
+ *               cardholderCountry:
+ *                 type: string
+ *               cardNumber:
+ *                 type: string
+ *                 description: Optional. Defaults to the Stripe or mock card number.
+ *               cvv:
+ *                 type: string
+ *                 description: Optional. Defaults to the Stripe or mock card CVC.
  *               billing:
  *                 type: object
  *                 properties:
@@ -1497,6 +1524,66 @@ export async function getBalance(req: Request, res: Response) {
  *       403:
  *         description: Forbidden
  */
+/**
+ * @openapi
+ * /api/v1/stripe/cards/buyer/{buyerId}:
+ *   get:
+ *     summary: List Stripe cards for a buyer
+ *     tags: [Stripe]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: buyerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Stripe cards retrieved
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Buyer not found
+ */
+export async function listStripeCardsByBuyer(req: Request, res: Response) {
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const buyerId = req.params.buyerId;
+    const isAdmin =
+      user.userType?.toUpperCase() === "ADMIN" ||
+      user.role === "Admin" ||
+      user.role === "SuperAdmin";
+
+    if (!isAdmin && user.userType?.toUpperCase() === "BUYER") {
+      const buyer = await prisma.buyer.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+      if (!buyer || buyer.id !== buyerId) {
+        return res.status(403).json({ message: "buyerId does not match authenticated buyer" });
+      }
+    } else if (!isAdmin) {
+      return res.status(403).json({ message: "Only buyers or admins can view virtual cards" });
+    }
+
+    const cards = await stripeService.listCardsByBuyerId(buyerId);
+    return res.status(200).json({ success: true, data: cards });
+  } catch (error: any) {
+    const message = error?.message || "Failed to retrieve Stripe cards";
+    if (message === "Buyer not found") {
+      return res.status(404).json({ success: false, message });
+    }
+    return res.status(400).json({ success: false, message });
+  }
+}
+
 export async function createVirtualCard(req: Request, res: Response) {
   try {
     const user = req.user;
@@ -1505,7 +1592,24 @@ export async function createVirtualCard(req: Request, res: Response) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { amountCents, currency, buyerId: requestedBuyerId, billing, isFake } = req.body || {};
+    const {
+      amountCents,
+      currency,
+      buyerId: requestedBuyerId,
+      billing,
+      isFake,
+      expirationDate,
+      cardholderName,
+      cardholderEmail,
+      cardholderPhone,
+      cardholderAddress,
+      cardholderCity,
+      cardholderState,
+      cardholderZip,
+      cardholderCountry,
+      cardNumber,
+      cvv,
+    } = req.body || {};
 
     if (isFake !== undefined && typeof isFake !== "boolean") {
       return res.status(400).json({ message: "isFake must be a boolean" });
@@ -1557,6 +1661,17 @@ export async function createVirtualCard(req: Request, res: Response) {
       currency,
       billing,
       ...(typeof isFake === "boolean" && { isFake }),
+      ...(expirationDate !== undefined && { expirationDate }),
+      ...(cardholderName !== undefined && { cardholderName }),
+      ...(cardholderEmail !== undefined && { cardholderEmail }),
+      ...(cardholderPhone !== undefined && { cardholderPhone }),
+      ...(cardholderAddress !== undefined && { cardholderAddress }),
+      ...(cardholderCity !== undefined && { cardholderCity }),
+      ...(cardholderState !== undefined && { cardholderState }),
+      ...(cardholderZip !== undefined && { cardholderZip }),
+      ...(cardholderCountry !== undefined && { cardholderCountry }),
+      ...(cardNumber !== undefined && { cardNumber }),
+      ...(cvv !== undefined && { cvv }),
     });
 
     return res.status(201).json(result);

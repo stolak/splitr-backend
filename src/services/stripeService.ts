@@ -134,6 +134,17 @@ export interface CreateVirtualCardInput {
   amountCents: number;
   currency?: string;
   isFake?: boolean;
+  expirationDate?: Date | string | null;
+  cardholderName?: string | null;
+  cardholderEmail?: string | null;
+  cardholderPhone?: string | null;
+  cardholderAddress?: string | null;
+  cardholderCity?: string | null;
+  cardholderState?: string | null;
+  cardholderZip?: string | null;
+  cardholderCountry?: string | null;
+  cardNumber?: string | null;
+  cvv?: string | null;
   billing?: {
     line1?: string;
     line2?: string;
@@ -141,6 +152,59 @@ export interface CreateVirtualCardInput {
     state?: string;
     postalCode?: string;
     country?: string;
+  };
+}
+
+function optionalCardText(value: string | null | undefined, fallback?: string | null) {
+  const chosen = value !== undefined ? value : fallback;
+  if (chosen === undefined || chosen === null) return null;
+  const trimmed = chosen.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function cardExpirationDate(
+  card: { exp_month?: number; exp_year?: number } | null | undefined,
+  override?: Date | string | null
+) {
+  if (override !== undefined && override !== null && override !== "") {
+    const date = override instanceof Date ? override : new Date(override);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error("expirationDate must be a valid date");
+    }
+    return date;
+  }
+  if (card?.exp_month && card?.exp_year) {
+    return new Date(Date.UTC(card.exp_year, card.exp_month, 0, 23, 59, 59));
+  }
+  return null;
+}
+
+function stripeCardProfile(
+  input: CreateVirtualCardInput,
+  resolved: {
+    name: string;
+    email: string;
+    phone?: string | null;
+    line1: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  },
+  card?: { exp_month?: number; exp_year?: number; number?: string; cvc?: string } | null
+) {
+  return {
+    expirationDate: cardExpirationDate(card, input.expirationDate),
+    cardholderName: optionalCardText(input.cardholderName, resolved.name),
+    cardholderEmail: optionalCardText(input.cardholderEmail, resolved.email),
+    cardholderPhone: optionalCardText(input.cardholderPhone, resolved.phone),
+    cardholderAddress: optionalCardText(input.cardholderAddress, resolved.line1),
+    cardholderCity: optionalCardText(input.cardholderCity, resolved.city),
+    cardholderState: optionalCardText(input.cardholderState, resolved.state),
+    cardholderZip: optionalCardText(input.cardholderZip, resolved.postalCode),
+    cardholderCountry: optionalCardText(input.cardholderCountry, resolved.country),
+    cardNumber: optionalCardText(input.cardNumber, card?.number),
+    cvv: optionalCardText(input.cvv, card?.cvc),
   };
 }
 
@@ -1048,8 +1112,20 @@ export class StripeService {
     if (USE_STRIPE_ISSUING_MOCK) {
       console.log("Using MOCK Stripe Issuing");
 
+      const existingCardholder = await stripeCardholderService.getByBuyerId(buyer.id);
+      if (existingCardholder) {
+        cardholderid = existingCardholder.cardholderId;
+      } else {
+        cardholderid = `ich_mock_${crypto.randomUUID()}`;
+        await stripeCardholderService.create({
+          buyerId: buyer.id,
+          cardholderId: cardholderid,
+          isFake: true,
+        });
+      }
+
       cardholder = {
-        id: `ich_mock_${crypto.randomUUID()}`,
+        id: cardholderid,
         object: "issuing.cardholder",
         name,
         email,
@@ -1076,6 +1152,10 @@ export class StripeService {
         cardholder: cardholder.id,
         type: "virtual",
         status: "active",
+        number: `400000${Array.from({ length: 10 }, () => Math.floor(Math.random() * 10)).join("")}`,
+        cvc: Array.from({ length: 3 }, () => Math.floor(Math.random() * 10)).join(""),
+        exp_month: 12,
+        exp_year: new Date().getFullYear() + 3,
         currency,
         spending_controls: {
           spending_limits: [
@@ -1162,7 +1242,21 @@ export class StripeService {
         currency,
         used: false,
         buyerId: buyer.id,
-        ...(input.isFake !== undefined && { isFake: input.isFake }),
+        isFake: USE_STRIPE_ISSUING_MOCK ? true : input.isFake === true,
+        ...stripeCardProfile(
+          input,
+          {
+            name,
+            email,
+            phone: buyer.phoneNumber,
+            line1,
+            city,
+            state,
+            postalCode,
+            country,
+          },
+          card
+        ),
       },
     });
 
@@ -1172,6 +1266,17 @@ export class StripeService {
       stripeCardId: card.id,
       allocatedAmount: stripeCard.allocatedAmount,
       currency: stripeCard.currency,
+      expirationDate: stripeCard.expirationDate,
+      cardholderName: stripeCard.cardholderName,
+      cardholderEmail: stripeCard.cardholderEmail,
+      cardholderPhone: stripeCard.cardholderPhone,
+      cardholderAddress: stripeCard.cardholderAddress,
+      cardholderCity: stripeCard.cardholderCity,
+      cardholderState: stripeCard.cardholderState,
+      cardholderZip: stripeCard.cardholderZip,
+      cardholderCountry: stripeCard.cardholderCountry,
+      cardNumber: stripeCard.cardNumber,
+      cvv: stripeCard.cvv,
       used: stripeCard.used,
       isFake: stripeCard.isFake,
       buyerId: stripeCard.buyerId,
@@ -1281,6 +1386,20 @@ export class StripeService {
         used: false,
         buyerId: buyer.id,
         ...(input.isFake !== undefined && { isFake: input.isFake }),
+        ...stripeCardProfile(
+          input,
+          {
+            name,
+            email,
+            phone: buyer.phoneNumber,
+            line1,
+            city,
+            state,
+            postalCode,
+            country,
+          },
+          card
+        ),
       },
     });
 
@@ -1291,6 +1410,17 @@ export class StripeService {
       stripeCardId: card.id,
       allocatedAmount: stripeCard.allocatedAmount,
       currency: stripeCard.currency,
+      expirationDate: stripeCard.expirationDate,
+      cardholderName: stripeCard.cardholderName,
+      cardholderEmail: stripeCard.cardholderEmail,
+      cardholderPhone: stripeCard.cardholderPhone,
+      cardholderAddress: stripeCard.cardholderAddress,
+      cardholderCity: stripeCard.cardholderCity,
+      cardholderState: stripeCard.cardholderState,
+      cardholderZip: stripeCard.cardholderZip,
+      cardholderCountry: stripeCard.cardholderCountry,
+      cardNumber: stripeCard.cardNumber,
+      cvv: stripeCard.cvv,
       used: stripeCard.used,
       isFake: stripeCard.isFake,
       buyerId: stripeCard.buyerId,
@@ -1298,6 +1428,25 @@ export class StripeService {
       cardholder,
       card,
     };
+  }
+
+  async listCardsByBuyerId(buyerId: string) {
+    if (!buyerId?.trim()) {
+      throw new Error("buyerId is required");
+    }
+
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: buyerId },
+      select: { id: true },
+    });
+    if (!buyer) {
+      throw new Error("Buyer not found");
+    }
+
+    return prisma.stripeCard.findMany({
+      where: { buyerId },
+      orderBy: { createdAt: "desc" },
+    });
   }
 }
 
