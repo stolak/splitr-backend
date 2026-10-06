@@ -94,6 +94,37 @@ export class SettlementController {
     }
   }
 
+  async totalsByRecordType(req: Request, res: Response) {
+    try {
+      const startDateRaw = queryString(req.query.startDate);
+      const endDateRaw = queryString(req.query.endDate);
+      if (!startDateRaw || !endDateRaw) {
+        return res.status(400).json({
+          success: false,
+          message: "startDate and endDate are required",
+        });
+      }
+
+      const startDate = new Date(startDateRaw);
+      const endDate = new Date(endDateRaw);
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "startDate and endDate must be valid dates",
+        });
+      }
+
+      const data = await settlementService.totalsByRecordType({
+        startDate,
+        endDate,
+        merchantId: queryString(req.query.merchantId),
+      });
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async computePendingSettlement(req: Request, res: Response) {
     try {
       const merchantId = queryString(req.query.merchantId);

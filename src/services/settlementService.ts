@@ -177,6 +177,40 @@ export class SettlementService {
     return [...groups.values()];
   }
 
+  async totalsByRecordType(filters: { startDate: Date; endDate: Date; merchantId?: string }) {
+    if (filters.startDate.getTime() > filters.endDate.getTime()) {
+      throw new Error("startDate must be before or equal to endDate");
+    }
+
+    const grouped = await prisma.settlement.groupBy({
+      by: ["settlementRecordType"],
+      where: {
+        createdAt: {
+          gte: filters.startDate,
+          lte: filters.endDate,
+        },
+        ...(filters.merchantId && { merchantId: filters.merchantId }),
+      },
+      _sum: { credit: true, debit: true },
+    });
+
+    const totals = new Map(
+      grouped.map((row) => [
+        row.settlementRecordType,
+        {
+          totalCredit: Number(row._sum.credit ?? 0),
+          totalDebit: Number(row._sum.debit ?? 0),
+        },
+      ])
+    );
+
+    return SETTLEMENT_RECORD_TYPES.filter((settlementRecordType) =>
+      totals.has(settlementRecordType)
+    ).map((settlementRecordType) => ({
+      [settlementRecordType]: totals.get(settlementRecordType)!,
+    }));
+  }
+
   async getById(id: string) {
     const record = await prisma.settlement.findUnique({
       where: { id },
@@ -679,6 +713,7 @@ export class SettlementService {
       settledTransactions,
       merchantTier,
       simulateMarchanetPendingSettlement,
+      totalsByRecordType,
     ] = await Promise.all([
       prisma.merchantTransaction.findMany({
         where: {
@@ -706,6 +741,7 @@ export class SettlementService {
       this.listSettledGroupedByReference({ merchantId: input.merchantId, startDate, endDate }),
       this.resolveMerchantTier({ merchantTierId: merchant?.merchantTierId || null }),
       this.simulateMarchanetPendingSettlement({ merchantId: input.merchantId }),
+      this.totalsByRecordType({ merchantId: input.merchantId, startDate, endDate }),
     ]);
 
     const unprocessScheduledSettlements = {
@@ -751,6 +787,7 @@ export class SettlementService {
       nextPayOut: pendingSettlementsReadyForPayment,
       merchantTransactions,
       merchantTier,
+      totalsByRecordType,
     };
   }
 }

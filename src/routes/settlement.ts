@@ -122,6 +122,57 @@ router.get("/settled", auth, controller.listSettledGrouped.bind(controller));
 
 /**
  * @swagger
+ * /api/v1/settlements/totals-by-record-type:
+ *   get:
+ *     summary: Sum settlement credit and debit by record type
+ *     description: >
+ *       Filters settlements by createdAt within the date range.
+ *       merchantId is optional. Only record types with matching rows are returned.
+ *     tags: [Settlement]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: merchantId
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Settlement totals grouped by record type
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     example:
+ *                       Gross:
+ *                         totalCredit: 2000
+ *                         totalDebit: 0
+ *       400:
+ *         description: Invalid or missing date range
+ */
+router.get("/totals-by-record-type", auth, controller.totalsByRecordType.bind(controller));
+
+/**
+ * @swagger
  * /api/v1/settlements/merchant-dashboard:
  *   get:
  *     summary: Merchant settlement dashboard

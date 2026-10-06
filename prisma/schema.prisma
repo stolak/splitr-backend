@@ -1546,6 +1546,7 @@ enum SettlementRecordType {
   CallUpWithhold
   InstantPayout
   InstantPayoutFee
+  FinalSettlement
 }
 
 model Settlement {
