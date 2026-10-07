@@ -1,8 +1,42 @@
 import { Router } from 'express';
 import { invoiceController } from '../controllers/invoiceController';
+import { invoiceExtractionController } from '../controllers/invoiceExtractionController';
 import { authenticateJWT } from '../middlewares/auth';
+import { uploadInvoice } from '../middlewares/invoiceUpload';
 
 const router = Router();
+
+/**
+ * @swagger
+ * /api/v1/invoices/extract:
+ *   post:
+ *     summary: Extract invoice data from a PDF, PNG, or JPEG
+ *     tags: [Invoice]
+ *     parameters:
+ *       - in: query
+ *         name: includeRawText
+ *         schema:
+ *           type: boolean
+ *         description: Include the cleaned source text in the response when true
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [invoice]
+ *             properties:
+ *               invoice:
+ *                 type: string
+ *                 format: binary
+ *                 description: PDF, PNG, or JPEG invoice file
+ *     responses:
+ *       200:
+ *         description: Extracted invoice data
+ *       400:
+ *         description: Missing file, unsupported type, or unreadable document
+ */
+router.post('/extract', uploadInvoice, invoiceExtractionController.extract);
 
 // Create new invoice with items
 router.post('/', authenticateJWT, invoiceController.create);

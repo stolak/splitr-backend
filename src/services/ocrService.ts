@@ -1,0 +1,40 @@
+import { createWorker, type Worker } from "tesseract.js";
+import sharp from "sharp";
+import { extractionConfig } from "./extractionConfig";
+
+export class OcrService {
+  private workerPromise: Promise<Worker> | null = null;
+
+  private getWorker(): Promise<Worker> {
+    if (!this.workerPromise) {
+      this.workerPromise = createWorker(extractionConfig.ocrLanguage);
+    }
+    return this.workerPromise;
+  }
+
+  async recognize(buffer: Buffer): Promise<{ text: string; confidence: number }> {
+    const prepared = await sharp(buffer)
+      .rotate()
+      .resize({ width: 2200, withoutEnlargement: false })
+      .grayscale()
+      .normalize()
+      .png()
+      .toBuffer();
+
+    const worker = await this.getWorker();
+    const result = await worker.recognize(prepared);
+    return {
+      text: result.data.text,
+      confidence: Number(result.data.confidence ?? 0) / 100,
+    };
+  }
+
+  async terminate(): Promise<void> {
+    if (!this.workerPromise) return;
+    const worker = await this.workerPromise;
+    await worker.terminate();
+    this.workerPromise = null;
+  }
+}
+
+export const ocrService = new OcrService();

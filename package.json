@@ -35,6 +35,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "file-type": "^21.3.4",
     "firebase-admin": "^13.10.0",
     "handlebars": "^4.7.8",
     "jsonwebtoken": "^9.0.2",
@@ -42,11 +43,14 @@
     "mysql2": "^3.15.2",
     "nodemailer": "^7.0.9",
     "openai": "^6.10.0",
+    "pdf-parse": "^2.4.5",
     "plaid": "^43.0.0",
     "prisma": "^6.16.2",
+    "sharp": "^0.34.5",
     "stripe": "^22.3.0",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
