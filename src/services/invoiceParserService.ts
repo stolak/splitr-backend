@@ -52,7 +52,14 @@ const ADDRESS_WORDS = [
   "abuja",
 ];
 
-const MERCHANT_IGNORE = ["invoice", "receipt", "order", "tax invoice", "sales receipt", "thank you"];
+const MERCHANT_IGNORE = [
+  "invoice",
+  "receipt",
+  "order",
+  "tax invoice",
+  "sales receipt",
+  "thank you",
+];
 
 function parseMoney(value: string): number | null {
   const cleaned = value.replace(/[\s,]/g, "").replace(/(?:CAD|USD|NGN|GBP|EUR)$/i, "");
@@ -60,7 +67,9 @@ function parseMoney(value: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-function moneyCandidates(line: string): Array<{ amount: number; currency: SupportedCurrency; index: number }> {
+function moneyCandidates(
+  line: string
+): Array<{ amount: number; currency: SupportedCurrency; index: number }> {
   const regex =
     /(?:\b(CAD|USD|NGN|GBP|EUR)\s*)?([$₦€£])?\s*(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|-?\d+(?:\.\d{1,2})?)/gi;
   const results: Array<{ amount: number; currency: SupportedCurrency; index: number }> = [];
@@ -179,7 +188,7 @@ function extractMerchant(textLines: string[]): { name: string | null; confidence
     if (/^#?\d{3,}/.test(line) || /\b(?:phone|tel|email|www|http)\b/i.test(line)) continue;
     if (line.length >= 2 && line.length <= 80 && !/^\$?[\d.,-]+$/.test(line)) {
       const looksCompany =
-        /\b(inc|ltd|llc|corp|corporation|limited|store|shop|canada|walmart|amazon|best buy|apple|ikea|samsung)\b/i.test(
+        /\b(inc|ltd|llc|corp|corporation|limited|store|shop|canada|walmart|amazon|best buy|apple|ikea|samsung|jumia)\b/i.test(
           line
         );
       return { name: line, confidence: looksCompany ? 0.92 : 0.68 };
@@ -193,7 +202,9 @@ function extractItems(textLines: string[], totalAmount: number | null): InvoiceI
   let inItems = false;
   for (const line of textLines) {
     const normalized = normalizeForMatch(line);
-    if (STOP_ITEM_LABELS.some((label) => normalized === label || normalized.startsWith(`${label} `))) {
+    if (
+      STOP_ITEM_LABELS.some((label) => normalized === label || normalized.startsWith(`${label} `))
+    ) {
       if (inItems) break;
       continue;
     }
@@ -259,8 +270,12 @@ export function parseInvoice(
     ? items.reduce((sum, item) => sum + item.confidence, 0) / items.length
     : 0;
   const overall =
-    clamp(merchant.confidence * 0.25 + total.confidence * 0.35 + date.confidence * 0.15 + itemConfidence * 0.25) *
-    (ocrUsed ? Math.max(0.75, ocrConfidence) : 1);
+    clamp(
+      merchant.confidence * 0.25 +
+        total.confidence * 0.35 +
+        date.confidence * 0.15 +
+        itemConfidence * 0.25
+    ) * (ocrUsed ? Math.max(0.75, ocrConfidence) : 1);
 
   return {
     merchantName: merchant.name,
@@ -281,5 +296,6 @@ export function parseInvoice(
       ocrUsed,
       ...(includeRawText ? { rawText: text } : {}),
     },
+    rawText: text,
   };
 }

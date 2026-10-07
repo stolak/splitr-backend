@@ -18,6 +18,7 @@ export class InvoiceExtractionService {
 
   private async extractImage(buffer: Buffer, options: ExtractionOptions) {
     const result = await ocrService.recognize(buffer);
+    // console.log("result", result.text);
     const text = cleanText(result.text);
     if (!text) throw new Error("No readable text was detected in the image.");
     return parseInvoice(text, "ocr", 1, true, result.confidence, options.includeRawText);
@@ -26,6 +27,7 @@ export class InvoiceExtractionService {
   private async extractPdf(buffer: Buffer, options: ExtractionOptions) {
     const result = await pdfExtractionService.extract(buffer);
     const text = cleanText(result.text);
+    // console.log("text", result.text);
     if (!text) throw new Error("No readable text was detected in the PDF.");
     return parseInvoice(
       text,

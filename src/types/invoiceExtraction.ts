@@ -11,6 +11,7 @@ export interface InvoiceItem {
 }
 
 export interface ExtractedInvoice {
+  rawText?: string;
   merchantName: string | null;
   totalAmount: number | null;
   currency: SupportedCurrency;
