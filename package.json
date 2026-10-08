@@ -42,14 +42,11 @@
     "mysql2": "^3.15.2",
     "nodemailer": "^7.0.9",
     "openai": "^6.10.0",
-    "pdf-parse": "^2.4.5",
     "plaid": "^43.0.0",
     "prisma": "^6.16.2",
-    "sharp": "^0.34.5",
     "stripe": "^22.3.0",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1",
-    "tesseract.js": "^7.0.0"
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
