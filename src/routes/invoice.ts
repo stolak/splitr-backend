@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { invoiceController } from '../controllers/invoiceController';
-import { invoiceExtractionController } from '../controllers/invoiceExtractionController';
 import { authenticateJWT } from '../middlewares/auth';
 import { uploadInvoice } from '../middlewares/invoiceUpload';
 
@@ -36,7 +35,16 @@ const router = Router();
  *       400:
  *         description: Missing file, unsupported type, or unreadable document
  */
-router.post('/extract', uploadInvoice, invoiceExtractionController.extract);
+router.post('/extract', uploadInvoice, async (req, res) => {
+  try {
+    const { invoiceExtractionController } = await import('../controllers/invoiceExtractionController');
+    await invoiceExtractionController.extract(req, res);
+  } catch (error) {
+    if (res.headersSent) return;
+    const message = error instanceof Error ? error.message : 'Invoice extraction failed.';
+    res.status(500).json({ success: false, message });
+  }
+});
 
 // Create new invoice with items
 router.post('/', authenticateJWT, invoiceController.create);

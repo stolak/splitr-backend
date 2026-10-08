@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import { extractionConfig } from "./extractionConfig";
 import { ocrService } from "./ocrService";
 
@@ -11,6 +10,7 @@ export interface PdfExtraction {
 
 export class PdfExtractionService {
   async extract(buffer: Buffer): Promise<PdfExtraction> {
+    const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
 
     try {
