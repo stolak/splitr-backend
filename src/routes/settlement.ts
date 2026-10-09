@@ -288,10 +288,10 @@ router.get("/unsettled-balance", auth, controller.getUnsettledBalance.bind(contr
  * @swagger
  * /api/v1/settlements/instant:
  *   post:
- *     summary: Run instant settlement for a merchant
+ *     summary: Run a standard or instant settlement for a merchant
  *     description: >
- *       Applies instant payout charges and withholdings for the given amount.
- *       merchantId and amount may be sent in the JSON body or as query parameters.
+ *       method standard charges the tier base rate. method instant charges the surcharge rate.
+ *       merchantId, amount, and method may be sent in the JSON body or as query parameters.
  *     tags: [Settlement]
  *     security:
  *       - bearerAuth: []
@@ -304,23 +304,33 @@ router.get("/unsettled-balance", auth, controller.getUnsettledBalance.bind(contr
  *         name: amount
  *         schema:
  *           type: number
+ *       - in: query
+ *         name: method
+ *         schema:
+ *           type: string
+ *           enum: [standard, instant]
  *     requestBody:
  *       required: false
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [method, amount]
  *             properties:
  *               merchantId:
  *                 type: string
  *               amount:
  *                 type: number
  *                 example: 500
+ *               method:
+ *                 type: string
+ *                 enum: [standard, instant]
+ *                 example: instant
  *     responses:
  *       200:
- *         description: Instant settlement completed successfully
+ *         description: Settlement completed successfully
  *       400:
- *         description: merchantId is required, or amount is not a number greater than 0
+ *         description: merchantId is required, amount is invalid, or method is not standard or instant
  *       404:
  *         description: Merchant not found
  */

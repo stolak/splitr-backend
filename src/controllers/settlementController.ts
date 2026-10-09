@@ -179,8 +179,19 @@ export class SettlementController {
           message: "amount must be a number greater than 0",
         });
       }
-      const data = await settlementService.instantSettlement({ merchantId, amount });
-      return this.ok(res, data, "Instant settlement completed successfully");
+      const method = queryString(req.body?.method) ?? queryString(req.query.method);
+      if (method !== "standard" && method !== "instant") {
+        return res.status(400).json({
+          success: false,
+          message: "method must be standard or instant",
+        });
+      }
+      const data = await settlementService.instantSettlement({ merchantId, amount, method });
+      const message =
+        method === "standard"
+          ? "Standard settlement completed successfully"
+          : "Instant settlement completed successfully";
+      return this.ok(res, data, message);
     } catch (error) {
       return this.fail(res, error);
     }

@@ -568,7 +568,11 @@ export class SettlementService {
 
     return { success: true, merchantTier: draft.merchantTier };
   }
-  async instantSettlement(input: { merchantId: string; amount: number }) {
+  async instantSettlement(input: {
+    merchantId: string;
+    amount: number;
+    method: "standard" | "instant";
+  }) {
     const amount = roundUpTo2Decimals(requireAmount(input.amount, "amount"));
     const merchant = await prisma.merchant.findUnique({ where: { id: input.merchantId } });
     if (!merchant) throw new Error("Merchant not found");
@@ -579,9 +583,10 @@ export class SettlementService {
       `${input.merchantId}_INSTANT_SETTLEMENT_${Date.now()}`;
     if (unsettledBalance.total > 0) {
       const instantSettlementSettings = merchantTier.instantPayoutSettings;
-      const instantPayoutChargeRate =
-        Number(instantSettlementSettings?.baseRate) +
-        Number(instantSettlementSettings?.surchargeRate);
+      const chargeRate =
+        input.method === "standard"
+          ? Number(instantSettlementSettings?.baseRate)
+          : Number(instantSettlementSettings?.surchargeRate);
       const maxPayoutAmount = roundUpTo2Decimals(
         Number(unsettledBalance.total + unsettledBalance.paidOutAmount) *
           Number(instantSettlementSettings?.maxPayoutPercentage) *
@@ -596,14 +601,15 @@ export class SettlementService {
       if (possiblePayoutAmount < amount && Math.abs(possiblePayoutAmount - amount) > 0.1) {
         throw new Error(`Amount is greater than possible payout amount ${possiblePayoutAmount}`);
       }
-      const chargeAmount = roundUpTo2Decimals(amount * instantPayoutChargeRate * 0.01);
+      const chargeAmount = roundUpTo2Decimals(amount * chargeRate * 0.01);
       const payoutAmount = roundUpTo2Decimals(amount - chargeAmount);
+      const label = input.method === "standard" ? "Standard settlement" : "Instant settlement";
 
       await this.create({
         merchantId: input.merchantId,
         debit: chargeAmount,
         credit: 0,
-        remarks: `Instant settlement charge on ${amount}`,
+        remarks: `${label} charge on ${amount}`,
         settlementRecordType: SettlementRecordType.InstantPayoutFee,
         batchReference,
       });
@@ -611,7 +617,7 @@ export class SettlementService {
         merchantId: input.merchantId,
         debit: payoutAmount,
         credit: 0,
-        remarks: `Instant settlement payout on ${amount}`,
+        remarks: `${label} payout on ${amount}`,
         settlementRecordType: SettlementRecordType.InstantPayout,
         batchReference,
       });
