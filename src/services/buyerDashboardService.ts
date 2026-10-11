@@ -1,6 +1,7 @@
 import { InvoiceStatus, LoanScheduleStatus, LoanStatus, Prisma } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { roundUpTo2Decimals } from "../utils/helper";
+import { scoreService } from "./scoringService";
 
 type PlanStatus = "onTrack" | "paymentDue" | "overdue" | "completed";
 
@@ -41,15 +42,7 @@ export class BuyerDashboardService {
     const upcomingUntil = addUtcDays(today, 30);
 
     const [eligibility, loans, pendingInvoices] = await Promise.all([
-      prisma.eligibilityAndScore.findFirst({
-        where: { buyerId },
-        orderBy: { createdAt: "desc" },
-        select: {
-          finalApprovedLoan: true,
-          maxEligibleLoan: true,
-          approvedPurchaseAmount: true,
-        },
-      }),
+      scoreService.buyerScore(buyerId),
       prisma.loan.findMany({
         where: { buyerId, loanStatus: { not: LoanStatus.Cancel } },
         include: {
@@ -65,11 +58,10 @@ export class BuyerDashboardService {
       }),
     ]);
 
+    const productSpendingPowers =
+      eligibility?.products.map((product) => Number(product.availableSpendingPower)) ?? [];
     const totalSpendingPower = money(
-      eligibility?.finalApprovedLoan ||
-        eligibility?.maxEligibleLoan ||
-        eligibility?.approvedPurchaseAmount ||
-        0
+      productSpendingPowers.length ? Math.max(0, ...productSpendingPowers) : 0
     );
 
     const plans = loans
@@ -78,7 +70,9 @@ export class BuyerDashboardService {
         const schedules = loan.loanSchedules.filter(
           (schedule) => schedule.status !== LoanScheduleStatus.Cancelled
         );
-        const openSchedules = schedules.filter((schedule) => schedule.status === LoanScheduleStatus.Open);
+        const openSchedules = schedules.filter(
+          (schedule) => schedule.status === LoanScheduleStatus.Open
+        );
         const paidInstallments = schedules.filter(
           (schedule) => schedule.status === LoanScheduleStatus.Closed
         ).length;
@@ -128,6 +122,9 @@ export class BuyerDashboardService {
         .reduce((sum, loan) => sum + Number(loan.loanAmount), 0) +
         pendingInvoices.reduce((sum, invoice) => sum + Number(invoice.amount), 0)
     );
+    // console.log("totalSpendingPower", totalSpendingPower);
+    // console.log("outstandingFinancing", outstandingFinancing);
+    // console.log("reservedForPendingPurchases", reservedForPendingPurchases);
     const availableSpendingPower = money(
       Math.max(0, totalSpendingPower - outstandingFinancing - reservedForPendingPurchases)
     );
@@ -157,7 +154,9 @@ export class BuyerDashboardService {
 
     const nextSource = [...activePlans]
       .filter((plan) => plan.nextPaymentDate)
-      .sort((left, right) => String(left.nextPaymentDate).localeCompare(String(right.nextPaymentDate)))[0];
+      .sort((left, right) =>
+        String(left.nextPaymentDate).localeCompare(String(right.nextPaymentDate))
+      )[0];
 
     const counts = {
       all: plans.length,
@@ -201,7 +200,9 @@ export class BuyerDashboardService {
       plans: [...plans].sort((left, right) => {
         if (left.status === "completed" && right.status !== "completed") return 1;
         if (right.status === "completed" && left.status !== "completed") return -1;
-        return String(left.nextPaymentDate ?? "9999").localeCompare(String(right.nextPaymentDate ?? "9999"));
+        return String(left.nextPaymentDate ?? "9999").localeCompare(
+          String(right.nextPaymentDate ?? "9999")
+        );
       }),
     };
   }
