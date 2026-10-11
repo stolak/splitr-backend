@@ -50,4 +50,34 @@ const router = Router();
  */
 router.get("/stats", authenticateJWT, dashboardController.getDashboardStats);
 
+/**
+ * @swagger
+ * /api/v1/dashboard/buyer:
+ *   get:
+ *     summary: Buyer financing dashboard
+ *     description: >
+ *       Returns the signed-in buyer's spending power, outstanding financing,
+ *       next payment, payments due in the next 30 days, and plan list.
+ *       Admins must pass buyerId.
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: buyerId
+ *         schema:
+ *           type: string
+ *         description: Required for admins. Ignored for buyers.
+ *     responses:
+ *       200:
+ *         description: Buyer dashboard retrieved successfully
+ *       400:
+ *         description: buyerId is required for admins
+ *       403:
+ *         description: Buyer access is required
+ *       404:
+ *         description: Buyer not found
+ */
+router.get("/buyer", authenticateJWT, dashboardController.getBuyerDashboard);
+
 export default router;
