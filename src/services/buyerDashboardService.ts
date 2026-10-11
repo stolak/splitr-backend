@@ -86,7 +86,7 @@ export class BuyerDashboardService {
         const nextSchedule = [...openSchedules].sort(
           (left, right) => left.start.getTime() - right.start.getTime()
         )[0];
-        const nextDue = nextSchedule ? startOfUtcDay(nextSchedule.start) : null;
+        const nextDue = nextSchedule ? startOfUtcDay(nextSchedule.end) : null;
         const status = this.planStatus(loan.loanStatus, nextDue, today);
         const progressPercent =
           installmentCount > 0 ? Math.round((paidInstallments / installmentCount) * 100) : 0;
