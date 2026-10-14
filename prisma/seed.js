@@ -193,6 +193,116 @@ async function main() {
 
     console.log(`✅ ${banksData.length} banks seeded successfully`);
 
+    console.log("\n🍁 Seeding tax matrix...");
+    const taxMatrices = [
+      {
+        provinceCode: "AB",
+        province: "Alberta",
+        gstRate: 5,
+        psrRate: 0,
+        timeZone: "America/Edmonton",
+      },
+      {
+        provinceCode: "BC",
+        province: "British Columbia",
+        gstRate: 5,
+        psrRate: 7,
+        timeZone: "America/Vancouver",
+      },
+      {
+        provinceCode: "MB",
+        province: "Manitoba",
+        gstRate: 5,
+        psrRate: 7,
+        timeZone: "America/Winnipeg",
+      },
+      {
+        provinceCode: "NB",
+        province: "New Brunswick",
+        gstRate: 15,
+        psrRate: 0,
+        timeZone: "America/Moncton",
+      },
+      {
+        provinceCode: "NL",
+        province: "Newfoundland and Labrador",
+        gstRate: 15,
+        psrRate: 0,
+        timeZone: "America/St_Johns",
+      },
+      {
+        provinceCode: "NT",
+        province: "Northwest Territories",
+        gstRate: 5,
+        psrRate: 0,
+        timeZone: "America/Yellowknife",
+      },
+      {
+        provinceCode: "NS",
+        province: "Nova Scotia",
+        gstRate: 14,
+        psrRate: 0,
+        timeZone: "America/Halifax",
+      },
+      {
+        provinceCode: "NU",
+        province: "Nunavut",
+        gstRate: 5,
+        psrRate: 0,
+        timeZone: "America/Iqaluit",
+      },
+      {
+        provinceCode: "ON",
+        province: "Ontario",
+        gstRate: 13,
+        psrRate: 0,
+        timeZone: "America/Toronto",
+      },
+      {
+        provinceCode: "PE",
+        province: "Prince Edward Island",
+        gstRate: 15,
+        psrRate: 0,
+        timeZone: "America/Halifax",
+      },
+      {
+        provinceCode: "QC",
+        province: "Quebec",
+        gstRate: 5,
+        psrRate: 9.98,
+        timeZone: "America/Toronto",
+      },
+      {
+        provinceCode: "SK",
+        province: "Saskatchewan",
+        gstRate: 5,
+        psrRate: 6,
+        timeZone: "America/Regina",
+      },
+      {
+        provinceCode: "YT",
+        province: "Yukon",
+        gstRate: 5,
+        psrRate: 0,
+        timeZone: "America/Whitehorse",
+      },
+    ];
+
+    for (const row of taxMatrices) {
+      await prisma.taxMatrix.upsert({
+        where: { provinceCode: row.provinceCode },
+        update: {
+          province: row.province,
+          gstRate: row.gstRate,
+          psrRate: row.psrRate,
+          timeZone: row.timeZone,
+        },
+        create: row,
+      });
+    }
+
+    console.log(`✅ ${taxMatrices.length} tax matrix rows seeded successfully`);
+
     // Create sample merchants
     const merchant1 = await prisma.merchant.upsert({
       where: { businessEmail: "techcorp@example.com" },
@@ -1346,116 +1456,6 @@ async function main() {
     }
 
     console.log("✅ Invoice categories seeded successfully");
-
-    console.log("\n🍁 Seeding tax matrix...");
-    const taxMatrices = [
-      {
-        provinceCode: "AB",
-        province: "Alberta",
-        gstRate: 5,
-        psrRate: 0,
-        timeZone: "America/Edmonton",
-      },
-      {
-        provinceCode: "BC",
-        province: "British Columbia",
-        gstRate: 5,
-        psrRate: 7,
-        timeZone: "America/Vancouver",
-      },
-      {
-        provinceCode: "MB",
-        province: "Manitoba",
-        gstRate: 5,
-        psrRate: 7,
-        timeZone: "America/Winnipeg",
-      },
-      {
-        provinceCode: "NB",
-        province: "New Brunswick",
-        gstRate: 15,
-        psrRate: 0,
-        timeZone: "America/Moncton",
-      },
-      {
-        provinceCode: "NL",
-        province: "Newfoundland and Labrador",
-        gstRate: 15,
-        psrRate: 0,
-        timeZone: "America/St_Johns",
-      },
-      {
-        provinceCode: "NT",
-        province: "Northwest Territories",
-        gstRate: 5,
-        psrRate: 0,
-        timeZone: "America/Yellowknife",
-      },
-      {
-        provinceCode: "NS",
-        province: "Nova Scotia",
-        gstRate: 14,
-        psrRate: 0,
-        timeZone: "America/Halifax",
-      },
-      {
-        provinceCode: "NU",
-        province: "Nunavut",
-        gstRate: 5,
-        psrRate: 0,
-        timeZone: "America/Iqaluit",
-      },
-      {
-        provinceCode: "ON",
-        province: "Ontario",
-        gstRate: 13,
-        psrRate: 0,
-        timeZone: "America/Toronto",
-      },
-      {
-        provinceCode: "PE",
-        province: "Prince Edward Island",
-        gstRate: 15,
-        psrRate: 0,
-        timeZone: "America/Halifax",
-      },
-      {
-        provinceCode: "QC",
-        province: "Quebec",
-        gstRate: 5,
-        psrRate: 9.98,
-        timeZone: "America/Toronto",
-      },
-      {
-        provinceCode: "SK",
-        province: "Saskatchewan",
-        gstRate: 5,
-        psrRate: 6,
-        timeZone: "America/Regina",
-      },
-      {
-        provinceCode: "YT",
-        province: "Yukon",
-        gstRate: 5,
-        psrRate: 0,
-        timeZone: "America/Whitehorse",
-      },
-    ];
-
-    for (const row of taxMatrices) {
-      await prisma.taxMatrix.upsert({
-        where: { provinceCode: row.provinceCode },
-        update: {
-          province: row.province,
-          gstRate: row.gstRate,
-          psrRate: row.psrRate,
-          timeZone: row.timeZone,
-        },
-        create: row,
-      });
-    }
-
-    console.log(`✅ ${taxMatrices.length} tax matrix rows seeded successfully`);
 
     console.log("\n🏷️ Seeding merchant tiers...");
     const merchantTiers = [

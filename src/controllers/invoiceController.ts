@@ -59,6 +59,10 @@ import {
  *               merchantId:
  *                 type: string
  *                 description: Required unless type is VirtualCard. VirtualCard uses VIRTUAL_CARD_MERCHANT_ID.
+ *               outletId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Outlet for this merchant. When provinceCode is omitted, the outlet province is used.
  *               categoryId:
  *                 type: string
  *                 description: Optional invoice category ID
@@ -132,6 +136,11 @@ import {
  *         name: merchantId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: outletId
+ *         schema:
+ *           type: string
+ *         description: Filter invoices for one outlet
  *       - in: query
  *         name: buyerId
  *         schema:
@@ -325,6 +334,10 @@ import {
  *                 type: number
  *               buyerId:
  *                 type: string
+ *               outletId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Outlet for this invoice's merchant. Pass null to clear it.
  *               categoryId:
  *                 type: string
  *                 nullable: true
@@ -806,6 +819,13 @@ export class InvoiceController {
         merchantId: isVirtualCard ? undefined : input.merchantId ?? req.user?.merchantId,
       });
 
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message,
+        });
+      }
+
       return res.status(201).json({
         success: true,
         message: "Invoice created successfully",
@@ -825,11 +845,12 @@ export class InvoiceController {
    */
   async list(req: Request, res: Response) {
     try {
-      const { merchantId, buyerId, status, customerEmail, q, type, returnStatus, from, to, page, limit } =
+      const { merchantId, buyerId, status, customerEmail, q, type, returnStatus, outletId, from, to, page, limit } =
         req.query;
 
       const filters: any = {};
       if (merchantId) filters.merchantId = merchantId as string;
+      if (outletId) filters.outletId = outletId as string;
       if (buyerId) filters.buyerId = buyerId as string;
       if (status) filters.status = status as InvoiceStatus;
       if (customerEmail) filters.customerEmail = customerEmail as string;

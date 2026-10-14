@@ -162,6 +162,7 @@ model User {
   // Password reset tokens
   passwordResetTokens PasswordResetToken[]
   linkedUsers         LinkedUser[]
+  outlets             Outlet[]
 
   @@map("user")
 }
@@ -292,7 +293,7 @@ model Merchant {
   dateOfIncorporation         String?
   tin                         String? @unique
   registrationAddress         String?
-  businessDescription         String? @db.VarChar(30000)
+  businessDescription         String? @db.MediumText
   businessCategory            String?
   businessType                String?
   businessTypes               Json?   @default("[]")
@@ -370,6 +371,8 @@ model Merchant {
   merchantTier                 MerchantTier?                 @relation(fields: [merchantTierId], references: [id], onDelete: SetNull)
   merchantReserveReleases      MerchantReserveRelease[]
   merchantReserveContributions MerchantReserveContribution[]
+  outlets                      Outlet[]
+  merchantBankAccounts         MerchantBankAccount[]
 
   @@map("merchant")
 }
@@ -395,6 +398,48 @@ model MerchantDirector {
   @@map("merchant_director")
 }
 
+model Outlet {
+  id                          String               @id @default(uuid())
+  code                        String?              @unique @db.VarChar(30)
+  merchantId                  String
+  merchant                    Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  outletName                  String
+  outletAddress               String?
+  provinceCode                String?
+  province                    TaxMatrix?           @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
+  outletPhone                 String?
+  outletEmail                 String?
+  outletMerchantBankAccountId String?
+  outletMerchantBankAccount   MerchantBankAccount? @relation(fields: [outletMerchantBankAccountId], references: [id], onDelete: SetNull)
+  status                      OutletStatus         @default(Active)
+  type                        OutletType           @default(HeadOffice)
+  userManagerId               String?
+  userManager                 User?                @relation(fields: [userManagerId], references: [id], onDelete: SetNull)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  invoices                    Invoice[]
+  settlements                 Settlement[]
+
+  @@map("outlet")
+}
+
+enum OutletType {
+  HeadOffice
+  Branch
+  Franchise
+  MobileStore
+  OnlineStore
+  Other
+}
+
+enum OutletStatus {
+  Active
+  Inactive
+  Pending
+  Suspended
+  Closed
+}
+
 model BankAccount {
   id            String   @id @default(uuid())
   bankId        String
@@ -405,6 +450,22 @@ model BankAccount {
   bank          Bank     @relation(fields: [bankId], references: [id], onDelete: Cascade)
 
   @@map("bank_account")
+}
+
+model MerchantBankAccount {
+  id                String   @id @default(uuid())
+  bankAccountId     String   @unique
+  bankName          String   @db.VarChar(100)
+  last4             String?  @default("****") @db.VarChar(4)
+  accountHolderName String?  @db.VarChar(100)
+  routingNumber     String?  @db.VarChar(100)
+  accountType       String?  @db.VarChar(100)
+  merchantId        String
+  accountName       String?
+  merchant          Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  outlets           Outlet[]
+
+  @@map("merchant_bank_account")
 }
 
 model Bank {
@@ -856,6 +917,8 @@ model Invoice {
   buyer               Buyer?           @relation(fields: [buyerId], references: [id], onDelete: SetNull)
   merchantId          String?
   merchant            Merchant?        @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  outletId            String?
+  outlet              Outlet?          @relation(fields: [outletId], references: [id], onDelete: SetNull)
   categoryId          String?
   category            InvoiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   provinceCode        String?
@@ -1531,6 +1594,7 @@ model TaxMatrix {
   merchants            Merchant[]
   buyers               Buyer[]
   invoices             Invoice[]
+  outlets              Outlet[]
 
   @@map("tax_matrix")
 }
@@ -1553,6 +1617,8 @@ model Settlement {
   id                   String               @id @default(uuid())
   merchantId           String
   merchant             Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  outletId             String?
+  outlet               Outlet?              @relation(fields: [outletId], references: [id], onDelete: SetNull)
   debit                Decimal              @default(0) @db.Decimal(15, 2)
   credit               Decimal              @default(0) @db.Decimal(15, 2)
   remarks              String               @db.VarChar(500)

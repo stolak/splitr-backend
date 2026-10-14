@@ -3,6 +3,7 @@ import { DocumentStatus, MerchantStatus, StripeMandateStatus } from "@prisma/cli
 import prisma from "../utils/prisma";
 import { merchantService } from "./merchantService";
 import { stripeCardholderService } from "./stripeCardholderService";
+import { merchantBankAccountService } from "./merchantBankAccountService";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_DEFAULT_CURRENCY = process.env.STRIPE_DEFAULT_CURRENCY || "cad";
@@ -408,10 +409,10 @@ export class StripeService {
     const companyAddress = company?.address;
     const businessProfile = account.business_profile;
     const externalAccounts = account.external_accounts?.data ?? [];
-    const bankAccount = externalAccounts.find(
+    const bankAccounts = externalAccounts.filter(
       (item): item is Stripe.BankAccount => item.object === "bank_account"
     );
-
+    const bankAccount = bankAccounts[0];
     const registrationAddress = companyAddress
       ? [
           companyAddress.line1,
@@ -462,11 +463,24 @@ export class StripeService {
     };
 
     const updatedMerchant = await merchantService.updateMerchantRecord(merchant.id, updateData);
+    const merchantBankAccounts = await merchantBankAccountService.syncFromStripe(
+      merchant.id,
+      bankAccounts.map((item) => ({
+        id: item.id,
+        bank_name: item.bank_name,
+        last4: item.last4,
+        account_holder_name: item.account_holder_name,
+        routing_number: item.routing_number,
+        account_type: item.account_type,
+      })),
+      company?.name || bankAccount?.account_holder_name
+    );
 
     return {
       accountId: account.id,
       account,
       merchant: updatedMerchant,
+      merchantBankAccounts,
       verified: isVerified,
     };
   }

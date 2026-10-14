@@ -90,6 +90,7 @@ export interface CreateInvoiceInput {
   amount: number;
   buyerId?: string;
   merchantId?: string;
+  outletId?: string | null;
   categoryId?: string;
   provinceCode?: string;
   items: CreateItemInput[];
@@ -106,6 +107,7 @@ export interface UpdateInvoiceInput {
   note?: string;
   amount?: number;
   buyerId?: string;
+  outletId?: string | null;
   categoryId?: string | null;
   provinceCode?: string | null;
   status?: InvoiceStatus;
@@ -273,6 +275,36 @@ const invoiceProvinceInclude = {
   },
 } as const;
 
+const invoiceOutletInclude = {
+  select: {
+    id: true,
+    code: true,
+    merchantId: true,
+    outletName: true,
+    outletAddress: true,
+    provinceCode: true,
+    outletPhone: true,
+    outletEmail: true,
+    outletMerchantBankAccountId: true,
+    status: true,
+    type: true,
+  },
+} as const;
+
+async function resolveOutlet(outletId: string | null | undefined, merchantId: string) {
+  if (outletId === undefined) return undefined;
+  if (outletId === null || outletId.trim() === "") return null;
+  const outlet = await prisma.outlet.findUnique({
+    where: { id: outletId.trim() },
+    select: { id: true, merchantId: true, provinceCode: true },
+  });
+  if (!outlet) throw new Error("Outlet not found");
+  if (outlet.merchantId !== merchantId) {
+    throw new Error("Outlet does not belong to this merchant");
+  }
+  return outlet;
+}
+
 // ==================== INVOICE SERVICE ====================
 
 export class InvoiceService {
@@ -352,8 +384,9 @@ export class InvoiceService {
       if (!input.items || input.items.length === 0) {
         throw new Error("Invoice must have at least one item");
       }
+      const outlet = await resolveOutlet(input.outletId, merchantId);
       const provinceCode = await resolveProvinceCode(
-        input.provinceCode ?? buyerProvinceCode ?? merchant.provinceCode
+        input.provinceCode ?? outlet?.provinceCode ?? buyerProvinceCode ?? merchant.provinceCode
       );
       const amount =
         input.items.length > 0
@@ -374,6 +407,7 @@ export class InvoiceService {
           amount: amount,
           buyerId: input.buyerId,
           merchantId,
+          ...(outlet ? { outletId: outlet.id } : {}),
           categoryId: input.categoryId,
           ...(provinceCode ? { provinceCode } : {}),
           status: input.status || InvoiceStatus.Pending,
@@ -396,6 +430,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -492,6 +527,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -552,6 +588,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -613,6 +650,7 @@ export class InvoiceService {
     q?: string;
     type?: InvoiceType;
     returnStatus?: LoanReturnStatus;
+    outletId?: string;
     from?: Date | string;
     to?: Date | string;
     page?: number;
@@ -649,6 +687,7 @@ export class InvoiceService {
       if (filters?.customerEmail) where.customerEmail = filters.customerEmail;
       if (filters?.type) where.type = filters.type;
       if (filters?.returnStatus) where.returnStatus = filters.returnStatus;
+      if (filters?.outletId) where.outletId = filters.outletId;
       if (filters?.q) {
         where.OR = [
           { splitrId: { contains: filters.q } },
@@ -666,6 +705,7 @@ export class InvoiceService {
           include: {
             items: true,
             virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
             category: {
               select: invoiceCategorySelect,
             },
@@ -734,6 +774,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -788,6 +829,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -833,6 +875,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -882,6 +925,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -1006,6 +1050,7 @@ export class InvoiceService {
       include: {
         items: true,
         virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
       },
     });
 
@@ -1122,6 +1167,13 @@ export class InvoiceService {
       if (input.amount !== undefined) updateData.amount = input.amount;
       if (input.buyerId !== undefined) updateData.buyerId = input.buyerId;
       if (input.categoryId !== undefined) updateData.categoryId = input.categoryId;
+      if (input.outletId !== undefined) {
+        if (!existingInvoice.merchantId) {
+          throw new Error("Invoice merchant is required to assign an outlet");
+        }
+        const outlet = await resolveOutlet(input.outletId, existingInvoice.merchantId);
+        updateData.outletId = outlet ? outlet.id : null;
+      }
       if (input.provinceCode !== undefined) {
         updateData.provinceCode = await resolveProvinceCode(input.provinceCode);
       }
@@ -1162,6 +1214,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -1393,6 +1446,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
           buyer: {
             select: {
               id: true,
@@ -1529,6 +1583,7 @@ export class InvoiceService {
       include: {
         items: true,
         virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
       },
     });
 
@@ -2486,6 +2541,7 @@ export class InvoiceService {
       include: {
         items: true,
         virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
       },
     });
 
@@ -2592,6 +2648,7 @@ export class InvoiceService {
       include: {
         items: true,
         virtualInvoiceExtra: true,
+        outlet: invoiceOutletInclude,
       },
     });
 

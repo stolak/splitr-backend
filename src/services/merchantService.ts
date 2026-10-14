@@ -5,6 +5,7 @@ import { emailService } from "./emailService";
 
 import prisma from "../utils/prisma";
 import { merchantPricingService } from "./merchantPricingService";
+import { outletService } from "./outletService";
 
 export interface CreateMerchantInput {
   businessName: string;
@@ -550,6 +551,15 @@ export class MerchantService {
     if (!newUser) {
       throw new Error("User not created");
     }
+    await outletService.createDefaultForMerchant({
+      merchantId: merchant.id,
+      outletName: input.businessName,
+      outletAddress: input.registrationAddress,
+      outletPhone: input.businessPhone || input.authorizedPhoneNo,
+      outletEmail: input.businessEmail,
+      userManagerId: newUser.data.user.id,
+      provinceCode: input.provinceCode,
+    });
     await this.createAuthorisers(merchant.id, [
       {
         authoriserName: firstName,
