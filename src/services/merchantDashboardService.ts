@@ -86,7 +86,7 @@ function inRange(date: Date, start: Date, end: Date): boolean {
 }
 
 function purchaseStatusLabel(status: InvoiceStatus): string {
-  if (status === InvoiceStatus.Paid) return "Captured";
+  if (status === InvoiceStatus.Paid) return "Paid";
   if (status === InvoiceStatus.Pending) return "Awaiting purchase";
   return status;
 }
@@ -121,7 +121,8 @@ function productGroup(invoice: PaidInvoice): { key: string; label: string } {
   const tenure = invoice.loan?.product?.tenure ?? invoice.loan?.loanTenure;
   if (type === ProductType.MONTHLY_FLEX) return { key: "monthlyFlex", label: "Monthly Flex" };
   if (tenure === 6) return { key: "payIn6", label: "Pay-in-6 (P6)" };
-  if (tenure === 4 || type === ProductType.BI_WEEKLY) return { key: "payIn4", label: "Pay-in-4 (P4)" };
+  if (tenure === 4 || type === ProductType.BI_WEEKLY)
+    return { key: "payIn4", label: "Pay-in-4 (P4)" };
   return { key: "other", label: "Other" };
 }
 
@@ -144,7 +145,12 @@ function approvalRate(invoices: { loan: { loanStatus: LoanStatus } | null }[]): 
 }
 
 export class MerchantDashboardService {
-  async getDashboard(input: { merchantId: string; outletId?: string; startDate?: Date; endDate?: Date }) {
+  async getDashboard(input: {
+    merchantId: string;
+    outletId?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }) {
     const merchant = await prisma.merchant.findUnique({
       where: { id: input.merchantId },
       select: { id: true, businessName: true },
@@ -157,7 +163,8 @@ export class MerchantDashboardService {
         select: { id: true, merchantId: true },
       });
       if (!outlet) throw new Error("Outlet not found");
-      if (outlet.merchantId !== merchant.id) throw new Error("Outlet does not belong to this merchant");
+      if (outlet.merchantId !== merchant.id)
+        throw new Error("Outlet does not belong to this merchant");
     }
 
     const today = new Date();
@@ -303,16 +310,23 @@ export class MerchantDashboardService {
       nextSettlementScheduleService.get(),
     ]);
 
-    const currentInvoices = rangeInvoices.filter((invoice) => inRange(invoice.createdAt, startDate, endDate));
-    const priorInvoices = rangeInvoices.filter((invoice) => inRange(invoice.createdAt, priorStart, priorEnd));
-    const currentPaid = paidInvoices.filter((invoice) => inRange(invoice.createdAt, startDate, endDate));
-    const priorPaid = paidInvoices.filter((invoice) => inRange(invoice.createdAt, priorStart, priorEnd));
+    const currentInvoices = rangeInvoices.filter((invoice) =>
+      inRange(invoice.createdAt, startDate, endDate)
+    );
+    const priorInvoices = rangeInvoices.filter((invoice) =>
+      inRange(invoice.createdAt, priorStart, priorEnd)
+    );
+    const currentPaid = paidInvoices.filter((invoice) =>
+      inRange(invoice.createdAt, startDate, endDate)
+    );
+    const priorPaid = paidInvoices.filter((invoice) =>
+      inRange(invoice.createdAt, priorStart, priorEnd)
+    );
     const gmv = sumAmounts(currentPaid);
     const priorGmv = sumAmounts(priorPaid);
     const successfulPurchases = currentPaid.length;
     const priorSuccessfulPurchases = priorPaid.length;
-    const averagePurchaseValue =
-      successfulPurchases > 0 ? money(gmv / successfulPurchases) : 0;
+    const averagePurchaseValue = successfulPurchases > 0 ? money(gmv / successfulPurchases) : 0;
     const priorAveragePurchaseValue =
       priorSuccessfulPurchases > 0 ? money(priorGmv / priorSuccessfulPurchases) : 0;
     const financingRate = approvalRate(currentInvoices);
@@ -335,7 +349,9 @@ export class MerchantDashboardService {
     const priorCustomersCounts = this.customerCounts(priorPaid, knownBeforePrior);
 
     const lastSixStart = chartThisStart;
-    const lastSixPaid = paidInvoices.filter((invoice) => invoice.createdAt.getTime() >= lastSixStart.getTime());
+    const lastSixPaid = paidInvoices.filter(
+      (invoice) => invoice.createdAt.getTime() >= lastSixStart.getTime()
+    );
     const lastSixGmv = sumAmounts(lastSixPaid);
     const lastSixPurchases = lastSixPaid.length;
 
@@ -393,7 +409,11 @@ export class MerchantDashboardService {
       },
       gmvPerformance: {
         thisPeriod: this.monthlySeries(paidInvoices, chartThisStart, endDate),
-        previousPeriod: this.monthlySeries(paidInvoices, chartPreviousStart, new Date(chartThisStart.getTime() - 1)),
+        previousPeriod: this.monthlySeries(
+          paidInvoices,
+          chartPreviousStart,
+          new Date(chartThisStart.getTime() - 1)
+        ),
         lastSixMonths: {
           gmv: lastSixGmv,
           successfulPurchases: lastSixPurchases,
@@ -424,7 +444,10 @@ export class MerchantDashboardService {
         },
         newCustomers: {
           count: currentCustomers.newCustomers,
-          changePercent: changePercent(currentCustomers.newCustomers, priorCustomersCounts.newCustomers),
+          changePercent: changePercent(
+            currentCustomers.newCustomers,
+            priorCustomersCounts.newCustomers
+          ),
         },
         returningCustomers: {
           count: currentCustomers.returning,
@@ -435,11 +458,13 @@ export class MerchantDashboardService {
       recentTransactions: {
         counts: {
           all: currentInvoices.length,
-          pending: currentInvoices.filter((invoice) => invoice.status === InvoiceStatus.Pending).length,
+          pending: currentInvoices.filter((invoice) => invoice.status === InvoiceStatus.Pending)
+            .length,
           approved: currentInvoices.filter((invoice) =>
             invoice.loan ? APPROVED_LOAN_STATUSES.includes(invoice.loan.loanStatus) : false
           ).length,
-          captured: currentInvoices.filter((invoice) => invoice.status === InvoiceStatus.Paid).length,
+          captured: currentInvoices.filter((invoice) => invoice.status === InvoiceStatus.Paid)
+            .length,
           fulfilmentPending: currentInvoices.filter(
             (invoice) =>
               invoice.status === InvoiceStatus.Paid &&
@@ -455,22 +480,32 @@ export class MerchantDashboardService {
           ).length,
           disputes: disputesInRange,
         },
-        items: currentInvoices.slice(0, RECENT_TRANSACTION_LIMIT).map((invoice) => ({
-          id: invoice.id,
-          transactionId: invoice.loan?.splitrId || invoice.splitrId,
-          date: invoice.createdAt,
-          customerName: invoice.customerName,
-          purchaseAmount: money(invoice.amount),
-          productName: productLabel(invoice),
-          purchaseStatus: purchaseStatusLabel(invoice.status),
-          fulfilmentStatus: fulfilmentStatusLabel(invoice.fulfillStatus),
-        })),
+        items: [...currentInvoices]
+          .sort((left, right) => {
+            const leftWaiting = left.fulfillStatus === FulfillStatus.AwaitingFulfillment ? 0 : 1;
+            const rightWaiting = right.fulfillStatus === FulfillStatus.AwaitingFulfillment ? 0 : 1;
+            if (leftWaiting !== rightWaiting) return leftWaiting - rightWaiting;
+            return right.createdAt.getTime() - left.createdAt.getTime();
+          })
+          .slice(0, RECENT_TRANSACTION_LIMIT)
+          .map((invoice) => ({
+            id: invoice.id,
+            transactionId: invoice.loan?.splitrId || invoice.splitrId,
+            date: invoice.createdAt,
+            customerName: invoice.customerName,
+            purchaseAmount: money(invoice.amount),
+            productName: productLabel(invoice),
+            purchaseStatus: purchaseStatusLabel(invoice.status),
+            fulfilmentStatus: fulfilmentStatusLabel(invoice.fulfillStatus),
+          })),
       },
     };
   }
 
   private customerCounts(invoices: PaidInvoice[], knownBefore: Set<string>) {
-    const keys = new Set(invoices.map((invoice) => customerKey(invoice.buyerId, invoice.customerEmail)));
+    const keys = new Set(
+      invoices.map((invoice) => customerKey(invoice.buyerId, invoice.customerEmail))
+    );
     let newCustomers = 0;
     let returning = 0;
     for (const key of keys) {
@@ -487,7 +522,9 @@ export class MerchantDashboardService {
     while (cursor.getTime() <= last.getTime()) {
       const next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
       const monthInvoices = invoices.filter(
-        (invoice) => invoice.createdAt.getTime() >= cursor.getTime() && invoice.createdAt.getTime() < next.getTime()
+        (invoice) =>
+          invoice.createdAt.getTime() >= cursor.getTime() &&
+          invoice.createdAt.getTime() < next.getTime()
       );
       points.push({
         month: monthKey(cursor),
@@ -528,7 +565,10 @@ export class MerchantDashboardService {
       groups.set(group.key, current);
     }
     return [...groups.entries()]
-      .filter(([key, group]) => key === "payIn4" || key === "payIn6" || key === "monthlyFlex" || group.amount > 0)
+      .filter(
+        ([key, group]) =>
+          key === "payIn4" || key === "payIn6" || key === "monthlyFlex" || group.amount > 0
+      )
       .map(([key, group]) => ({
         key,
         label: group.label,
