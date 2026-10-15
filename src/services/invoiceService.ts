@@ -15,6 +15,7 @@ import {
   ProductType,
   PaymentProvider,
   PaymentType,
+  FulfillStatus,
 } from "@prisma/client";
 import { loanService } from "./loanService";
 import { LoanSettingService } from "./loanSettingService";
@@ -1028,6 +1029,8 @@ export class InvoiceService {
 
     const updateData: any = {
       status: InvoiceStatus.Paid,
+      paymentDate: new Date(),
+      fulfillStatus: FulfillStatus.AwaitingFulfillment,
       returnStatus: LoanReturnStatus.Active,
       buyerId: buyerId,
       customerName: `${buyer.firstName} ${buyer.lastName}`,
@@ -2503,6 +2506,8 @@ export class InvoiceService {
 
     const updateData = {
       status: InvoiceStatus.Paid,
+      paymentDate: new Date(),
+      fulfillStatus: FulfillStatus.AwaitingFulfillment,
       buyerId,
       returnStatus: LoanReturnStatus.Active,
       customerName: `${buyer.firstName ?? ""} ${buyer.lastName ?? ""}`.trim(),
@@ -2634,6 +2639,8 @@ export class InvoiceService {
     const updateData = {
       status: InvoiceStatus.Paid,
       returnStatus: LoanReturnStatus.Active,
+      paymentDate: new Date(),
+      fulfillStatus: FulfillStatus.AwaitingFulfillment,
       buyerId,
       customerName: `${buyer.firstName ?? ""} ${buyer.lastName ?? ""}`.trim(),
       customerEmail: buyer.email,

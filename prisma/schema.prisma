@@ -934,6 +934,7 @@ model Invoice {
 
   items                Item[]
   status               InvoiceStatus         @default(Pending)
+  paymentDate          DateTime?
   type                 InvoiceType           @default(Purchase)
   installmentType      LoanInstallmentType   @default(Monthly)
   productType          ProductType           @default(BI_WEEKLY)

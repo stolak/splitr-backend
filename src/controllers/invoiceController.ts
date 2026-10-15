@@ -1,5 +1,11 @@
 import { Request, Response } from "express";
-import { invoiceService, CreateInvoiceInput, UpdateInvoiceInput, UpdateInvoiceReturnInput } from "../services/invoiceService";
+import {
+  invoiceService,
+  CreateInvoiceInput,
+  UpdateInvoiceInput,
+  UpdateInvoiceReturnInput,
+} from "../services/invoiceService";
+import prisma from "../utils/prisma";
 
 import {
   InvoiceStatus,
@@ -62,7 +68,10 @@ import {
  *               outletId:
  *                 type: string
  *                 nullable: true
- *                 description: Outlet for this merchant. When provinceCode is omitted, the outlet province is used.
+ *                 description: >
+ *                   Outlet for this merchant. When omitted, the authenticated user's first managed
+ *                   outlet for this merchant is used. Otherwise the merchant's first outlet is used.
+ *                   It stays empty when neither exists. When provinceCode is omitted, the outlet province is used.
  *               categoryId:
  *                 type: string
  *                 description: Optional invoice category ID
@@ -775,6 +784,38 @@ import {
  *         description: Internal server error
  */
 
+async function resolveCreateOutletId(input: {
+  outletId?: string | null;
+  merchantId?: string;
+  userId?: string;
+}): Promise<string | null> {
+  const provided = typeof input.outletId === "string" ? input.outletId.trim() : "";
+  if (provided) return provided;
+
+  if (input.userId) {
+    const managedOutlet = await prisma.outlet.findFirst({
+      where: {
+        userManagerId: input.userId,
+        ...(input.merchantId ? { merchantId: input.merchantId } : {}),
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (managedOutlet) return managedOutlet.id;
+  }
+
+  if (input.merchantId) {
+    const merchantOutlet = await prisma.outlet.findFirst({
+      where: { merchantId: input.merchantId },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (merchantOutlet) return merchantOutlet.id;
+  }
+
+  return null;
+}
+
 export class InvoiceController {
   /**
    * Create a new invoice with items
@@ -814,9 +855,19 @@ export class InvoiceController {
           message: "Invoice must have at least one item",
         });
       }
+
+      const merchantId = isVirtualCard
+        ? process.env.VIRTUAL_CARD_MERCHANT_ID?.trim()
+        : (input.merchantId ?? req.user?.merchantId);
+      const outletId = await resolveCreateOutletId({
+        outletId: input.outletId,
+        merchantId,
+        userId: req.user?.id,
+      });
       const result = await invoiceService.createInvoice({
         ...input,
-        merchantId: isVirtualCard ? undefined : input.merchantId ?? req.user?.merchantId,
+        merchantId,
+        outletId,
       });
 
       if (!result.success) {
@@ -845,8 +896,20 @@ export class InvoiceController {
    */
   async list(req: Request, res: Response) {
     try {
-      const { merchantId, buyerId, status, customerEmail, q, type, returnStatus, outletId, from, to, page, limit } =
-        req.query;
+      const {
+        merchantId,
+        buyerId,
+        status,
+        customerEmail,
+        q,
+        type,
+        returnStatus,
+        outletId,
+        from,
+        to,
+        page,
+        limit,
+      } = req.query;
 
       const filters: any = {};
       if (merchantId) filters.merchantId = merchantId as string;
