@@ -80,4 +80,52 @@ router.get("/stats", authenticateJWT, dashboardController.getDashboardStats);
  */
 router.get("/buyer", authenticateJWT, dashboardController.getBuyerDashboard);
 
+/**
+ * @swagger
+ * /api/v1/dashboard/merchant:
+ *   get:
+ *     summary: Merchant portal dashboard
+ *     description: >
+ *       Returns GMV, successful purchases, financing approval rate, average purchase value,
+ *       the six-month GMV chart, attention counts, settlement snapshot, category and product
+ *       mix, customer insights, and recent purchases. Financing amount and financing status
+ *       are omitted from the transaction list. merchantId is required. outletId limits the
+ *       figures to one outlet. When startDate and endDate are omitted, the range is the
+ *       month ending today.
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: outletId
+ *         schema:
+ *           type: string
+ *         description: Optional outlet. Omit for all outlets.
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Merchant dashboard retrieved successfully
+ *       400:
+ *         description: merchantId or the date range is invalid
+ *       403:
+ *         description: Merchant access is required
+ *       404:
+ *         description: Merchant or outlet not found
+ */
+router.get("/merchant", authenticateJWT, dashboardController.getMerchantDashboard);
+
 export default router;

@@ -399,26 +399,27 @@ model MerchantDirector {
 }
 
 model Outlet {
-  id                          String               @id @default(uuid())
-  code                        String?              @unique @db.VarChar(30)
+  id                          String                   @id @default(uuid())
+  code                        String?                  @unique @db.VarChar(30)
   merchantId                  String
-  merchant                    Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchant                    Merchant                 @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   outletName                  String
   outletAddress               String?
   provinceCode                String?
-  province                    TaxMatrix?           @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
+  province                    TaxMatrix?               @relation(fields: [provinceCode], references: [provinceCode], onDelete: SetNull)
   outletPhone                 String?
   outletEmail                 String?
   outletMerchantBankAccountId String?
-  outletMerchantBankAccount   MerchantBankAccount? @relation(fields: [outletMerchantBankAccountId], references: [id], onDelete: SetNull)
-  status                      OutletStatus         @default(Active)
-  type                        OutletType           @default(HeadOffice)
+  outletMerchantBankAccount   MerchantBankAccount?     @relation(fields: [outletMerchantBankAccountId], references: [id], onDelete: SetNull)
+  status                      OutletStatus             @default(Active)
+  type                        OutletType               @default(HeadOffice)
   userManagerId               String?
-  userManager                 User?                @relation(fields: [userManagerId], references: [id], onDelete: SetNull)
-  createdAt                   DateTime             @default(now())
-  updatedAt                   DateTime             @updatedAt
+  userManager                 User?                    @relation(fields: [userManagerId], references: [id], onDelete: SetNull)
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
   invoices                    Invoice[]
   settlements                 Settlement[]
+  merchantReserveReleases     MerchantReserveRelease[]
 
   @@map("outlet")
 }
@@ -829,6 +830,13 @@ enum DiscountStatus {
   Open
 }
 
+enum FulfillStatus {
+  Pending
+  AwaitingFulfillment
+  Fulfilled
+  Failed
+}
+
 model EligibilityAndScore {
   id                      String   @id @default(uuid())
   buyerId                 String
@@ -939,6 +947,7 @@ model Invoice {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   revenues             Revenue[]
+  fulfillStatus        FulfillStatus         @default(Pending)
 
   returnStatus          LoanReturnStatus? @default(Active)
   returnAmount          Decimal?
@@ -1642,6 +1651,8 @@ model MerchantReserveRelease {
   id               String        @id @default(uuid())
   merchantId       String
   merchant         Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  outletId         String?
+  outlet           Outlet?       @relation(fields: [outletId], references: [id], onDelete: SetNull)
   amount           Decimal       @default(0) @db.Decimal(15, 2)
   remarks          String        @db.VarChar(500)
   reserveReference String        @db.VarChar(100)

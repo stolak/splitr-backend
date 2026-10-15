@@ -314,7 +314,6 @@ export class InvoiceService {
    * Create a new invoice with items
    */
   async createInvoice(input: CreateInvoiceInput) {
-    console.log("Creating invoice", input);
     try {
       const isVirtualCard = input.type === InvoiceType.VirtualCard;
       const merchantId = isVirtualCard
@@ -430,7 +429,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -527,7 +526,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -588,7 +587,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -705,7 +704,7 @@ export class InvoiceService {
           include: {
             items: true,
             virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+            outlet: invoiceOutletInclude,
             category: {
               select: invoiceCategorySelect,
             },
@@ -774,7 +773,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -829,7 +828,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -875,7 +874,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -925,7 +924,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -1214,7 +1213,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           category: {
             select: invoiceCategorySelect,
           },
@@ -1446,7 +1445,7 @@ export class InvoiceService {
         include: {
           items: true,
           virtualInvoiceExtra: true,
-        outlet: invoiceOutletInclude,
+          outlet: invoiceOutletInclude,
           buyer: {
             select: {
               id: true,
