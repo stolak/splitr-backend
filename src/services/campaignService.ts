@@ -270,8 +270,15 @@ function parseProductFinanceChargeDiscount(value: unknown): ProductFinanceCharge
   });
 }
 
-function parseSplittingRatio(value: unknown): SplittingRatio | null {
-  if (value === undefined || value === null) return null;
+function parseSplittingRatio(value: unknown, options?: { required?: boolean }): SplittingRatio | null {
+  if (value === undefined || value === null) {
+    if (options?.required) {
+      throw new Error(
+        "splittingRatio is required when funding is MerchantAndSplitrFunded"
+      );
+    }
+    return null;
+  }
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new Error("splittingRatio must be an object");
   }
@@ -286,6 +293,36 @@ function parseSplittingRatio(value: unknown): SplittingRatio | null {
     throw new Error("splittingRatio.merchant + splittingRatio.splitr must equal 1");
   }
   return { merchant, splitr };
+}
+
+/**
+ * MerchantFunded → { merchant: 1, splitr: 0 }
+ * SplitrFunded → { merchant: 0, splitr: 1 }
+ * MerchantAndSplitrFunded → required from client and validated (both sides > 0, sum = 1)
+ */
+function resolveSplittingRatioForFunding(
+  funding: CampaignFunding,
+  value: unknown
+): SplittingRatio {
+  if (funding === CampaignFunding.MerchantFunded) {
+    return { merchant: 1, splitr: 0 };
+  }
+  if (funding === CampaignFunding.SplitrFunded) {
+    return { merchant: 0, splitr: 1 };
+  }
+
+  const ratio = parseSplittingRatio(value, { required: true });
+  if (!ratio) {
+    throw new Error(
+      "splittingRatio is required when funding is MerchantAndSplitrFunded"
+    );
+  }
+  if (ratio.merchant <= 0 || ratio.splitr <= 0) {
+    throw new Error(
+      "splittingRatio.merchant and splittingRatio.splitr must both be greater than 0 when funding is MerchantAndSplitrFunded"
+    );
+  }
+  return ratio;
 }
 
 function moneyOrNull(value: number | null | undefined): Prisma.Decimal | null | undefined {
@@ -677,7 +714,8 @@ export class CampaignService {
     const confirm = optionalBoolean(input.confirm, "confirm") ?? false;
     const approved = optionalBoolean(input.approved, "approved") ?? false;
     const campaignCode = await generateCampaignCode();
-    const splittingRatio = parseSplittingRatio(input.splittingRatio);
+    const funding = parseEnum(input.funding, "funding", FUNDING);
+    const splittingRatio = resolveSplittingRatioForFunding(funding, input.splittingRatio);
 
     const record = await prisma.campaign.create({
       data: {
@@ -704,8 +742,8 @@ export class CampaignService {
         minPurchase: moneyOrNull(optionalNumber(input.minPurchase, "minPurchase")) ?? null,
         allProducts: optionalBoolean(input.allProducts, "allProducts") ?? true,
         productFinanceChargeDiscount,
-        splittingRatio: splittingRatio === null ? Prisma.JsonNull : splittingRatio,
-        funding: parseEnum(input.funding, "funding", FUNDING),
+        splittingRatio,
+        funding,
         budget: moneyOrNull(optionalNumber(input.budget, "budget")) ?? null,
         startDate,
         endDate,
@@ -761,8 +799,12 @@ export class CampaignService {
     if (input.eligibility !== undefined) {
       data.eligibility = parseEnum(input.eligibility, "eligibility", ELIGIBILITY);
     }
+    const funding =
+      input.funding !== undefined
+        ? parseEnum(input.funding, "funding", FUNDING)
+        : existing.funding;
     if (input.funding !== undefined) {
-      data.funding = parseEnum(input.funding, "funding", FUNDING);
+      data.funding = funding;
     }
     if (input.status !== undefined) {
       data.status = parseEnum(input.status, "status", STATUSES);
@@ -796,9 +838,12 @@ export class CampaignService {
       data.merchantIds = merchantIds;
     }
 
-    if (input.splittingRatio !== undefined) {
-      const ratio = parseSplittingRatio(input.splittingRatio);
-      data.splittingRatio = ratio === null ? Prisma.JsonNull : ratio;
+    if (input.funding !== undefined || input.splittingRatio !== undefined) {
+      const ratioInput =
+        input.splittingRatio !== undefined
+          ? input.splittingRatio
+          : existing.splittingRatio;
+      data.splittingRatio = resolveSplittingRatioForFunding(funding, ratioInput);
     }
 
     if (input.minPurchase !== undefined) {

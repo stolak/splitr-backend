@@ -1807,6 +1807,8 @@ model Campaign {
 
   // Required when promoType = FinanceChargeDiscount and when required is all the financingProducts must have a financeChargeDiscountPercentage
   productFinanceChargeDiscount Json            @default("[]") // sample: [{product:"PayIn4",financeChargeDiscountPercentage:4}]
+  /// Defaults by funding: MerchantFunded → {merchant:1,splitr:0}; SplitrFunded → {merchant:0,splitr:1}.
+  /// Required from API when funding = MerchantAndSplitrFunded (both sides > 0, sum = 1).
   splittingRatio               Json?           @default("{}") // sample: {"merchant":0.3,"splitr":0.7}
   funding                      CampaignFunding
   budget                       Decimal?        @db.Decimal(15, 2)

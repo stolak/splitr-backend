@@ -159,7 +159,10 @@ const controller = campaignController;
  *             splitr:
  *               type: number
  *               example: 0.7
- *           description: merchant + splitr must equal 1.
+ *           description: >
+ *             Required when funding is MerchantAndSplitrFunded (both sides > 0, merchant + splitr = 1).
+ *             Ignored/overwritten when MerchantFunded ({merchant:1,splitr:0}) or
+ *             SplitrFunded ({merchant:0,splitr:1}).
  *           example:
  *             merchant: 0.3
  *             splitr: 0.7
