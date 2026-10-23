@@ -36,37 +36,34 @@ const controller = campaignController;
  *         approvedRemarks:
  *           type: string
  *           nullable: true
- *     CampaignProductFinancing:
+ *     CampaignProductFinanceChargeDiscount:
  *       type: object
- *       required: [product]
+ *       required: [product, financeChargeDiscountPercentage]
  *       properties:
  *         product:
  *           type: string
  *           enum: [PayIn4, PayIn6, MonthlyFlex]
- *         reducedPercentage:
+ *         financeChargeDiscountPercentage:
  *           type: number
- *           nullable: true
+ *           minimum: 0
+ *           exclusiveMinimum: true
+ *           maximum: 100
  *           example: 4
- *         productDiscount:
- *           type: object
- *           nullable: true
- *           properties:
- *             fixed:
- *               type: number
- *               nullable: true
- *               example: 300
- *             percentage:
- *               type: number
- *               nullable: true
- *               example: 5
  *     CampaignInput:
  *       type: object
- *       required: [initiatedBy, name, promoType, funding, startDate, endDate]
+ *       required:
+ *         - initiatedBy
+ *         - name
+ *         - promoType
+ *         - financingProducts
+ *         - funding
+ *         - startDate
+ *         - endDate
  *       properties:
  *         merchantId:
  *           type: string
  *           nullable: true
- *           description: Optional owner merchant. Defaults to the authenticated merchant's id when available.
+ *           description: Owner merchant. Required when initiatedBy is Merchant.
  *         initiatedBy:
  *           type: string
  *           enum: [Merchant, Splitr]
@@ -110,50 +107,59 @@ const controller = campaignController;
  *         productScope:
  *           type: string
  *           example: All products
+ *         financingProducts:
+ *           type: array
+ *           minItems: 1
+ *           items:
+ *             type: string
+ *             enum: [PayIn4, PayIn6, MonthlyFlex]
+ *           example: [PayIn4, PayIn6, MonthlyFlex]
+ *           description: At least one financing product is required.
  *         promoType:
  *           type: string
- *           enum: [PurchaseDiscount, FixedAmountOff, Mixed]
- *         discountAmount:
+ *           enum: [PurchaseDiscount, FinanceChargeDiscount, Mixed]
+ *         purchaseDiscountType:
+ *           type: string
+ *           nullable: true
+ *           enum: [FixedAmountOff, PercentageOff]
+ *           description: Required when promoType is PurchaseDiscount or Mixed.
+ *         purchaseDiscountAmount:
  *           type: number
  *           example: 50
- *           description: Required when promoType is FixedAmountOff.
- *         discountPercentage:
+ *           description: Required when purchaseDiscountType is FixedAmountOff.
+ *         purchaseDiscountPercentage:
  *           type: number
- *           example: 50
- *           description: Required when promoType is PurchaseDiscount.
+ *           example: 10
+ *           description: Required when purchaseDiscountType is PercentageOff.
  *         minPurchase:
  *           type: number
  *           example: 200
  *         allProducts:
  *           type: boolean
  *           example: true
- *         stacking:
- *           type: boolean
- *           example: false
- *         financing:
+ *         productFinanceChargeDiscount:
  *           type: array
  *           items:
- *             type: string
- *             enum: [PayIn4, PayIn6, MonthlyFlex]
- *           example: [PayIn4, PayIn6, MonthlyFlex]
- *         productFinancing:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/CampaignProductFinancing'
- *           description: Required when promoType is Mixed.
+ *             $ref: '#/components/schemas/CampaignProductFinanceChargeDiscount'
+ *           description: >
+ *             Required when promoType is FinanceChargeDiscount or Mixed.
+ *             Must include exactly one entry for every product in financingProducts
+ *             (and no products outside financingProducts). Must be empty for PurchaseDiscount.
  *           example:
  *             - product: PayIn4
- *               reducedPercentage: 4
- *               productDiscount:
- *                 fixed: 300
- *                 percentage: 5
+ *               financeChargeDiscountPercentage: 4
+ *             - product: PayIn6
+ *               financeChargeDiscountPercentage: 6
  *         splittingRatio:
  *           type: object
- *           additionalProperties:
- *             type: number
- *           description: >
- *             Funding split ratios keyed by party (e.g. merchant, splitr, or a merchant id).
- *             Values must be between 0 and 1 and sum to 1. Empty object clears a prior ratio.
+ *           properties:
+ *             merchant:
+ *               type: number
+ *               example: 0.3
+ *             splitr:
+ *               type: number
+ *               example: 0.7
+ *           description: merchant + splitr must equal 1.
  *           example:
  *             merchant: 0.3
  *             splitr: 0.7
@@ -219,6 +225,15 @@ const controller = campaignController;
  *         description: Unauthorized
  *   post:
  *     summary: Create a campaign
+ *     description: |
+ *       Creates a campaign. `campaignCode` is auto-generated (CMP-YYMM-XXXXXXXX).
+ *
+ *       Rules:
+ *       - `financingProducts` must include at least one of PayIn4, PayIn6, MonthlyFlex
+ *       - PurchaseDiscount / Mixed: require `purchaseDiscountType` + amount or percentage
+ *       - FinanceChargeDiscount / Mixed: `productFinanceChargeDiscount` must 1:1 match `financingProducts`
+ *       - PurchaseDiscount: `productFinanceChargeDiscount` must be [] or omitted
+ *       - FinanceChargeDiscount: purchase discount fields must be omitted/null
  *     tags: [Campaign]
  *     security:
  *       - bearerAuth: []
@@ -228,33 +243,277 @@ const controller = campaignController;
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CampaignInput'
- *           example:
- *             initiatedBy: Splitr
- *             name: Back to School with Splitr
- *             description: Seasonal financing promotion for qualifying purchases.
- *             imageName: campaign.png
- *             outletIds: []
- *             merchantIds: []
- *             eligibility: AllCustomers
- *             channels: [OnlineStoreWebsite, InStorePOS, PaymentLinkInvoice]
- *             productScope: All products
- *             promoType: PurchaseDiscount
- *             discountPercentage: 50
- *             minPurchase: 200
- *             allProducts: true
- *             stacking: false
- *             financing: [PayIn4, PayIn6, MonthlyFlex]
- *             productFinancing: []
- *             splittingRatio:
- *               merchant: 0.3
- *               splitr: 0.7
- *             funding: MerchantAndSplitrFunded
- *             budget: 10000
- *             startDate: 2026-10-01
- *             endDate: 2026-10-31
- *             confirm: true
- *             approved: false
- *             status: Pending
+ *           examples:
+ *             purchaseDiscountPercentageAllProducts:
+ *               summary: Purchase % off — all financing products
+ *               value:
+ *                 initiatedBy: Splitr
+ *                 name: Back to School with Splitr
+ *                 description: Seasonal financing promotion for qualifying purchases.
+ *                 imageName: campaign.png
+ *                 outletIds: []
+ *                 merchantIds: []
+ *                 eligibility: AllCustomers
+ *                 channels: [OnlineStoreWebsite, InStorePOS, PaymentLinkInvoice]
+ *                 productScope: All products
+ *                 financingProducts: [PayIn4, PayIn6, MonthlyFlex]
+ *                 promoType: PurchaseDiscount
+ *                 purchaseDiscountType: PercentageOff
+ *                 purchaseDiscountPercentage: 10
+ *                 minPurchase: 200
+ *                 allProducts: true
+ *                 productFinanceChargeDiscount: []
+ *                 splittingRatio:
+ *                   merchant: 0.3
+ *                   splitr: 0.7
+ *                 funding: MerchantAndSplitrFunded
+ *                 budget: 10000
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-10-31"
+ *                 confirm: true
+ *                 approved: false
+ *                 status: Pending
+ *             purchaseDiscountFixedAmountMerchant:
+ *               summary: Purchase fixed $ off — merchant-initiated
+ *               value:
+ *                 merchantId: merchant-uuid-1
+ *                 initiatedBy: Merchant
+ *                 name: $50 Off Fall Sale
+ *                 description: Fixed amount off purchases of $300+
+ *                 outletIds: []
+ *                 merchantIds: []
+ *                 eligibility: AllCustomers
+ *                 channels: [InStorePOS, OnlineStoreWebsite]
+ *                 productScope: All products
+ *                 financingProducts: [PayIn4]
+ *                 promoType: PurchaseDiscount
+ *                 purchaseDiscountType: FixedAmountOff
+ *                 purchaseDiscountAmount: 50
+ *                 minPurchase: 300
+ *                 allProducts: true
+ *                 productFinanceChargeDiscount: []
+ *                 funding: MerchantFunded
+ *                 budget: 5000
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-11-15"
+ *                 confirm: true
+ *                 status: Pending
+ *             purchaseDiscountNewCustomersPayIn4And6:
+ *               summary: Purchase % off — new customers, PayIn4 + PayIn6
+ *               value:
+ *                 merchantId: merchant-uuid-1
+ *                 initiatedBy: Merchant
+ *                 name: New Customer Welcome
+ *                 eligibility: NewCustomer
+ *                 channels: [OnlineStoreWebsite]
+ *                 financingProducts: [PayIn4, PayIn6]
+ *                 promoType: PurchaseDiscount
+ *                 purchaseDiscountType: PercentageOff
+ *                 purchaseDiscountPercentage: 15
+ *                 minPurchase: 100
+ *                 allProducts: true
+ *                 productFinanceChargeDiscount: []
+ *                 funding: MerchantFunded
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-12-31"
+ *                 confirm: true
+ *             purchaseDiscountReturningOutletScoped:
+ *               summary: Purchase fixed off — returning customers, specific outlets
+ *               value:
+ *                 merchantId: merchant-uuid-1
+ *                 initiatedBy: Merchant
+ *                 name: Loyalty Outlet Promo
+ *                 eligibility: ReturningCustomer
+ *                 outletIds: [outlet-uuid-a, outlet-uuid-b]
+ *                 channels: [InStorePOS]
+ *                 financingProducts: [MonthlyFlex]
+ *                 promoType: PurchaseDiscount
+ *                 purchaseDiscountType: FixedAmountOff
+ *                 purchaseDiscountAmount: 25
+ *                 minPurchase: 150
+ *                 allProducts: false
+ *                 productScope: Selected SKUs
+ *                 productFinanceChargeDiscount: []
+ *                 funding: MerchantFunded
+ *                 startDate: "2026-10-15"
+ *                 endDate: "2026-10-31"
+ *                 confirm: false
+ *                 status: Pending
+ *             financeChargeAllProducts:
+ *               summary: Finance charge discount — all products
+ *               value:
+ *                 initiatedBy: Splitr
+ *                 name: Zero Fee October
+ *                 description: Reduce finance charges across all plans
+ *                 merchantIds:
+ *                   - merchantId: merchant-uuid-1
+ *                     approved: false
+ *                   - merchantId: merchant-uuid-2
+ *                     approved: false
+ *                 eligibility: AllCustomers
+ *                 channels: [OnlineStoreWebsite, InStorePOS, PaymentLinkInvoice]
+ *                 financingProducts: [PayIn4, PayIn6, MonthlyFlex]
+ *                 promoType: FinanceChargeDiscount
+ *                 productFinanceChargeDiscount:
+ *                   - product: PayIn4
+ *                     financeChargeDiscountPercentage: 100
+ *                   - product: PayIn6
+ *                     financeChargeDiscountPercentage: 50
+ *                   - product: MonthlyFlex
+ *                     financeChargeDiscountPercentage: 25
+ *                 splittingRatio:
+ *                   merchant: 0.5
+ *                   splitr: 0.5
+ *                 funding: MerchantAndSplitrFunded
+ *                 budget: 20000
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-10-31"
+ *                 confirm: true
+ *                 approved: false
+ *                 status: Pending
+ *             financeChargePayIn4Only:
+ *               summary: Finance charge discount — PayIn4 only
+ *               value:
+ *                 merchantId: merchant-uuid-1
+ *                 initiatedBy: Merchant
+ *                 name: PayIn4 Fee Cut
+ *                 eligibility: AllCustomers
+ *                 channels: [PaymentLinkInvoice]
+ *                 financingProducts: [PayIn4]
+ *                 promoType: FinanceChargeDiscount
+ *                 productFinanceChargeDiscount:
+ *                   - product: PayIn4
+ *                     financeChargeDiscountPercentage: 4
+ *                 funding: MerchantFunded
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-11-30"
+ *                 confirm: true
+ *             financeChargeSplitrFunded:
+ *               summary: Finance charge discount — Splitr funded
+ *               value:
+ *                 initiatedBy: Splitr
+ *                 name: Splitr Covers Fees
+ *                 merchantIds: [merchant-uuid-1, merchant-uuid-2]
+ *                 eligibility: NewCustomer
+ *                 channels: [OnlineStoreWebsite]
+ *                 financingProducts: [PayIn4, PayIn6]
+ *                 promoType: FinanceChargeDiscount
+ *                 productFinanceChargeDiscount:
+ *                   - product: PayIn4
+ *                     financeChargeDiscountPercentage: 10
+ *                   - product: PayIn6
+ *                     financeChargeDiscountPercentage: 8
+ *                 splittingRatio:
+ *                   merchant: 0
+ *                   splitr: 1
+ *                 funding: SplitrFunded
+ *                 budget: 15000
+ *                 startDate: "2026-11-01"
+ *                 endDate: "2026-11-30"
+ *                 confirm: true
+ *                 approved: true
+ *                 status: Active
+ *             mixedPercentageAndFinanceCharge:
+ *               summary: Mixed — purchase % off + finance charge discounts
+ *               value:
+ *                 initiatedBy: Splitr
+ *                 name: Mega Mixed Promo
+ *                 description: Purchase discount plus reduced finance charges
+ *                 merchantIds:
+ *                   - merchantId: merchant-uuid-1
+ *                     approved: false
+ *                 eligibility: AllCustomers
+ *                 channels: [OnlineStoreWebsite, InStorePOS]
+ *                 financingProducts: [PayIn4, PayIn6, MonthlyFlex]
+ *                 promoType: Mixed
+ *                 purchaseDiscountType: PercentageOff
+ *                 purchaseDiscountPercentage: 5
+ *                 minPurchase: 250
+ *                 allProducts: true
+ *                 productFinanceChargeDiscount:
+ *                   - product: PayIn4
+ *                     financeChargeDiscountPercentage: 4
+ *                   - product: PayIn6
+ *                     financeChargeDiscountPercentage: 6
+ *                   - product: MonthlyFlex
+ *                     financeChargeDiscountPercentage: 3
+ *                 splittingRatio:
+ *                   merchant: 0.3
+ *                   splitr: 0.7
+ *                 funding: MerchantAndSplitrFunded
+ *                 budget: 25000
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-12-31"
+ *                 confirm: true
+ *                 status: Pending
+ *             mixedFixedAmountAndFinanceCharge:
+ *               summary: Mixed — fixed $ off + finance charge (PayIn4 + MonthlyFlex)
+ *               value:
+ *                 merchantId: merchant-uuid-1
+ *                 initiatedBy: Merchant
+ *                 name: Bundle & Save Mixed
+ *                 eligibility: ReturningCustomer
+ *                 outletIds: [outlet-uuid-a]
+ *                 channels: [InStorePOS]
+ *                 financingProducts: [PayIn4, MonthlyFlex]
+ *                 promoType: Mixed
+ *                 purchaseDiscountType: FixedAmountOff
+ *                 purchaseDiscountAmount: 75
+ *                 minPurchase: 500
+ *                 allProducts: true
+ *                 productFinanceChargeDiscount:
+ *                   - product: PayIn4
+ *                     financeChargeDiscountPercentage: 2
+ *                   - product: MonthlyFlex
+ *                     financeChargeDiscountPercentage: 5
+ *                 funding: MerchantFunded
+ *                 budget: 8000
+ *                 startDate: "2026-10-10"
+ *                 endDate: "2026-10-25"
+ *                 confirm: true
+ *             invoiceChannelOnly:
+ *               summary: Purchase % off — PaymentLinkInvoice only
+ *               value:
+ *                 merchantId: merchant-uuid-1
+ *                 initiatedBy: Merchant
+ *                 name: Invoice Channel Promo
+ *                 eligibility: AllCustomers
+ *                 channels: [PaymentLinkInvoice]
+ *                 financingProducts: [PayIn6]
+ *                 promoType: PurchaseDiscount
+ *                 purchaseDiscountType: PercentageOff
+ *                 purchaseDiscountPercentage: 8
+ *                 minPurchase: 50
+ *                 productFinanceChargeDiscount: []
+ *                 funding: MerchantFunded
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-10-31"
+ *                 confirm: true
+ *             minimalPurchaseDiscount:
+ *               summary: Minimal valid PurchaseDiscount payload
+ *               value:
+ *                 initiatedBy: Splitr
+ *                 name: Minimal Purchase Promo
+ *                 financingProducts: [PayIn4]
+ *                 promoType: PurchaseDiscount
+ *                 purchaseDiscountType: PercentageOff
+ *                 purchaseDiscountPercentage: 5
+ *                 funding: SplitrFunded
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-10-31"
+ *             minimalFinanceChargeDiscount:
+ *               summary: Minimal valid FinanceChargeDiscount payload
+ *               value:
+ *                 initiatedBy: Splitr
+ *                 name: Minimal Fee Promo
+ *                 financingProducts: [PayIn4]
+ *                 promoType: FinanceChargeDiscount
+ *                 productFinanceChargeDiscount:
+ *                   - product: PayIn4
+ *                     financeChargeDiscountPercentage: 4
+ *                 funding: SplitrFunded
+ *                 startDate: "2026-10-01"
+ *                 endDate: "2026-10-31"
  *     responses:
  *       201:
  *         description: Campaign created successfully. campaignCode is auto-generated.
@@ -412,6 +671,25 @@ router.post("/:id/approve-merchant", auth, controller.approveMerchant.bind(contr
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CampaignInput'
+ *           examples:
+ *             updateFinanceChargePairing:
+ *               summary: Change financing products + matching fee discounts
+ *               value:
+ *                 financingProducts: [PayIn4, PayIn6]
+ *                 promoType: FinanceChargeDiscount
+ *                 productFinanceChargeDiscount:
+ *                   - product: PayIn4
+ *                     financeChargeDiscountPercentage: 5
+ *                   - product: PayIn6
+ *                     financeChargeDiscountPercentage: 7
+ *             updatePurchaseDiscount:
+ *               summary: Switch to purchase percentage off
+ *               value:
+ *                 promoType: PurchaseDiscount
+ *                 purchaseDiscountType: PercentageOff
+ *                 purchaseDiscountPercentage: 12
+ *                 financingProducts: [PayIn4]
+ *                 productFinanceChargeDiscount: []
  *     responses:
  *       200:
  *         description: Campaign updated successfully

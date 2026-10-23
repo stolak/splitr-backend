@@ -1,25 +1,62 @@
+import { randomBytes } from "crypto";
 import {
+  CampaignChannel,
   CampaignEligibility,
   CampaignFinancingOption,
   CampaignFunding,
   CampaignInitiatedBy,
   CampaignPromoType,
   CampaignStatus,
-  CampaignChannel,
   Prisma,
+  PurchaseDiscountType,
 } from "@prisma/client";
-import { randomBytes } from "crypto";
 import prisma from "../utils/prisma";
+import { roundUpTo2Decimals } from "../utils/helper";
 
-const INITIATED_BY = Object.values(CampaignInitiatedBy);
-const ELIGIBILITY = Object.values(CampaignEligibility);
-const PROMO_TYPES = Object.values(CampaignPromoType);
-const FUNDING = Object.values(CampaignFunding);
-const STATUSES = Object.values(CampaignStatus);
-const CHANNELS = Object.values(CampaignChannel);
-const FINANCING = Object.values(CampaignFinancingOption);
+const INITIATED_BY: CampaignInitiatedBy[] = Object.values(CampaignInitiatedBy);
+const ELIGIBILITY: CampaignEligibility[] = Object.values(CampaignEligibility);
+const PROMO_TYPES: CampaignPromoType[] = Object.values(CampaignPromoType);
+const PURCHASE_DISCOUNT_TYPES: PurchaseDiscountType[] = Object.values(PurchaseDiscountType);
+const FUNDING: CampaignFunding[] = Object.values(CampaignFunding);
+const STATUSES: CampaignStatus[] = Object.values(CampaignStatus);
+const CHANNELS: CampaignChannel[] = Object.values(CampaignChannel);
+const FINANCING: CampaignFinancingOption[] = Object.values(CampaignFinancingOption);
 
-type CampaignMerchantEntry = {
+const CHANNEL_ALIASES: Record<string, CampaignChannel> = {
+  OnlineStoreWebsite: CampaignChannel.OnlineStoreWebsite,
+  online_store_website: CampaignChannel.OnlineStoreWebsite,
+  InStorePOS: CampaignChannel.InStorePOS,
+  in_store_pos: CampaignChannel.InStorePOS,
+  PaymentLinkInvoice: CampaignChannel.PaymentLinkInvoice,
+  payment_link_invoice: CampaignChannel.PaymentLinkInvoice,
+};
+
+const FINANCING_ALIASES: Record<string, CampaignFinancingOption> = {
+  PayIn4: CampaignFinancingOption.PayIn4,
+  pay_in_4: CampaignFinancingOption.PayIn4,
+  PayIn6: CampaignFinancingOption.PayIn6,
+  pay_in_6: CampaignFinancingOption.PayIn6,
+  MonthlyFlex: CampaignFinancingOption.MonthlyFlex,
+  monthly_flex: CampaignFinancingOption.MonthlyFlex,
+};
+
+const PROMO_ALIASES: Record<string, CampaignPromoType> = {
+  PurchaseDiscount: CampaignPromoType.PurchaseDiscount,
+  purchase_discount: CampaignPromoType.PurchaseDiscount,
+  FinanceChargeDiscount: CampaignPromoType.FinanceChargeDiscount,
+  finance_charge_discount: CampaignPromoType.FinanceChargeDiscount,
+  Mixed: CampaignPromoType.Mixed,
+  mixed: CampaignPromoType.Mixed,
+};
+
+const PURCHASE_DISCOUNT_ALIASES: Record<string, PurchaseDiscountType> = {
+  FixedAmountOff: PurchaseDiscountType.FixedAmountOff,
+  fixed_amount_off: PurchaseDiscountType.FixedAmountOff,
+  PercentageOff: PurchaseDiscountType.PercentageOff,
+  percentage_off: PurchaseDiscountType.PercentageOff,
+};
+
+type MerchantCampaignEntry = {
   merchantId: string;
   approved: boolean;
   approvedBy: string | null;
@@ -27,71 +64,23 @@ type CampaignMerchantEntry = {
   approvedRemarks: string | null;
 };
 
-type ProductDiscount = {
-  fixed?: number | null;
-  percentage?: number | null;
-};
-
-type ProductFinancingEntry = {
+type ProductFinanceChargeDiscountEntry = {
   product: CampaignFinancingOption;
-  reducedPercentage?: number | null;
-  productDiscount?: ProductDiscount | null;
+  financeChargeDiscountPercentage: number;
 };
 
-const CHANNEL_ALIASES: Record<string, CampaignChannel> = {
-  OnlineStoreWebsite: CampaignChannel.OnlineStoreWebsite,
-  "Online store / Website": CampaignChannel.OnlineStoreWebsite,
-  InStorePOS: CampaignChannel.InStorePOS,
-  "In-store (POS)": CampaignChannel.InStorePOS,
-  PaymentLinkInvoice: CampaignChannel.PaymentLinkInvoice,
-  "Payment link / Invoice": CampaignChannel.PaymentLinkInvoice,
-};
-
-const FINANCING_ALIASES: Record<string, CampaignFinancingOption> = {
-  PayIn4: CampaignFinancingOption.PayIn4,
-  "Pay-in-4 (P4)": CampaignFinancingOption.PayIn4,
-  PayIn6: CampaignFinancingOption.PayIn6,
-  "Pay-in-6 (P6)": CampaignFinancingOption.PayIn6,
-  MonthlyFlex: CampaignFinancingOption.MonthlyFlex,
-  "Monthly Flex (MF)": CampaignFinancingOption.MonthlyFlex,
-};
-
-const ELIGIBILITY_ALIASES: Record<string, CampaignEligibility> = {
-  AllCustomers: CampaignEligibility.AllCustomers,
-  "All customers": CampaignEligibility.AllCustomers,
-  NewCustomer: CampaignEligibility.NewCustomer,
-  "New customer": CampaignEligibility.NewCustomer,
-  ReturningCustomer: CampaignEligibility.ReturningCustomer,
-  "Returning customer": CampaignEligibility.ReturningCustomer,
-};
-
-const FUNDING_ALIASES: Record<string, CampaignFunding> = {
-  MerchantFunded: CampaignFunding.MerchantFunded,
-  "Merchant funded": CampaignFunding.MerchantFunded,
-  SplitrFunded: CampaignFunding.SplitrFunded,
-  "Splitr funded": CampaignFunding.SplitrFunded,
-  MerchantAndSplitrFunded: CampaignFunding.MerchantAndSplitrFunded,
-  "Merchant and Splitr funded": CampaignFunding.MerchantAndSplitrFunded,
-};
-
-const PROMO_ALIASES: Record<string, CampaignPromoType> = {
-  PurchaseDiscount: CampaignPromoType.PurchaseDiscount,
-  "Purchase discount": CampaignPromoType.PurchaseDiscount,
-  FixedAmountOff: CampaignPromoType.FixedAmountOff,
-  "Fixed amount off": CampaignPromoType.FixedAmountOff,
-  Mixed: CampaignPromoType.Mixed,
-  mixed: CampaignPromoType.Mixed,
+type SplittingRatio = {
+  merchant: number;
+  splitr: number;
 };
 
 const campaignInclude = {
-  merchant: { select: { id: true, businessName: true, splitrId: true } },
-  createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
-} satisfies Prisma.CampaignInclude;
+  merchant: { select: { id: true, businessName: true, businessEmail: true } },
+  createdBy: { select: { id: true, email: true, firstName: true, lastName: true } },
+} as const;
 
 function requireText(value: unknown, field: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${field} is required`);
-  }
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${field} is required`);
   return value.trim();
 }
 
@@ -100,34 +89,7 @@ function optionalText(value: unknown, field: string): string | null | undefined 
   if (value === null) return null;
   if (typeof value !== "string") throw new Error(`${field} must be a string`);
   const trimmed = value.trim();
-  return trimmed || null;
-}
-
-function requireEnum<T extends string>(
-  value: unknown,
-  field: string,
-  allowed: readonly T[],
-  aliases?: Record<string, T>
-): T {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${field} is required`);
-  }
-  const raw = value.trim();
-  if (aliases?.[raw]) return aliases[raw];
-  if (!allowed.includes(raw as T)) {
-    throw new Error(`${field} must be ${allowed.join(", ")}`);
-  }
-  return raw as T;
-}
-
-function optionalEnum<T extends string>(
-  value: unknown,
-  field: string,
-  allowed: readonly T[],
-  aliases?: Record<string, T>
-): T | undefined {
-  if (value === undefined) return undefined;
-  return requireEnum(value, field, allowed, aliases);
+  return trimmed.length ? trimmed : null;
 }
 
 function requireBoolean(value: unknown, field: string): boolean {
@@ -141,258 +103,364 @@ function optionalBoolean(value: unknown, field: string): boolean | undefined {
 }
 
 function requireNumber(value: unknown, field: string): number {
-  const parsed = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
-  if (typeof parsed !== "number" || !Number.isFinite(parsed)) {
-    throw new Error(`${field} must be a number`);
-  }
-  return parsed;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) throw new Error(`${field} must be a number`);
+  return n;
 }
 
 function optionalNumber(value: unknown, field: string): number | null | undefined {
   if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
+  if (value === null) return null;
   return requireNumber(value, field);
 }
 
 function requireDate(value: unknown, field: string): Date {
-  if (value === undefined || value === null || value === "") {
-    throw new Error(`${field} is required`);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw new Error(`${field} must be a valid date`);
+    return value;
   }
-  const date = value instanceof Date ? value : new Date(String(value));
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${field} is required`);
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new Error(`${field} must be a valid date`);
   return date;
+}
+
+function parseEnum<T extends string>(
+  value: unknown,
+  field: string,
+  allowed: readonly T[],
+  aliases?: Record<string, T>
+): T {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${field} is required`);
+  const raw = value.trim();
+  if ((allowed as readonly string[]).includes(raw)) return raw as T;
+  if (aliases?.[raw]) return aliases[raw];
+  throw new Error(`${field} must be one of: ${allowed.join(", ")}`);
+}
+
+function optionalEnum<T extends string>(
+  value: unknown,
+  field: string,
+  allowed: readonly T[],
+  aliases?: Record<string, T>
+): T | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return parseEnum(value, field, allowed, aliases);
+}
+
+function parseStringIdArray(value: unknown, field: string): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  const ids = value.map((item, index) => {
+    if (typeof item !== "string" || !item.trim()) {
+      throw new Error(`${field}[${index}] must be a non-empty string`);
+    }
+    return item.trim();
+  });
+  return [...new Set(ids)];
 }
 
 function parseEnumArray<T extends string>(
   value: unknown,
   field: string,
   allowed: readonly T[],
-  aliases: Record<string, T>
+  aliases?: Record<string, T>
 ): T[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
-  return value.map((entry, index) =>
-    requireEnum(entry, `${field}[${index}]`, allowed, aliases)
-  );
+  const items = value.map((item, index) => parseEnum(item, `${field}[${index}]`, allowed, aliases));
+  return [...new Set(items)];
 }
 
-function parseOutletIds(value: unknown): string[] {
-  if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) throw new Error("outletIds must be an array");
-  return value.map((entry, index) => {
-    if (typeof entry !== "string" || !entry.trim()) {
-      throw new Error(`outletIds[${index}] must be a non-empty string`);
-    }
-    return entry.trim();
-  });
-}
-
-function asMerchantEntries(value: Prisma.JsonValue | null | undefined): CampaignMerchantEntry[] {
+function asMerchantEntries(value: Prisma.JsonValue | null | undefined): MerchantCampaignEntry[] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
-      const row = entry as Record<string, unknown>;
-      if (typeof row.merchantId !== "string" || !row.merchantId.trim()) return null;
+    .filter((item) => !!item && typeof item === "object" && !Array.isArray(item))
+    .map((item) => {
+      const row = item as Record<string, unknown>;
       return {
-        merchantId: row.merchantId.trim(),
+        merchantId: typeof row.merchantId === "string" ? row.merchantId : "",
         approved: Boolean(row.approved),
         approvedBy: typeof row.approvedBy === "string" ? row.approvedBy : null,
-        approvedAt: typeof row.approvedAt === "string" ? row.approvedAt : null,
+        approvedAt:
+          typeof row.approvedAt === "string"
+            ? row.approvedAt
+            : row.approvedAt instanceof Date
+              ? row.approvedAt.toISOString()
+              : null,
         approvedRemarks: typeof row.approvedRemarks === "string" ? row.approvedRemarks : null,
       };
     })
-    .filter((entry): entry is CampaignMerchantEntry => Boolean(entry));
+    .filter((item) => item.merchantId.length > 0);
 }
 
-function parseMerchantIds(value: unknown): CampaignMerchantEntry[] {
+function parseMerchantIds(value: unknown): MerchantCampaignEntry[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) throw new Error("merchantIds must be an array");
 
+  const entries: MerchantCampaignEntry[] = [];
   const seen = new Set<string>();
-  return value.map((entry, index) => {
-    if (typeof entry === "string") {
-      const merchantId = entry.trim();
+
+  value.forEach((item, index) => {
+    if (typeof item === "string") {
+      const merchantId = item.trim();
       if (!merchantId) throw new Error(`merchantIds[${index}] must be a non-empty string`);
-      if (seen.has(merchantId)) throw new Error(`merchantIds[${index}] is duplicated`);
+      if (seen.has(merchantId)) return;
       seen.add(merchantId);
-      return {
+      entries.push({
         merchantId,
         approved: false,
         approvedBy: null,
         approvedAt: null,
         approvedRemarks: null,
-      };
+      });
+      return;
     }
 
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
       throw new Error(`merchantIds[${index}] must be a string or object`);
     }
-    const row = entry as Record<string, unknown>;
+
+    const row = item as Record<string, unknown>;
     const merchantId = requireText(row.merchantId, `merchantIds[${index}].merchantId`);
-    if (seen.has(merchantId)) throw new Error(`merchantIds[${index}] is duplicated`);
+    if (seen.has(merchantId)) return;
     seen.add(merchantId);
 
-    return {
+    entries.push({
       merchantId,
-      approved: typeof row.approved === "boolean" ? row.approved : false,
-      approvedBy: typeof row.approvedBy === "string" ? row.approvedBy : null,
-      approvedAt: typeof row.approvedAt === "string" ? row.approvedAt : null,
-      approvedRemarks:
-        typeof row.approvedRemarks === "string" ? row.approvedRemarks : null,
-    };
+      approved: optionalBoolean(row.approved, `merchantIds[${index}].approved`) ?? false,
+      approvedBy: optionalText(row.approvedBy, `merchantIds[${index}].approvedBy`) ?? null,
+      approvedAt:
+        row.approvedAt === undefined || row.approvedAt === null
+          ? null
+          : requireDate(row.approvedAt, `merchantIds[${index}].approvedAt`).toISOString(),
+      approvedRemarks: optionalText(row.approvedRemarks, `merchantIds[${index}].approvedRemarks`) ?? null,
+    });
   });
+
+  return entries;
 }
 
-function parseProductFinancing(value: unknown): ProductFinancingEntry[] {
+function parseProductFinanceChargeDiscount(value: unknown): ProductFinanceChargeDiscountEntry[] {
   if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) throw new Error("productFinancing must be an array");
+  if (!Array.isArray(value)) throw new Error("productFinanceChargeDiscount must be an array");
 
   return value.map((entry, index) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      throw new Error(`productFinancing[${index}] must be an object`);
+      throw new Error(`productFinanceChargeDiscount[${index}] must be an object`);
     }
     const row = entry as Record<string, unknown>;
-    const product = requireEnum(
+    const product = parseEnum(
       row.product,
-      `productFinancing[${index}].product`,
+      `productFinanceChargeDiscount[${index}].product`,
       FINANCING,
       FINANCING_ALIASES
     );
-    const reducedPercentage = optionalNumber(
-      row.reducedPercentage,
-      `productFinancing[${index}].reducedPercentage`
+    const financeChargeDiscountPercentage = requireNumber(
+      row.financeChargeDiscountPercentage,
+      `productFinanceChargeDiscount[${index}].financeChargeDiscountPercentage`
     );
-
-    let productDiscount: ProductDiscount | null = null;
-    if (row.productDiscount !== undefined && row.productDiscount !== null) {
-      if (typeof row.productDiscount !== "object" || Array.isArray(row.productDiscount)) {
-        throw new Error(`productFinancing[${index}].productDiscount must be an object`);
-      }
-      const discount = row.productDiscount as Record<string, unknown>;
-      productDiscount = {
-        fixed: optionalNumber(discount.fixed, `productFinancing[${index}].productDiscount.fixed`) ?? null,
-        percentage:
-          optionalNumber(
-            discount.percentage,
-            `productFinancing[${index}].productDiscount.percentage`
-          ) ?? null,
-      };
+    if (financeChargeDiscountPercentage <= 0 || financeChargeDiscountPercentage > 100) {
+      throw new Error(
+        `productFinanceChargeDiscount[${index}].financeChargeDiscountPercentage must be between 0 and 100`
+      );
     }
-
-    return {
-      product,
-      reducedPercentage: reducedPercentage ?? null,
-      productDiscount,
-    };
+    return { product, financeChargeDiscountPercentage };
   });
 }
 
-function parseSplittingRatio(value: unknown): Record<string, number> | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
+function parseSplittingRatio(value: unknown): SplittingRatio | null {
+  if (value === undefined || value === null) return null;
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new Error("splittingRatio must be an object");
   }
-
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length === 0) return {};
-
-  const ratio: Record<string, number> = {};
-  let total = 0;
-  for (const [key, raw] of entries) {
-    const name = key.trim();
-    if (!name) throw new Error("splittingRatio keys must be non-empty strings");
-    const amount = requireNumber(raw, `splittingRatio.${name}`);
-    if (amount < 0 || amount > 1) {
-      throw new Error(`splittingRatio.${name} must be between 0 and 1`);
-    }
-    ratio[name] = amount;
-    total += amount;
+  const row = value as Record<string, unknown>;
+  const merchant = requireNumber(row.merchant, "splittingRatio.merchant");
+  const splitr = requireNumber(row.splitr, "splittingRatio.splitr");
+  if (merchant < 0 || splitr < 0) {
+    throw new Error("splittingRatio values must be >= 0");
   }
-
-  if (Math.abs(total - 1) > 0.0001) {
-    throw new Error("splittingRatio values must sum to 1");
+  const sum = Number((merchant + splitr).toFixed(6));
+  if (Math.abs(sum - 1) > 0.000001) {
+    throw new Error("splittingRatio.merchant + splittingRatio.splitr must equal 1");
   }
-  return ratio;
+  return { merchant, splitr };
 }
 
-function asSplittingRatio(value: Prisma.JsonValue | null | undefined): Record<string, number> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const ratio: Record<string, number> = {};
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    const amount = Number(raw);
-    if (Number.isFinite(amount)) ratio[key] = amount;
-  }
-  return ratio;
+function moneyOrNull(value: number | null | undefined): Prisma.Decimal | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return new Prisma.Decimal(roundUpTo2Decimals(value));
 }
 
-function moneyFields(record: {
-  discountAmount: Prisma.Decimal | null;
-  discountPercentage: Prisma.Decimal | null;
+function mapMoneyFields<T extends {
+  purchaseDiscountAmount: Prisma.Decimal | null;
+  purchaseDiscountPercentage: Prisma.Decimal | null;
   minPurchase: Prisma.Decimal | null;
   budget: Prisma.Decimal | null;
-}) {
+}>(record: T) {
   return {
-    discountAmount: record.discountAmount === null ? null : Number(record.discountAmount),
-    discountPercentage:
-      record.discountPercentage === null ? null : Number(record.discountPercentage),
+    ...record,
+    purchaseDiscountAmount:
+      record.purchaseDiscountAmount === null ? null : Number(record.purchaseDiscountAmount),
+    purchaseDiscountPercentage:
+      record.purchaseDiscountPercentage === null ? null : Number(record.purchaseDiscountPercentage),
     minPurchase: record.minPurchase === null ? null : Number(record.minPurchase),
     budget: record.budget === null ? null : Number(record.budget),
   };
 }
 
 function mapCampaign<T extends {
-  discountAmount: Prisma.Decimal | null;
-  discountPercentage: Prisma.Decimal | null;
+  purchaseDiscountAmount: Prisma.Decimal | null;
+  purchaseDiscountPercentage: Prisma.Decimal | null;
   minPurchase: Prisma.Decimal | null;
   budget: Prisma.Decimal | null;
-  outletIds: Prisma.JsonValue | null;
-  merchantIds: Prisma.JsonValue | null;
-  channels: Prisma.JsonValue | null;
-  financing: Prisma.JsonValue;
-  productFinancing: Prisma.JsonValue;
+  outletIds: Prisma.JsonValue;
+  merchantIds: Prisma.JsonValue;
+  channels: Prisma.JsonValue;
+  financingProducts: Prisma.JsonValue;
+  productFinanceChargeDiscount: Prisma.JsonValue;
   splittingRatio: Prisma.JsonValue | null;
 }>(record: T) {
   return {
-    ...record,
-    ...moneyFields(record),
+    ...mapMoneyFields(record),
     outletIds: Array.isArray(record.outletIds) ? record.outletIds : [],
     merchantIds: asMerchantEntries(record.merchantIds),
     channels: Array.isArray(record.channels) ? record.channels : [],
-    financing: Array.isArray(record.financing) ? record.financing : [],
-    productFinancing: Array.isArray(record.productFinancing) ? record.productFinancing : [],
-    splittingRatio: asSplittingRatio(record.splittingRatio),
+    financingProducts: Array.isArray(record.financingProducts) ? record.financingProducts : [],
+    productFinanceChargeDiscount: Array.isArray(record.productFinanceChargeDiscount)
+      ? record.productFinanceChargeDiscount
+      : [],
+    splittingRatio:
+      record.splittingRatio &&
+      typeof record.splittingRatio === "object" &&
+      !Array.isArray(record.splittingRatio)
+        ? record.splittingRatio
+        : null,
   };
 }
 
-function assertPromoFields(
-  promoType: CampaignPromoType,
-  discountAmount: number | null | undefined,
-  discountPercentage: number | null | undefined,
-  productFinancing: ProductFinancingEntry[]
-) {
-  if (promoType === CampaignPromoType.FixedAmountOff) {
-    if (discountAmount === undefined || discountAmount === null) {
-      throw new Error("discountAmount is required when promoType is FixedAmountOff");
-    }
-    if (discountAmount <= 0) throw new Error("discountAmount must be greater than 0");
+function assertFinancingProducts(financingProducts: CampaignFinancingOption[]) {
+  if (financingProducts.length === 0) {
+    throw new Error("financingProducts must include at least one product");
   }
-  if (promoType === CampaignPromoType.PurchaseDiscount) {
-    if (discountPercentage === undefined || discountPercentage === null) {
-      throw new Error("discountPercentage is required when promoType is PurchaseDiscount");
-    }
-    if (discountPercentage <= 0 || discountPercentage > 100) {
-      throw new Error("discountPercentage must be between 0 and 100");
-    }
-  }
-  if (promoType === CampaignPromoType.Mixed && productFinancing.length === 0) {
-    throw new Error("productFinancing is required when promoType is Mixed");
+  if (new Set(financingProducts).size !== financingProducts.length) {
+    throw new Error("financingProducts must not contain duplicate products");
   }
 }
 
-async function assertMerchant(merchantId: string | null | undefined) {
-  if (!merchantId) return;
+function assertFinanceChargeDiscountPairing(
+  financingProducts: CampaignFinancingOption[],
+  productFinanceChargeDiscount: ProductFinanceChargeDiscountEntry[]
+) {
+  if (productFinanceChargeDiscount.length === 0) {
+    throw new Error("productFinanceChargeDiscount must include at least one product");
+  }
+
+  const products = productFinanceChargeDiscount.map((entry) => entry.product);
+  if (new Set(products).size !== products.length) {
+    throw new Error("productFinanceChargeDiscount must not contain duplicate products");
+  }
+
+  const financingSet = new Set(financingProducts);
+  const discountSet = new Set(products);
+
+  const missing = financingProducts.filter((product) => !discountSet.has(product));
+  if (missing.length > 0) {
+    throw new Error(
+      `productFinanceChargeDiscount is missing entries for: ${missing.join(", ")}`
+    );
+  }
+
+  const extra = products.filter((product) => !financingSet.has(product));
+  if (extra.length > 0) {
+    throw new Error(
+      `productFinanceChargeDiscount contains products not listed in financingProducts: ${extra.join(", ")}`
+    );
+  }
+}
+
+function assertPurchaseDiscountFields(input: {
+  purchaseDiscountType?: PurchaseDiscountType | null;
+  purchaseDiscountAmount?: number | null;
+  purchaseDiscountPercentage?: number | null;
+}) {
+  if (!input.purchaseDiscountType) {
+    throw new Error(
+      "purchaseDiscountType is required when promoType is PurchaseDiscount or Mixed"
+    );
+  }
+  if (input.purchaseDiscountType === PurchaseDiscountType.FixedAmountOff) {
+    if (input.purchaseDiscountAmount === undefined || input.purchaseDiscountAmount === null) {
+      throw new Error("purchaseDiscountAmount is required when purchaseDiscountType is FixedAmountOff");
+    }
+    if (input.purchaseDiscountAmount <= 0) {
+      throw new Error("purchaseDiscountAmount must be greater than 0");
+    }
+  }
+  if (input.purchaseDiscountType === PurchaseDiscountType.PercentageOff) {
+    if (
+      input.purchaseDiscountPercentage === undefined ||
+      input.purchaseDiscountPercentage === null
+    ) {
+      throw new Error(
+        "purchaseDiscountPercentage is required when purchaseDiscountType is PercentageOff"
+      );
+    }
+    if (input.purchaseDiscountPercentage <= 0 || input.purchaseDiscountPercentage > 100) {
+      throw new Error("purchaseDiscountPercentage must be between 0 and 100");
+    }
+  }
+}
+
+function assertPromoFields(input: {
+  promoType: CampaignPromoType;
+  purchaseDiscountType?: PurchaseDiscountType | null;
+  purchaseDiscountAmount?: number | null;
+  purchaseDiscountPercentage?: number | null;
+  financingProducts: CampaignFinancingOption[];
+  productFinanceChargeDiscount: ProductFinanceChargeDiscountEntry[];
+}) {
+  assertFinancingProducts(input.financingProducts);
+
+  if (
+    input.promoType === CampaignPromoType.PurchaseDiscount ||
+    input.promoType === CampaignPromoType.Mixed
+  ) {
+    assertPurchaseDiscountFields(input);
+  }
+
+  if (input.promoType === CampaignPromoType.FinanceChargeDiscount) {
+    if (input.purchaseDiscountType) {
+      throw new Error("purchaseDiscountType must be null when promoType is FinanceChargeDiscount");
+    }
+    if (input.purchaseDiscountAmount != null) {
+      throw new Error("purchaseDiscountAmount must be null when promoType is FinanceChargeDiscount");
+    }
+    if (input.purchaseDiscountPercentage != null) {
+      throw new Error(
+        "purchaseDiscountPercentage must be null when promoType is FinanceChargeDiscount"
+      );
+    }
+  }
+
+  if (
+    input.promoType === CampaignPromoType.FinanceChargeDiscount ||
+    input.promoType === CampaignPromoType.Mixed
+  ) {
+    assertFinanceChargeDiscountPairing(
+      input.financingProducts,
+      input.productFinanceChargeDiscount
+    );
+  } else if (input.productFinanceChargeDiscount.length > 0) {
+    throw new Error(
+      "productFinanceChargeDiscount must be empty when promoType is PurchaseDiscount"
+    );
+  }
+}
+
+async function assertMerchant(merchantId: string) {
   const merchant = await prisma.merchant.findUnique({
     where: { id: merchantId },
     select: { id: true },
@@ -502,14 +570,10 @@ export class CampaignService {
     if (filters?.status) where.status = filters.status;
     if (filters?.initiatedBy) where.initiatedBy = filters.initiatedBy;
     if (filters?.q) {
-      where.AND = [
-        {
-          OR: [
-            { name: { contains: filters.q } },
-            { description: { contains: filters.q } },
-            { campaignCode: { contains: filters.q } },
-          ],
-        },
+      where.OR = [
+        { name: { contains: filters.q } },
+        { description: { contains: filters.q } },
+        { campaignCode: { contains: filters.q } },
       ];
     }
 
@@ -522,13 +586,11 @@ export class CampaignService {
   }
 
   private isRelatedToMerchant(
-    campaign: { merchantId: string | null; merchantIds: CampaignMerchantEntry[] },
+    campaign: { merchantId?: string | null; merchantIds?: MerchantCampaignEntry[] },
     merchantId: string
   ) {
-    return (
-      campaign.merchantId === merchantId ||
-      campaign.merchantIds.some((entry) => entry.merchantId === merchantId)
-    );
+    if (campaign.merchantId === merchantId) return true;
+    return (campaign.merchantIds ?? []).some((entry) => entry.merchantId === merchantId);
   }
 
   async getById(id: string) {
@@ -536,85 +598,119 @@ export class CampaignService {
       where: { id },
       include: campaignInclude,
     });
-    return record ? mapCampaign(record) : null;
+    if (!record) throw new Error("Campaign not found");
+    return mapCampaign(record);
   }
 
   async getByCode(campaignCode: string) {
+    const code = requireText(campaignCode, "campaignCode");
     const record = await prisma.campaign.findUnique({
-      where: { campaignCode: campaignCode.trim() },
+      where: { campaignCode: code },
       include: campaignInclude,
     });
-    return record ? mapCampaign(record) : null;
+    if (!record) throw new Error("Campaign not found");
+    return mapCampaign(record);
   }
 
   async create(input: Record<string, unknown>, createdById: string) {
     await assertUser(createdById);
 
-    const name = requireText(input.name, "name");
-    if (name.length > 200) throw new Error("name must be at most 200 characters");
+    const initiatedBy = parseEnum(input.initiatedBy, "initiatedBy", INITIATED_BY);
+    const merchantId =
+      input.merchantId === undefined || input.merchantId === null
+        ? null
+        : requireText(input.merchantId, "merchantId");
 
-    const initiatedBy = requireEnum(input.initiatedBy, "initiatedBy", INITIATED_BY);
-    const promoType = requireEnum(input.promoType, "promoType", PROMO_TYPES, PROMO_ALIASES);
-    const funding = requireEnum(input.funding, "funding", FUNDING, FUNDING_ALIASES);
+    if (initiatedBy === CampaignInitiatedBy.Merchant && !merchantId) {
+      throw new Error("merchantId is required when initiatedBy is Merchant");
+    }
+    if (merchantId) await assertMerchant(merchantId);
+
+    const merchantIds = parseMerchantIds(input.merchantIds);
+    await assertMerchants(merchantIds.map((entry) => entry.merchantId));
+
+    const outletIds = parseStringIdArray(input.outletIds, "outletIds");
+    await assertOutlets(outletIds, merchantId);
+
+    const promoType = parseEnum(input.promoType, "promoType", PROMO_TYPES, PROMO_ALIASES);
+    const purchaseDiscountType = optionalEnum(
+      input.purchaseDiscountType,
+      "purchaseDiscountType",
+      PURCHASE_DISCOUNT_TYPES,
+      PURCHASE_DISCOUNT_ALIASES
+    );
+    const purchaseDiscountAmount = optionalNumber(
+      input.purchaseDiscountAmount,
+      "purchaseDiscountAmount"
+    );
+    const purchaseDiscountPercentage = optionalNumber(
+      input.purchaseDiscountPercentage,
+      "purchaseDiscountPercentage"
+    );
+    const financingProducts = parseEnumArray(
+      input.financingProducts,
+      "financingProducts",
+      FINANCING,
+      FINANCING_ALIASES
+    );
+    const productFinanceChargeDiscount = parseProductFinanceChargeDiscount(
+      input.productFinanceChargeDiscount
+    );
+
+    assertPromoFields({
+      promoType,
+      purchaseDiscountType,
+      purchaseDiscountAmount,
+      purchaseDiscountPercentage,
+      financingProducts,
+      productFinanceChargeDiscount,
+    });
+
     const startDate = requireDate(input.startDate, "startDate");
     const endDate = requireDate(input.endDate, "endDate");
     if (endDate.getTime() < startDate.getTime()) {
       throw new Error("endDate must be on or after startDate");
     }
 
-    const merchantId =
-      input.merchantId === undefined || input.merchantId === null || input.merchantId === ""
-        ? null
-        : requireText(input.merchantId, "merchantId");
-    await assertMerchant(merchantId);
-
-    const outletIds = parseOutletIds(input.outletIds);
-    await assertOutlets(outletIds, merchantId);
-
-    const merchantIds = parseMerchantIds(input.merchantIds);
-    await assertMerchants(merchantIds.map((entry) => entry.merchantId));
-
-    const discountAmount = optionalNumber(input.discountAmount, "discountAmount");
-    const discountPercentage = optionalNumber(input.discountPercentage, "discountPercentage");
-    const productFinancing = parseProductFinancing(input.productFinancing);
-    assertPromoFields(promoType, discountAmount, discountPercentage, productFinancing);
-    const splittingRatio = parseSplittingRatio(input.splittingRatio) ?? {};
-
-    const channels = parseEnumArray(input.channels, "channels", CHANNELS, CHANNEL_ALIASES);
-    const financing = parseEnumArray(input.financing, "financing", FINANCING, FINANCING_ALIASES);
-    const eligibility =
-      optionalEnum(input.eligibility, "eligibility", ELIGIBILITY, ELIGIBILITY_ALIASES) ??
-      CampaignEligibility.AllCustomers;
-    const status = optionalEnum(input.status, "status", STATUSES) ?? CampaignStatus.Pending;
+    const status =
+      optionalEnum(input.status, "status", STATUSES) ?? CampaignStatus.Pending;
+    const confirm = optionalBoolean(input.confirm, "confirm") ?? false;
+    const approved = optionalBoolean(input.approved, "approved") ?? false;
     const campaignCode = await generateCampaignCode();
+    const splittingRatio = parseSplittingRatio(input.splittingRatio);
 
     const record = await prisma.campaign.create({
       data: {
         merchantId,
         initiatedBy,
-        name,
+        name: requireText(input.name, "name"),
         description: optionalText(input.description, "description") ?? null,
         imageName: optionalText(input.imageName, "imageName") ?? null,
         outletIds,
         merchantIds,
-        eligibility,
-        channels,
+        eligibility:
+          optionalEnum(input.eligibility, "eligibility", ELIGIBILITY) ??
+          CampaignEligibility.AllCustomers,
+        channels: parseEnumArray(input.channels, "channels", CHANNELS, CHANNEL_ALIASES),
         productScope: optionalText(input.productScope, "productScope") ?? "All products",
+        financingProducts,
         promoType,
-        discountAmount: discountAmount ?? null,
-        discountPercentage: discountPercentage ?? null,
-        minPurchase: optionalNumber(input.minPurchase, "minPurchase") ?? null,
+        purchaseDiscountType: purchaseDiscountType ?? null,
+        purchaseDiscountAmount: moneyOrNull(purchaseDiscountAmount) ?? null,
+        purchaseDiscountPercentage:
+          purchaseDiscountPercentage === undefined || purchaseDiscountPercentage === null
+            ? null
+            : new Prisma.Decimal(purchaseDiscountPercentage),
+        minPurchase: moneyOrNull(optionalNumber(input.minPurchase, "minPurchase")) ?? null,
         allProducts: optionalBoolean(input.allProducts, "allProducts") ?? true,
-        stacking: optionalBoolean(input.stacking, "stacking") ?? false,
-        financing,
-        productFinancing,
-        splittingRatio,
-        funding,
-        budget: optionalNumber(input.budget, "budget") ?? null,
+        productFinanceChargeDiscount,
+        splittingRatio: splittingRatio === null ? Prisma.JsonNull : splittingRatio,
+        funding: parseEnum(input.funding, "funding", FUNDING),
+        budget: moneyOrNull(optionalNumber(input.budget, "budget")) ?? null,
         startDate,
         endDate,
-        confirm: optionalBoolean(input.confirm, "confirm") ?? false,
-        approved: optionalBoolean(input.approved, "approved") ?? false,
+        confirm,
+        approved,
         status,
         campaignCode,
         createdById,
@@ -631,75 +727,65 @@ export class CampaignService {
 
     const data: Prisma.CampaignUpdateInput = {};
 
-    if (input.name !== undefined) {
-      const name = requireText(input.name, "name");
-      if (name.length > 200) throw new Error("name must be at most 200 characters");
-      data.name = name;
+    if (input.initiatedBy !== undefined) {
+      data.initiatedBy = parseEnum(input.initiatedBy, "initiatedBy", INITIATED_BY);
     }
+
+    let merchantId =
+      existing.merchantId === null || existing.merchantId === undefined
+        ? null
+        : existing.merchantId;
+    if (input.merchantId !== undefined) {
+      merchantId =
+        input.merchantId === null ? null : requireText(input.merchantId, "merchantId");
+      if (merchantId) await assertMerchant(merchantId);
+      data.merchant = merchantId ? { connect: { id: merchantId } } : { disconnect: true };
+    }
+
+    const initiatedBy =
+      (data.initiatedBy as CampaignInitiatedBy | undefined) ?? existing.initiatedBy;
+    if (initiatedBy === CampaignInitiatedBy.Merchant && !merchantId) {
+      throw new Error("merchantId is required when initiatedBy is Merchant");
+    }
+
+    if (input.name !== undefined) data.name = requireText(input.name, "name");
     if (input.description !== undefined) {
-      data.description = optionalText(input.description, "description");
+      data.description = optionalText(input.description, "description") ?? null;
     }
     if (input.imageName !== undefined) {
-      data.imageName = optionalText(input.imageName, "imageName");
-    }
-    if (input.initiatedBy !== undefined) {
-      data.initiatedBy = requireEnum(input.initiatedBy, "initiatedBy", INITIATED_BY);
-    }
-    if (input.eligibility !== undefined) {
-      data.eligibility = requireEnum(
-        input.eligibility,
-        "eligibility",
-        ELIGIBILITY,
-        ELIGIBILITY_ALIASES
-      );
+      data.imageName = optionalText(input.imageName, "imageName") ?? null;
     }
     if (input.productScope !== undefined) {
-      data.productScope = requireText(input.productScope, "productScope");
+      data.productScope = optionalText(input.productScope, "productScope") ?? "All products";
+    }
+    if (input.eligibility !== undefined) {
+      data.eligibility = parseEnum(input.eligibility, "eligibility", ELIGIBILITY);
     }
     if (input.funding !== undefined) {
-      data.funding = requireEnum(input.funding, "funding", FUNDING, FUNDING_ALIASES);
+      data.funding = parseEnum(input.funding, "funding", FUNDING);
     }
     if (input.status !== undefined) {
-      data.status = requireEnum(input.status, "status", STATUSES);
+      data.status = parseEnum(input.status, "status", STATUSES);
     }
+    if (input.confirm !== undefined) data.confirm = requireBoolean(input.confirm, "confirm");
+    if (input.approved !== undefined) data.approved = requireBoolean(input.approved, "approved");
     if (input.allProducts !== undefined) {
       data.allProducts = requireBoolean(input.allProducts, "allProducts");
-    }
-    if (input.stacking !== undefined) {
-      data.stacking = requireBoolean(input.stacking, "stacking");
-    }
-    if (input.confirm !== undefined) {
-      data.confirm = requireBoolean(input.confirm, "confirm");
-    }
-    if (input.approved !== undefined) {
-      data.approved = requireBoolean(input.approved, "approved");
     }
     if (input.channels !== undefined) {
       data.channels = parseEnumArray(input.channels, "channels", CHANNELS, CHANNEL_ALIASES);
     }
-    if (input.financing !== undefined) {
-      data.financing = parseEnumArray(input.financing, "financing", FINANCING, FINANCING_ALIASES);
-    }
-    if (input.minPurchase !== undefined) {
-      data.minPurchase = optionalNumber(input.minPurchase, "minPurchase");
-    }
-    if (input.budget !== undefined) {
-      data.budget = optionalNumber(input.budget, "budget");
-    }
 
-    let merchantId =
-      input.merchantId === undefined
-        ? existing.merchantId
-        : input.merchantId === null || input.merchantId === ""
-          ? null
-          : requireText(input.merchantId, "merchantId");
-    if (input.merchantId !== undefined) {
-      await assertMerchant(merchantId);
-      data.merchant = merchantId ? { connect: { id: merchantId } } : { disconnect: true };
-    }
+    const financingProducts =
+      input.financingProducts !== undefined
+        ? parseEnumArray(input.financingProducts, "financingProducts", FINANCING, FINANCING_ALIASES)
+        : Array.isArray(existing.financingProducts)
+          ? (existing.financingProducts as CampaignFinancingOption[])
+          : [];
+    if (input.financingProducts !== undefined) data.financingProducts = financingProducts;
 
     if (input.outletIds !== undefined) {
-      const outletIds = parseOutletIds(input.outletIds);
+      const outletIds = parseStringIdArray(input.outletIds, "outletIds");
       await assertOutlets(outletIds, merchantId);
       data.outletIds = outletIds;
     }
@@ -710,51 +796,92 @@ export class CampaignService {
       data.merchantIds = merchantIds;
     }
 
-    const productFinancing =
-      input.productFinancing !== undefined
-        ? parseProductFinancing(input.productFinancing)
-        : (Array.isArray(existing.productFinancing)
-            ? (existing.productFinancing as ProductFinancingEntry[])
-            : []);
-    if (input.productFinancing !== undefined) data.productFinancing = productFinancing;
-
     if (input.splittingRatio !== undefined) {
-      const splittingRatio = parseSplittingRatio(input.splittingRatio);
-      data.splittingRatio = splittingRatio === null ? Prisma.JsonNull : splittingRatio;
+      const ratio = parseSplittingRatio(input.splittingRatio);
+      data.splittingRatio = ratio === null ? Prisma.JsonNull : ratio;
+    }
+
+    if (input.minPurchase !== undefined) {
+      data.minPurchase = moneyOrNull(optionalNumber(input.minPurchase, "minPurchase")) ?? null;
+    }
+    if (input.budget !== undefined) {
+      data.budget = moneyOrNull(optionalNumber(input.budget, "budget")) ?? null;
+    }
+
+    const productFinanceChargeDiscount =
+      input.productFinanceChargeDiscount !== undefined
+        ? parseProductFinanceChargeDiscount(input.productFinanceChargeDiscount)
+        : Array.isArray(existing.productFinanceChargeDiscount)
+          ? (existing.productFinanceChargeDiscount as ProductFinanceChargeDiscountEntry[])
+          : [];
+    if (input.productFinanceChargeDiscount !== undefined) {
+      data.productFinanceChargeDiscount = productFinanceChargeDiscount;
     }
 
     const promoType =
-      input.promoType === undefined
-        ? existing.promoType
-        : requireEnum(input.promoType, "promoType", PROMO_TYPES, PROMO_ALIASES);
+      input.promoType !== undefined
+        ? parseEnum(input.promoType, "promoType", PROMO_TYPES, PROMO_ALIASES)
+        : existing.promoType;
     if (input.promoType !== undefined) data.promoType = promoType;
 
-    const discountAmount =
-      input.discountAmount !== undefined
-        ? optionalNumber(input.discountAmount, "discountAmount")
-        : existing.discountAmount === null
+    const purchaseDiscountType =
+      input.purchaseDiscountType !== undefined
+        ? optionalEnum(
+            input.purchaseDiscountType,
+            "purchaseDiscountType",
+            PURCHASE_DISCOUNT_TYPES,
+            PURCHASE_DISCOUNT_ALIASES
+          )
+        : existing.purchaseDiscountType;
+    if (input.purchaseDiscountType !== undefined) {
+      data.purchaseDiscountType = purchaseDiscountType ?? null;
+    }
+
+    const purchaseDiscountAmount =
+      input.purchaseDiscountAmount !== undefined
+        ? optionalNumber(input.purchaseDiscountAmount, "purchaseDiscountAmount")
+        : existing.purchaseDiscountAmount === null
           ? null
-          : Number(existing.discountAmount);
-    const discountPercentage =
-      input.discountPercentage !== undefined
-        ? optionalNumber(input.discountPercentage, "discountPercentage")
-        : existing.discountPercentage === null
+          : Number(existing.purchaseDiscountAmount);
+    const purchaseDiscountPercentage =
+      input.purchaseDiscountPercentage !== undefined
+        ? optionalNumber(input.purchaseDiscountPercentage, "purchaseDiscountPercentage")
+        : existing.purchaseDiscountPercentage === null
           ? null
-          : Number(existing.discountPercentage);
+          : Number(existing.purchaseDiscountPercentage);
+
+    if (input.purchaseDiscountAmount !== undefined) {
+      data.purchaseDiscountAmount = moneyOrNull(purchaseDiscountAmount) ?? null;
+    }
+    if (input.purchaseDiscountPercentage !== undefined) {
+      data.purchaseDiscountPercentage =
+        purchaseDiscountPercentage === undefined || purchaseDiscountPercentage === null
+          ? null
+          : new Prisma.Decimal(purchaseDiscountPercentage);
+    }
 
     if (
       input.promoType !== undefined ||
-      input.discountAmount !== undefined ||
-      input.discountPercentage !== undefined ||
-      input.productFinancing !== undefined
+      input.purchaseDiscountType !== undefined ||
+      input.purchaseDiscountAmount !== undefined ||
+      input.purchaseDiscountPercentage !== undefined ||
+      input.financingProducts !== undefined ||
+      input.productFinanceChargeDiscount !== undefined
     ) {
-      assertPromoFields(promoType, discountAmount, discountPercentage, productFinancing);
+      assertPromoFields({
+        promoType,
+        purchaseDiscountType,
+        purchaseDiscountAmount,
+        purchaseDiscountPercentage,
+        financingProducts,
+        productFinanceChargeDiscount,
+      });
     }
-    if (input.discountAmount !== undefined) data.discountAmount = discountAmount;
-    if (input.discountPercentage !== undefined) data.discountPercentage = discountPercentage;
 
     const startDate =
-      input.startDate !== undefined ? requireDate(input.startDate, "startDate") : existing.startDate;
+      input.startDate !== undefined
+        ? requireDate(input.startDate, "startDate")
+        : existing.startDate;
     const endDate =
       input.endDate !== undefined ? requireDate(input.endDate, "endDate") : existing.endDate;
     if (endDate.getTime() < startDate.getTime()) {
@@ -797,7 +924,8 @@ export class CampaignService {
       throw new Error("Merchant is not part of this campaign");
     }
 
-    const approved = input.approved === undefined ? true : requireBoolean(input.approved, "approved");
+    const approved =
+      input.approved === undefined ? true : requireBoolean(input.approved, "approved");
     merchantIds[index] = {
       ...merchantIds[index],
       approved,
@@ -806,7 +934,7 @@ export class CampaignService {
       approvedRemarks:
         input.approvedRemarks === undefined
           ? merchantIds[index].approvedRemarks
-          : optionalText(input.approvedRemarks, "approvedRemarks") ?? null,
+          : (optionalText(input.approvedRemarks, "approvedRemarks") ?? null),
     };
 
     const record = await prisma.campaign.update({
