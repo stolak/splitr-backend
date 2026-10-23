@@ -62,6 +62,10 @@ type MerchantCampaignEntry = {
   approvedBy: string | null;
   approvedAt: string | null;
   approvedRemarks: string | null;
+  /** Populated on read when the merchant exists (not persisted in JSON). */
+  businessName?: string | null;
+  /** Populated on read when the merchant exists (not persisted in JSON). */
+  splitrId?: string | null;
 };
 
 type ProductFinanceChargeDiscountEntry = {
@@ -193,6 +197,44 @@ function asMerchantEntries(value: Prisma.JsonValue | null | undefined): Merchant
       };
     })
     .filter((item) => item.merchantId.length > 0);
+}
+
+async function loadMerchantLookup(merchantIds: string[]) {
+  const ids = [...new Set(merchantIds.filter(Boolean))];
+  if (ids.length === 0) {
+    return new Map<string, { businessName: string; splitrId: string }>();
+  }
+  const merchants = await prisma.merchant.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, businessName: true, splitrId: true },
+  });
+  return new Map(
+    merchants.map((merchant) => [
+      merchant.id,
+      { businessName: merchant.businessName, splitrId: merchant.splitrId },
+    ])
+  );
+}
+
+function withMerchantDetails(
+  entries: MerchantCampaignEntry[],
+  lookup: Map<string, { businessName: string; splitrId: string }>
+): MerchantCampaignEntry[] {
+  return entries.map((entry) => {
+    const merchant = lookup.get(entry.merchantId);
+    return {
+      ...entry,
+      businessName: merchant?.businessName ?? null,
+      splitrId: merchant?.splitrId ?? null,
+    };
+  });
+}
+
+async function enrichMerchantEntries(
+  entries: MerchantCampaignEntry[]
+): Promise<MerchantCampaignEntry[]> {
+  const lookup = await loadMerchantLookup(entries.map((entry) => entry.merchantId));
+  return withMerchantDetails(entries, lookup);
 }
 
 function parseMerchantIds(value: unknown): MerchantCampaignEntry[] {
@@ -348,7 +390,7 @@ function mapMoneyFields<T extends {
   };
 }
 
-function mapCampaign<T extends {
+type CampaignRecordForMap = {
   purchaseDiscountAmount: Prisma.Decimal | null;
   purchaseDiscountPercentage: Prisma.Decimal | null;
   minPurchase: Prisma.Decimal | null;
@@ -359,11 +401,16 @@ function mapCampaign<T extends {
   financingProducts: Prisma.JsonValue;
   productFinanceChargeDiscount: Prisma.JsonValue;
   splittingRatio: Prisma.JsonValue | null;
-}>(record: T) {
+};
+
+function mapCampaignBase<T extends CampaignRecordForMap>(
+  record: T,
+  merchantIds: MerchantCampaignEntry[]
+) {
   return {
     ...mapMoneyFields(record),
     outletIds: Array.isArray(record.outletIds) ? record.outletIds : [],
-    merchantIds: asMerchantEntries(record.merchantIds),
+    merchantIds,
     channels: Array.isArray(record.channels) ? record.channels : [],
     financingProducts: Array.isArray(record.financingProducts) ? record.financingProducts : [],
     productFinanceChargeDiscount: Array.isArray(record.productFinanceChargeDiscount)
@@ -376,6 +423,21 @@ function mapCampaign<T extends {
         ? record.splittingRatio
         : null,
   };
+}
+
+async function mapCampaign<T extends CampaignRecordForMap>(record: T) {
+  const merchantIds = await enrichMerchantEntries(asMerchantEntries(record.merchantIds));
+  return mapCampaignBase(record, merchantIds);
+}
+
+async function mapCampaigns<T extends CampaignRecordForMap>(records: T[]) {
+  const entryLists = records.map((record) => asMerchantEntries(record.merchantIds));
+  const lookup = await loadMerchantLookup(
+    entryLists.flatMap((entries) => entries.map((entry) => entry.merchantId))
+  );
+  return records.map((record, index) =>
+    mapCampaignBase(record, withMerchantDetails(entryLists[index], lookup))
+  );
 }
 
 function assertFinancingProducts(financingProducts: CampaignFinancingOption[]) {
@@ -576,7 +638,7 @@ export class CampaignService {
       orderBy: { createdAt: "desc" },
     });
 
-    const mapped = records.map((record) => mapCampaign(record));
+    const mapped = await mapCampaigns(records);
     if (!filters?.merchantId) return mapped;
 
     return mapped.filter((campaign) => this.isRelatedToMerchant(campaign, filters.merchantId!));
@@ -619,7 +681,7 @@ export class CampaignService {
       include: campaignInclude,
       orderBy: { createdAt: "desc" },
     });
-    return records.map((record) => mapCampaign(record));
+    return mapCampaigns(records);
   }
 
   private isRelatedToMerchant(
@@ -636,7 +698,7 @@ export class CampaignService {
       include: campaignInclude,
     });
     if (!record) throw new Error("Campaign not found");
-    return mapCampaign(record);
+    return await mapCampaign(record);
   }
 
   async getByCode(campaignCode: string) {
@@ -646,7 +708,7 @@ export class CampaignService {
       include: campaignInclude,
     });
     if (!record) throw new Error("Campaign not found");
-    return mapCampaign(record);
+    return await mapCampaign(record);
   }
 
   async create(input: Record<string, unknown>, createdById: string) {
@@ -756,7 +818,7 @@ export class CampaignService {
       include: campaignInclude,
     });
 
-    return mapCampaign(record);
+    return await mapCampaign(record);
   }
 
   async update(id: string, input: Record<string, unknown>) {
@@ -944,7 +1006,7 @@ export class CampaignService {
       data,
       include: campaignInclude,
     });
-    return mapCampaign(record);
+    return await mapCampaign(record);
   }
 
   async approveMerchantParticipation(
@@ -987,7 +1049,7 @@ export class CampaignService {
       data: { merchantIds },
       include: campaignInclude,
     });
-    return mapCampaign(record);
+    return await mapCampaign(record);
   }
 
   async delete(id: string) {

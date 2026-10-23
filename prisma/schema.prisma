@@ -1785,6 +1785,7 @@ model Campaign {
 
   /// Empty array means all outlets for the merchant.
   outletIds   Json? @default("[]")
+  /// Stored: merchantId + approval fields. On API read, businessName + splitrId are resolved from Merchant.
   merchantIds Json? @default("[]") //[{merchantId:"id1",approved:false,approvedBy:"id2",approvedAt:date,approvedRemarks:"remarks",}...]
 
   eligibility CampaignEligibility @default(AllCustomers)

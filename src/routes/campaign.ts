@@ -36,6 +36,14 @@ const controller = campaignController;
  *         approvedRemarks:
  *           type: string
  *           nullable: true
+ *         businessName:
+ *           type: string
+ *           nullable: true
+ *           description: Resolved from Merchant on read (not stored in merchantIds JSON).
+ *         splitrId:
+ *           type: string
+ *           nullable: true
+ *           description: Resolved from Merchant on read (not stored in merchantIds JSON).
  *     CampaignProductFinanceChargeDiscount:
  *       type: object
  *       required: [product, financeChargeDiscountPercentage]
