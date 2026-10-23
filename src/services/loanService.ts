@@ -408,17 +408,17 @@ export class LoanService {
         expectedBalance = expectedBalanceCursor;
       } else {
         const installmentType = input.installmentType ?? LoanInstallmentType.Monthly;
-        let nextcycle = getNextCycleByInstallmentType(
-          new Date(loanStartDate).toISOString(),
-          installmentType
-        );
-        for (let i = 1; i <= input.loanTenure; i++) {
-          const cycleEnd =
-            installmentType === LoanInstallmentType.OneTime
-              ? (loanEndDate ?? nextcycle)
-              : getDayBeforeNextCycleByInstallmentType(
-                  new Date(nextcycle).toISOString(),
-                  installmentType
+      let nextcycle = getNextCycleByInstallmentType(
+        new Date(loanStartDate).toISOString(),
+        installmentType
+      );
+      for (let i = 1; i <= input.loanTenure; i++) {
+        const cycleEnd =
+          installmentType === LoanInstallmentType.OneTime
+            ? (loanEndDate ?? nextcycle)
+            : getDayBeforeNextCycleByInstallmentType(
+                new Date(nextcycle).toISOString(),
+                installmentType
                 );
 
           const interestOnBalance = roundUpTo2Decimals(
@@ -426,20 +426,20 @@ export class LoanService {
           );
           const expectedClosingBalance = roundUpTo2Decimals(
             expectedBalance + interestOnBalance - Number(input.monthlyRepayment)
-          );
+              );
 
-          this.createLoanSchedule({
-            loanId: loan.id,
-            start: nextcycle,
-            end: cycleEnd,
+        this.createLoanSchedule({
+          loanId: loan.id,
+          start: nextcycle,
+          end: cycleEnd,
             expectedPayment: roundUpTo2Decimals(Number(input.monthlyRepayment)),
             expectedBalance: roundUpTo2Decimals(expectedBalance),
             expectedClosingBalance,
-          });
-          nextcycle = getNextCycleByInstallmentType(
-            new Date(nextcycle).toISOString(),
-            installmentType
-          );
+        });
+        nextcycle = getNextCycleByInstallmentType(
+          new Date(nextcycle).toISOString(),
+          installmentType
+        );
           expectedBalance = expectedClosingBalance;
         }
       }
@@ -2156,13 +2156,13 @@ export class LoanService {
       // Calculate totals
       const totalPaid = roundUpTo2Decimals(
         loan.loanTransactions
-          .filter((t) => t.transactionStatus === TransactionStatus.Completed)
+        .filter((t) => t.transactionStatus === TransactionStatus.Completed)
           .reduce((sum, t) => sum + Number(t.creditAmount), 0)
       );
 
       const totalPending = roundUpTo2Decimals(
         loan.loanTransactions
-          .filter((t) => t.transactionStatus === TransactionStatus.Pending)
+        .filter((t) => t.transactionStatus === TransactionStatus.Pending)
           .reduce((sum, t) => sum + Number(t.creditAmount), 0)
       );
 
@@ -3566,7 +3566,7 @@ export class LoanService {
       return { success: true, data: updatedDirectPay };
     }
 
-    return { success: false, error: "Failed to validate loan repayment" };
+      return { success: false, error: "Failed to validate loan repayment" };
   }
 }
 export const loanService = new LoanService();

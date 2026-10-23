@@ -27,7 +27,7 @@ interface splitrIdOptions {
 
 /**
  * A mock in-memory sequence tracker for demonstration.
- * In production, replace with database-backed counter (e.g., Supabase, PostgreSQL sequence).
+ * In production, replace with database-backed counter (e.g., MySQL sequence or table counter).
  */
 const sequenceTracker: Record<string, number> = {};
 

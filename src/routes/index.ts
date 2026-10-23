@@ -69,6 +69,7 @@ import {
   merchantReserveContributionRoutes,
   merchantReserveReleaseRoutes,
 } from "./merchantReserve";
+import campaignRoutes from "./campaign";
 import { Router } from "express";
 
 const router = Router();
@@ -139,6 +140,7 @@ router.use("/settlements", settlementRoutes);
 router.use("/next-settlement-schedule", nextSettlementScheduleRoutes);
 router.use("/merchant-reserve-releases", merchantReserveReleaseRoutes);
 router.use("/merchant-reserve-contributions", merchantReserveContributionRoutes);
+router.use("/campaigns", campaignRoutes);
 
 /**
  * @swagger
