@@ -37,20 +37,23 @@ const FINANCING_OPTION_PRODUCT_MAP: Array<{
   code: string;
   productType: "BI_WEEKLY" | "MONTHLY_FLEX";
   tenure: number;
+  availableforFinanceChargeDiscount: boolean;
 }> = [
-  // {
-  //   product: CampaignFinancingOption.PayIn4,
-  //   name: "Pay in 4 (P4)",
-  //   code: "PAY_IN_4",
-  //   productType: "BI_WEEKLY",
-  //   tenure: 4,
-  // },
+  {
+    product: CampaignFinancingOption.PayIn4,
+    name: "Pay in 4 (P4)",
+    code: "PAY_IN_4",
+    productType: "BI_WEEKLY",
+    tenure: 4,
+    availableforFinanceChargeDiscount: true,
+  },
   {
     product: CampaignFinancingOption.PayIn6,
     name: "Pay in 6 (P6)",
     code: "PAY_IN_6",
     productType: "BI_WEEKLY",
     tenure: 6,
+    availableforFinanceChargeDiscount: true,
   },
   {
     product: CampaignFinancingOption.MonthlyFlex,
@@ -58,6 +61,7 @@ const FINANCING_OPTION_PRODUCT_MAP: Array<{
     code: "MONTHLY_FLEX_3",
     productType: "MONTHLY_FLEX",
     tenure: 3,
+    availableforFinanceChargeDiscount: true,
   },
 ];
 
@@ -689,6 +693,8 @@ export class CampaignService {
         product: entry.product,
         name: entry.name,
         rate: config?.rate ?? null,
+        availableforFinanceChargeDiscount: config?.rate && config.rate > 0 ? true : false,
+        availableforCampaign: config?.rate && config.rate > 0 ? true : false,
       };
     });
   }
