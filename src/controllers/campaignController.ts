@@ -1,14 +1,30 @@
 import {
+  CampaignFunding,
   CampaignInitiatedBy,
   CampaignStatus,
 } from "@prisma/client";
 import { Request, Response } from "express";
 import { campaignService } from "../services/campaignService";
+import {
+  CampaignActor,
+  isAdminActor,
+  normalizeCampaignStatus,
+} from "../services/campaignRules";
 
 function queryString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
+}
+
+function actorFromRequest(req: Request): CampaignActor | null {
+  if (!req.user?.id) return null;
+  return {
+    userId: req.user.id,
+    userType: req.user.userType,
+    role: req.user.role,
+    merchantId: req.user.merchantId ?? null,
+  };
 }
 
 export class CampaignController {
@@ -24,25 +40,34 @@ export class CampaignController {
     const message = error?.message || "Internal server error";
     const status = /not found/i.test(message)
       ? 404
-      : /required|must be|already exists|at least one|belong|between|greater than|not part of|duplicated|Unauthorized/i.test(
-            message
-          )
-        ? 400
-        : 500;
+      : /Unauthorized/i.test(message)
+        ? 403
+        : /required|must be|already exists|at least one|belong|between|greater than|not part of|duplicated|cannot/i.test(
+              message
+            )
+          ? 400
+          : 500;
     if (status === 500) console.error(error);
     return res.status(status).json({ success: false, message });
   }
 
   async list(req: Request, res: Response) {
     try {
-      const status = queryString(req.query.status);
-      const initiatedBy = queryString(req.query.initiatedBy);
-      if (status && !Object.values(CampaignStatus).includes(status as CampaignStatus)) {
+      const actor = actorFromRequest(req);
+      if (!actor) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const statusRaw = queryString(req.query.status);
+      const status = statusRaw ? normalizeCampaignStatus(statusRaw) : undefined;
+      if (statusRaw && !status) {
         return res.status(400).json({
           success: false,
-          message: `status must be ${Object.values(CampaignStatus).join(", ")}`,
+          message: `status must be ${Object.values(CampaignStatus).join(", ")} (or Cancelled)`,
         });
       }
+
+      const initiatedBy = queryString(req.query.initiatedBy);
       if (
         initiatedBy &&
         !Object.values(CampaignInitiatedBy).includes(initiatedBy as CampaignInitiatedBy)
@@ -53,13 +78,25 @@ export class CampaignController {
         });
       }
 
+      const funding = queryString(req.query.funding);
+      if (funding && !Object.values(CampaignFunding).includes(funding as CampaignFunding)) {
+        return res.status(400).json({
+          success: false,
+          message: `funding must be ${Object.values(CampaignFunding).join(", ")}`,
+        });
+      }
+
+      const adminView = isAdminActor(actor);
       return this.ok(
         res,
         await campaignService.list({
-          merchantId: queryString(req.query.merchantId),
-          status: status as CampaignStatus | undefined,
+          // Admins see all campaigns; merchants may optionally filter by merchantId query
+          merchantId: adminView ? undefined : queryString(req.query.merchantId) || actor.merchantId || undefined,
+          status: status ?? undefined,
           initiatedBy: initiatedBy as CampaignInitiatedBy | undefined,
+          funding: funding as CampaignFunding | undefined,
           q: queryString(req.query.q),
+          adminView,
         })
       );
     } catch (error) {
@@ -74,14 +111,16 @@ export class CampaignController {
         return res.status(400).json({ success: false, message: "merchantId is required" });
       }
 
-      const status = queryString(req.query.status);
-      const initiatedBy = queryString(req.query.initiatedBy);
-      if (status && !Object.values(CampaignStatus).includes(status as CampaignStatus)) {
+      const statusRaw = queryString(req.query.status);
+      const status = statusRaw ? normalizeCampaignStatus(statusRaw) : undefined;
+      if (statusRaw && !status) {
         return res.status(400).json({
           success: false,
-          message: `status must be ${Object.values(CampaignStatus).join(", ")}`,
+          message: `status must be ${Object.values(CampaignStatus).join(", ")} (or Cancelled)`,
         });
       }
+
+      const initiatedBy = queryString(req.query.initiatedBy);
       if (
         initiatedBy &&
         !Object.values(CampaignInitiatedBy).includes(initiatedBy as CampaignInitiatedBy)
@@ -95,7 +134,7 @@ export class CampaignController {
       return this.ok(
         res,
         await campaignService.listByMerchant(merchantId, {
-          status: status as CampaignStatus | undefined,
+          status: status ?? undefined,
           initiatedBy: initiatedBy as CampaignInitiatedBy | undefined,
           q: queryString(req.query.q),
         })
@@ -131,17 +170,17 @@ export class CampaignController {
 
   async create(req: Request, res: Response) {
     try {
-      const createdById = req.user?.id;
-      if (!createdById) {
+      const actor = actorFromRequest(req);
+      if (!actor) {
         return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
       const body = { ...(req.body ?? {}) };
-      if (!body.merchantId && req.user?.merchantId) {
-        body.merchantId = req.user.merchantId;
+      if (!body.merchantId && actor.merchantId) {
+        body.merchantId = actor.merchantId;
       }
 
-      const data = await campaignService.create(body, createdById);
+      const data = await campaignService.create(body, actor);
       return this.ok(res, data, "Campaign created successfully", 201);
     } catch (error) {
       return this.fail(res, error);
@@ -150,8 +189,66 @@ export class CampaignController {
 
   async update(req: Request, res: Response) {
     try {
-      const data = await campaignService.update(req.params.id, req.body ?? {});
+      const actor = actorFromRequest(req);
+      if (!actor) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const data = await campaignService.update(req.params.id, req.body ?? {}, actor);
       return this.ok(res, data, "Campaign updated successfully");
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
+  /**
+   * Consolidated workflow: approve | pause | cancel | resume | statusRemarks
+   */
+  async actions(req: Request, res: Response) {
+    try {
+      const actor = actorFromRequest(req);
+      if (!actor) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const rawAction =
+        typeof req.body?.action === "string" ? req.body.action.trim() : "";
+      const action = rawAction.toLowerCase();
+      const remark = req.body?.remark ?? req.body?.remarks;
+      const id = req.params.id;
+
+      switch (action) {
+        case "approve": {
+          const data = await campaignService.approveCampaign(id, actor, {
+            approvedRemarks: req.body?.approvedRemarks ?? remark,
+          });
+          return this.ok(res, data, "Campaign approved successfully");
+        }
+        case "pause": {
+          const data = await campaignService.pause(id, actor, remark);
+          return this.ok(res, data, "Campaign paused successfully");
+        }
+        case "cancel":
+        case "cancelled": {
+          const data = await campaignService.cancel(id, actor, remark);
+          return this.ok(res, data, "Campaign cancelled successfully");
+        }
+        case "resume": {
+          const data = await campaignService.resume(id, actor, remark);
+          return this.ok(res, data, "Campaign resumed successfully");
+        }
+        case "statusremarks":
+        case "status_remarks":
+        case "status-remarks": {
+          const data = await campaignService.listStatusRemarks(id);
+          return this.ok(res, data);
+        }
+        default:
+          return res.status(400).json({
+            success: false,
+            message:
+              "action must be one of: approve, pause, cancel, resume, statusRemarks",
+          });
+      }
     } catch (error) {
       return this.fail(res, error);
     }
@@ -159,16 +256,15 @@ export class CampaignController {
 
   async approveMerchant(req: Request, res: Response) {
     try {
-      const approvedById = req.user?.id;
-      if (!approvedById) {
+      const actor = actorFromRequest(req);
+      if (!actor) {
         return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      const userType = req.user?.userType?.toUpperCase();
-      const isAdmin = userType === "ADMIN" || req.user?.role === "SuperAdmin";
+      const isAdmin = isAdminActor(actor);
       const bodyMerchantId =
         typeof req.body?.merchantId === "string" ? req.body.merchantId.trim() : "";
-      const merchantId = isAdmin ? bodyMerchantId : req.user?.merchantId;
+      const merchantId = isAdmin ? bodyMerchantId : actor.merchantId;
 
       if (!merchantId) {
         return res.status(400).json({
@@ -178,7 +274,7 @@ export class CampaignController {
             : "Merchant access is required",
         });
       }
-      if (!isAdmin && userType !== "MERCHANT") {
+      if (!isAdmin && (actor.userType ?? "").toUpperCase() !== "MERCHANT") {
         return res.status(403).json({ success: false, message: "Merchant access is required" });
       }
       if (!isAdmin && bodyMerchantId && bodyMerchantId !== merchantId) {
@@ -190,7 +286,7 @@ export class CampaignController {
 
       const data = await campaignService.approveMerchantParticipation(req.params.id, {
         merchantId,
-        approvedById,
+        approvedById: actor.userId,
         approved: req.body?.approved,
         approvedRemarks: req.body?.approvedRemarks,
       });

@@ -7,11 +7,27 @@ import {
   CampaignInitiatedBy,
   CampaignPromoType,
   CampaignStatus,
+  CampaignStatusRemarkAction,
   Prisma,
   PurchaseDiscountType,
 } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { roundUpTo2Decimals } from "../utils/helper";
+import {
+  assertCanChangeFunding,
+  assertCanCreateWithFunding,
+  assertCanPauseOrCancel,
+  assertMerchantCanResumeOwn,
+  assertValidCancelTransition,
+  assertValidPauseTransition,
+  assertValidResumeTransition,
+  canActivateCampaign,
+  CampaignActor,
+  initialApprovedFlag,
+  isAdminActor,
+  isMerchantActor,
+  requireRemark,
+} from "./campaignRules";
 
 const INITIATED_BY: CampaignInitiatedBy[] = Object.values(CampaignInitiatedBy);
 const ELIGIBILITY: CampaignEligibility[] = Object.values(CampaignEligibility);
@@ -79,8 +95,15 @@ type SplittingRatio = {
 };
 
 const campaignInclude = {
-  merchant: { select: { id: true, businessName: true, businessEmail: true } },
+  merchant: { select: { id: true, businessName: true, businessEmail: true, splitrId: true } },
   createdBy: { select: { id: true, email: true, firstName: true, lastName: true } },
+  approvedBy: { select: { id: true, email: true, firstName: true, lastName: true } },
+  statusRemarks: {
+    orderBy: { createdAt: "desc" as const },
+    include: {
+      performedBy: { select: { id: true, email: true, firstName: true, lastName: true } },
+    },
+  },
 } as const;
 
 function requireText(value: unknown, field: string): string {
@@ -619,11 +642,15 @@ export class CampaignService {
     merchantId?: string;
     status?: CampaignStatus;
     initiatedBy?: CampaignInitiatedBy;
+    funding?: CampaignFunding;
     q?: string;
+    /** When true (admin list), never scope by merchant participation. */
+    adminView?: boolean;
   }) {
     const where: Prisma.CampaignWhereInput = {};
     if (filters?.status) where.status = filters.status;
     if (filters?.initiatedBy) where.initiatedBy = filters.initiatedBy;
+    if (filters?.funding) where.funding = filters.funding;
     if (filters?.q) {
       where.OR = [
         { name: { contains: filters.q } },
@@ -639,7 +666,7 @@ export class CampaignService {
     });
 
     const mapped = await mapCampaigns(records);
-    if (!filters?.merchantId) return mapped;
+    if (filters?.adminView || !filters?.merchantId) return mapped;
 
     return mapped.filter((campaign) => this.isRelatedToMerchant(campaign, filters.merchantId!));
   }
@@ -711,17 +738,27 @@ export class CampaignService {
     return await mapCampaign(record);
   }
 
-  async create(input: Record<string, unknown>, createdById: string) {
-    await assertUser(createdById);
+  async create(input: Record<string, unknown>, actor: CampaignActor) {
+    await assertUser(actor.userId);
 
-    const initiatedBy = parseEnum(input.initiatedBy, "initiatedBy", INITIATED_BY);
-    const merchantId =
+    const funding = parseEnum(input.funding, "funding", FUNDING);
+    assertCanCreateWithFunding(actor, funding);
+
+    let initiatedBy = parseEnum(input.initiatedBy, "initiatedBy", INITIATED_BY);
+    if (isAdminActor(actor)) {
+      initiatedBy = CampaignInitiatedBy.Splitr;
+    } else if (isMerchantActor(actor)) {
+      initiatedBy = CampaignInitiatedBy.Merchant;
+    }
+
+    let merchantId =
       input.merchantId === undefined || input.merchantId === null
         ? null
         : requireText(input.merchantId, "merchantId");
 
-    if (initiatedBy === CampaignInitiatedBy.Merchant && !merchantId) {
-      throw new Error("merchantId is required when initiatedBy is Merchant");
+    if (initiatedBy === CampaignInitiatedBy.Merchant) {
+      merchantId = actor.merchantId ?? merchantId;
+      if (!merchantId) throw new Error("merchantId is required when initiatedBy is Merchant");
     }
     if (merchantId) await assertMerchant(merchantId);
 
@@ -771,15 +808,13 @@ export class CampaignService {
       throw new Error("endDate must be on or after startDate");
     }
 
-    const status =
-      optionalEnum(input.status, "status", STATUSES) ?? CampaignStatus.Pending;
+    // Client cannot force Active/approved to bypass workflow
     const confirm = optionalBoolean(input.confirm, "confirm") ?? false;
-    const approved = optionalBoolean(input.approved, "approved") ?? false;
+    const approved = initialApprovedFlag(funding, initiatedBy);
     const campaignCode = await generateCampaignCode();
-    const funding = parseEnum(input.funding, "funding", FUNDING);
     const splittingRatio = resolveSplittingRatioForFunding(funding, input.splittingRatio);
 
-    const record = await prisma.campaign.create({
+    const created = await prisma.campaign.create({
       data: {
         merchantId,
         initiatedBy,
@@ -811,21 +846,71 @@ export class CampaignService {
         endDate,
         confirm,
         approved,
-        status,
+        status: CampaignStatus.Pending,
         campaignCode,
-        createdById,
+        createdById: actor.userId,
       },
       include: campaignInclude,
     });
 
-    return await mapCampaign(record);
+    await this.tryActivateCampaign(created.id);
+    return this.getById(created.id);
   }
 
-  async update(id: string, input: Record<string, unknown>) {
+  private activationSnapshotFromRecord(record: {
+    status: CampaignStatus;
+    funding: CampaignFunding;
+    initiatedBy: CampaignInitiatedBy;
+    approved: boolean;
+    confirm: boolean;
+    startDate: Date;
+    endDate: Date;
+    merchantIds: Prisma.JsonValue;
+  }) {
+    return {
+      status: record.status,
+      funding: record.funding,
+      initiatedBy: record.initiatedBy,
+      approved: record.approved,
+      confirm: record.confirm,
+      startDate: record.startDate,
+      endDate: record.endDate,
+      merchantIds: asMerchantEntries(record.merchantIds),
+    };
+  }
+
+  /** Activate when Pending/Paused and all gates are met. No-op otherwise. */
+  async tryActivateCampaign(id: string) {
+    const existing = await prisma.campaign.findUnique({ where: { id } });
+    if (!existing) return null;
+
+    const check = canActivateCampaign(this.activationSnapshotFromRecord(existing));
+    if (!check.ok) return existing;
+
+    return prisma.campaign.update({
+      where: { id },
+      data: { status: CampaignStatus.Active },
+      include: campaignInclude,
+    });
+  }
+
+  async update(id: string, input: Record<string, unknown>, actor: CampaignActor) {
     const existing = await prisma.campaign.findUnique({ where: { id } });
     if (!existing) throw new Error("Campaign not found");
 
     const data: Prisma.CampaignUpdateInput = {};
+
+    // Status / approval must go through dedicated endpoints
+    if (input.status !== undefined) {
+      throw new Error(
+        "status cannot be changed via update; use pause, cancel, resume, or approve endpoints"
+      );
+    }
+    if (input.approved !== undefined || input.approvedRemarks !== undefined) {
+      throw new Error(
+        "approved cannot be changed via update; use the Admin/Splitr approve endpoint"
+      );
+    }
 
     if (input.initiatedBy !== undefined) {
       data.initiatedBy = parseEnum(input.initiatedBy, "initiatedBy", INITIATED_BY);
@@ -866,13 +951,10 @@ export class CampaignService {
         ? parseEnum(input.funding, "funding", FUNDING)
         : existing.funding;
     if (input.funding !== undefined) {
+      assertCanChangeFunding(actor, funding);
       data.funding = funding;
     }
-    if (input.status !== undefined) {
-      data.status = parseEnum(input.status, "status", STATUSES);
-    }
     if (input.confirm !== undefined) data.confirm = requireBoolean(input.confirm, "confirm");
-    if (input.approved !== undefined) data.approved = requireBoolean(input.approved, "approved");
     if (input.allProducts !== undefined) {
       data.allProducts = requireBoolean(input.allProducts, "allProducts");
     }
@@ -1001,12 +1083,41 @@ export class CampaignService {
       throw new Error("At least one field is required");
     }
 
-    const record = await prisma.campaign.update({
+    await prisma.campaign.update({
       where: { id },
       data,
-      include: campaignInclude,
     });
-    return await mapCampaign(record);
+    await this.tryActivateCampaign(id);
+    return this.getById(id);
+  }
+
+  /**
+   * Admin/Splitr campaign-level approval (required for merchant-created co-funded campaigns).
+   */
+  async approveCampaign(
+    id: string,
+    actor: CampaignActor,
+    input: { approvedRemarks?: string | null }
+  ) {
+    if (!isAdminActor(actor)) {
+      throw new Error("Unauthorized: Admin/Splitr approval is required");
+    }
+
+    const existing = await prisma.campaign.findUnique({ where: { id } });
+    if (!existing) throw new Error("Campaign not found");
+
+    await prisma.campaign.update({
+      where: { id },
+      data: {
+        approved: true,
+        approvedById: actor.userId,
+        approvedAt: new Date(),
+        approvedRemarks: optionalText(input.approvedRemarks, "approvedRemarks") ?? null,
+      },
+    });
+
+    await this.tryActivateCampaign(id);
+    return this.getById(id);
   }
 
   async approveMerchantParticipation(
@@ -1044,12 +1155,133 @@ export class CampaignService {
           : (optionalText(input.approvedRemarks, "approvedRemarks") ?? null),
     };
 
-    const record = await prisma.campaign.update({
+    await prisma.campaign.update({
       where: { id },
       data: { merchantIds },
-      include: campaignInclude,
     });
-    return await mapCampaign(record);
+
+    // Merchant acceptance alone must not activate merchant-created co-funded campaigns
+    // (tryActivateCampaign enforces Admin approval gate).
+    await this.tryActivateCampaign(id);
+    return this.getById(id);
+  }
+
+  async pause(id: string, actor: CampaignActor, remarkRaw: unknown) {
+    const remark = requireRemark(remarkRaw);
+    const existing = await prisma.campaign.findUnique({ where: { id } });
+    if (!existing) throw new Error("Campaign not found");
+
+    assertCanPauseOrCancel(actor, existing);
+    assertValidPauseTransition(existing.status);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.campaign.update({
+        where: { id },
+        data: { status: CampaignStatus.Paused },
+      });
+      await tx.campaignStatusRemark.create({
+        data: {
+          campaignId: id,
+          action: CampaignStatusRemarkAction.Paused,
+          previousStatus: existing.status,
+          newStatus: CampaignStatus.Paused,
+          remark,
+          performedById: actor.userId,
+          performedByRole: actor.role || actor.userType || "Unknown",
+          fundingType: existing.funding,
+        },
+      });
+    });
+
+    return this.getById(id);
+  }
+
+  async cancel(id: string, actor: CampaignActor, remarkRaw: unknown) {
+    const remark = requireRemark(remarkRaw);
+    const existing = await prisma.campaign.findUnique({ where: { id } });
+    if (!existing) throw new Error("Campaign not found");
+
+    assertCanPauseOrCancel(actor, existing);
+    assertValidCancelTransition(existing.status);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.campaign.update({
+        where: { id },
+        data: { status: CampaignStatus.Cancel },
+      });
+      await tx.campaignStatusRemark.create({
+        data: {
+          campaignId: id,
+          action: CampaignStatusRemarkAction.Cancelled,
+          previousStatus: existing.status,
+          newStatus: CampaignStatus.Cancel,
+          remark,
+          performedById: actor.userId,
+          performedByRole: actor.role || actor.userType || "Unknown",
+          fundingType: existing.funding,
+        },
+      });
+    });
+
+    return this.getById(id);
+  }
+
+  async resume(id: string, actor: CampaignActor, remarkRaw?: unknown) {
+    const existing = await prisma.campaign.findUnique({ where: { id } });
+    if (!existing) throw new Error("Campaign not found");
+
+    assertMerchantCanResumeOwn(actor, existing);
+    assertValidResumeTransition(existing.status);
+
+    const check = canActivateCampaign({
+      ...this.activationSnapshotFromRecord(existing),
+      status: CampaignStatus.Paused,
+    });
+    if (!check.ok) {
+      throw new Error(check.reason || "Campaign cannot be resumed");
+    }
+
+    const remark =
+      remarkRaw === undefined || remarkRaw === null
+        ? "Resumed"
+        : requireRemark(remarkRaw);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.campaign.update({
+        where: { id },
+        data: { status: CampaignStatus.Active },
+      });
+      await tx.campaignStatusRemark.create({
+        data: {
+          campaignId: id,
+          action: CampaignStatusRemarkAction.Resumed,
+          previousStatus: existing.status,
+          newStatus: CampaignStatus.Active,
+          remark,
+          performedById: actor.userId,
+          performedByRole: actor.role || actor.userType || "Unknown",
+          fundingType: existing.funding,
+        },
+      });
+    });
+
+    return this.getById(id);
+  }
+
+  async listStatusRemarks(id: string) {
+    const existing = await prisma.campaign.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new Error("Campaign not found");
+
+    return prisma.campaignStatusRemark.findMany({
+      where: { campaignId: id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        performedBy: { select: { id: true, email: true, firstName: true, lastName: true } },
+      },
+    });
   }
 
   async delete(id: string) {

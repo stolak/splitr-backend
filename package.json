@@ -17,7 +17,9 @@
     "test-splitr-ids": "node scripts/test-splitr-ids.js",
     "test-validate-account": "node scripts/test-validate-and-create-account.js",
     "db:reset": "npx prisma migrate reset",
-    "generate": "npx prisma generate"
+    "generate": "npx prisma generate",
+    "test": "node --require ts-node/register/transpile-only --test src/services/campaignRules.test.ts",
+    "test:campaign-rules": "node --require ts-node/register/transpile-only --test src/services/campaignRules.test.ts"
   },
   "keywords": [],
   "author": "",

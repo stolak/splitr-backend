@@ -218,7 +218,12 @@ const controller = campaignController;
  *         name: status
  *         schema:
  *           type: string
- *           enum: [Pending, Active, Expire, Cancel]
+ *           enum: [Pending, Active, Expire, Cancel, Paused, Cancelled]
+ *       - in: query
+ *         name: funding
+ *         schema:
+ *           type: string
+ *           enum: [MerchantFunded, SplitrFunded, MerchantAndSplitrFunded]
  *       - in: query
  *         name: initiatedBy
  *         schema:
@@ -231,13 +236,22 @@ const controller = campaignController;
  *         description: Search name, description, or campaignCode
  *     responses:
  *       200:
- *         description: Campaigns retrieved successfully
+ *         description: >
+ *           Campaigns retrieved successfully. Admin/Splitr see all campaigns across funding types.
+ *           Merchants are scoped to their merchant relation when merchantId is applied.
  *       401:
  *         description: Unauthorized
  *   post:
  *     summary: Create a campaign
  *     description: |
  *       Creates a campaign. `campaignCode` is auto-generated (CMP-YYMM-XXXXXXXX).
+ *
+ *       Funding create permissions (enforced server-side):
+ *       - Merchant: MerchantFunded, MerchantAndSplitrFunded (not SplitrFunded)
+ *       - Admin/Splitr: SplitrFunded, MerchantAndSplitrFunded (not MerchantFunded)
+ *
+ *       Activation is evaluated after create / approve / merchant acceptance.
+ *       Client-supplied `status` and `approved` are ignored on create.
  *
  *       Rules:
  *       - `financingProducts` must include at least one of PayIn4, PayIn6, MonthlyFlex
@@ -600,12 +614,96 @@ router.get("/code/:campaignCode", auth, controller.getByCode.bind(controller));
 
 /**
  * @swagger
+ * /api/v1/campaigns/{id}/actions:
+ *   post:
+ *     summary: Campaign workflow action (approve, pause, cancel, resume, statusRemarks)
+ *     description: |
+ *       Single endpoint for campaign-level workflow actions (not merchant participation).
+ *
+ *       Actions:
+ *       - `approve` — Admin/Splitr campaign-level approval (required for merchant-created
+ *         MerchantAndSplitrFunded). Optional `approvedRemarks` or `remark`.
+ *       - `pause` — Active → Paused. Remark required. Merchant: own MerchantFunded only;
+ *         Admin/Splitr: any. Writes audit row.
+ *       - `cancel` — Active/Paused → Cancel. Remark required. Same permissions as pause.
+ *       - `resume` — Paused → Active when activation gates still pass. Optional remark
+ *         (defaults to "Resumed").
+ *       - `statusRemarks` — Returns pause/cancel/resume audit history for the campaign.
+ *
+ *       For merchant participation acceptance use `POST /campaigns/{id}/approve-merchant`.
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [action]
+ *             properties:
+ *               action:
+ *                 type: string
+ *                 enum: [approve, pause, cancel, resume, statusRemarks]
+ *               remark:
+ *                 type: string
+ *                 description: Required for pause/cancel. Optional for approve/resume.
+ *               approvedRemarks:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Optional alias used for approve (falls back to remark).
+ *           examples:
+ *             approve:
+ *               summary: Admin approve co-funded campaign
+ *               value:
+ *                 action: approve
+ *                 approvedRemarks: Approved for Q4 co-funded launch
+ *             pause:
+ *               summary: Pause active campaign
+ *               value:
+ *                 action: pause
+ *                 remark: Pausing due to inventory shortage
+ *             cancel:
+ *               summary: Cancel campaign
+ *               value:
+ *                 action: cancel
+ *                 remark: Cancelled — budget exhausted
+ *             resume:
+ *               summary: Resume paused campaign
+ *               value:
+ *                 action: resume
+ *                 remark: Inventory restored
+ *             statusRemarks:
+ *               summary: List audit remarks
+ *               value:
+ *                 action: statusRemarks
+ *     responses:
+ *       200:
+ *         description: Action completed (campaign payload, or remark list for statusRemarks)
+ *       400:
+ *         description: Invalid action, transition, or missing remark
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Campaign not found
+ */
+router.post("/:id/actions", auth, controller.actions.bind(controller));
+
+/**
+ * @swagger
  * /api/v1/campaigns/{id}/approve-merchant:
  *   post:
  *     summary: Approve or reject a merchant's campaign participation
  *     description: >
  *       Updates the matching entry in merchantIds. Merchants can only approve their own
  *       merchantId. Admins must pass merchantId in the body.
+ *       For Admin/Splitr-created MerchantAndSplitrFunded campaigns, one acceptance can unlock Active.
  *     tags: [Campaign]
  *     security:
  *       - bearerAuth: []
