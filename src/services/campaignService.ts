@@ -748,7 +748,6 @@ export class CampaignService {
     const where: Prisma.CampaignWhereInput = {
       id: { in: rows.map((row) => row.id) },
     };
-    console.log(where);
     if (filters?.status) where.status = filters.status;
     if (filters?.initiatedBy) where.initiatedBy = filters.initiatedBy;
     if (filters?.q) {
@@ -758,13 +757,13 @@ export class CampaignService {
         { campaignCode: { contains: filters.q } },
       ];
     }
-    console.log(where);
+
     const records = await prisma.campaign.findMany({
       where,
       include: campaignInclude,
       orderBy: { createdAt: "desc" },
     });
-    console.log(await mapCampaigns(records));
+
     return mapCampaigns(records);
   }
 
