@@ -1810,7 +1810,7 @@ model Campaign {
   initiatedBy CampaignInitiatedBy
   name        String              @db.VarChar(200)
   description String?             @db.Text
-  imageName   String?             @db.VarChar(255)
+  imageUrl    String?             @db.VarChar(255)
 
   /// Empty array means all outlets for the merchant.
   outletIds   Json? @default("[]")

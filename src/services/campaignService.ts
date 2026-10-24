@@ -300,7 +300,8 @@ function parseMerchantIds(value: unknown): MerchantCampaignEntry[] {
         row.approvedAt === undefined || row.approvedAt === null
           ? null
           : requireDate(row.approvedAt, `merchantIds[${index}].approvedAt`).toISOString(),
-      approvedRemarks: optionalText(row.approvedRemarks, `merchantIds[${index}].approvedRemarks`) ?? null,
+      approvedRemarks:
+        optionalText(row.approvedRemarks, `merchantIds[${index}].approvedRemarks`) ?? null,
     });
   });
 
@@ -335,12 +336,13 @@ function parseProductFinanceChargeDiscount(value: unknown): ProductFinanceCharge
   });
 }
 
-function parseSplittingRatio(value: unknown, options?: { required?: boolean }): SplittingRatio | null {
+function parseSplittingRatio(
+  value: unknown,
+  options?: { required?: boolean }
+): SplittingRatio | null {
   if (value === undefined || value === null) {
     if (options?.required) {
-      throw new Error(
-        "splittingRatio is required when funding is MerchantAndSplitrFunded"
-      );
+      throw new Error("splittingRatio is required when funding is MerchantAndSplitrFunded");
     }
     return null;
   }
@@ -365,10 +367,7 @@ function parseSplittingRatio(value: unknown, options?: { required?: boolean }): 
  * SplitrFunded → { merchant: 0, splitr: 1 }
  * MerchantAndSplitrFunded → required from client and validated (both sides > 0, sum = 1)
  */
-function resolveSplittingRatioForFunding(
-  funding: CampaignFunding,
-  value: unknown
-): SplittingRatio {
+function resolveSplittingRatioForFunding(funding: CampaignFunding, value: unknown): SplittingRatio {
   if (funding === CampaignFunding.MerchantFunded) {
     return { merchant: 1, splitr: 0 };
   }
@@ -378,9 +377,7 @@ function resolveSplittingRatioForFunding(
 
   const ratio = parseSplittingRatio(value, { required: true });
   if (!ratio) {
-    throw new Error(
-      "splittingRatio is required when funding is MerchantAndSplitrFunded"
-    );
+    throw new Error("splittingRatio is required when funding is MerchantAndSplitrFunded");
   }
   if (ratio.merchant <= 0 || ratio.splitr <= 0) {
     throw new Error(
@@ -396,12 +393,14 @@ function moneyOrNull(value: number | null | undefined): Prisma.Decimal | null | 
   return new Prisma.Decimal(roundUpTo2Decimals(value));
 }
 
-function mapMoneyFields<T extends {
-  purchaseDiscountAmount: Prisma.Decimal | null;
-  purchaseDiscountPercentage: Prisma.Decimal | null;
-  minPurchase: Prisma.Decimal | null;
-  budget: Prisma.Decimal | null;
-}>(record: T) {
+function mapMoneyFields<
+  T extends {
+    purchaseDiscountAmount: Prisma.Decimal | null;
+    purchaseDiscountPercentage: Prisma.Decimal | null;
+    minPurchase: Prisma.Decimal | null;
+    budget: Prisma.Decimal | null;
+  },
+>(record: T) {
   return {
     ...record,
     purchaseDiscountAmount:
@@ -490,9 +489,7 @@ function assertFinanceChargeDiscountPairing(
 
   const missing = financingProducts.filter((product) => !discountSet.has(product));
   if (missing.length > 0) {
-    throw new Error(
-      `productFinanceChargeDiscount is missing entries for: ${missing.join(", ")}`
-    );
+    throw new Error(`productFinanceChargeDiscount is missing entries for: ${missing.join(", ")}`);
   }
 
   const extra = products.filter((product) => !financingSet.has(product));
@@ -509,13 +506,13 @@ function assertPurchaseDiscountFields(input: {
   purchaseDiscountPercentage?: number | null;
 }) {
   if (!input.purchaseDiscountType) {
-    throw new Error(
-      "purchaseDiscountType is required when promoType is PurchaseDiscount or Mixed"
-    );
+    throw new Error("purchaseDiscountType is required when promoType is PurchaseDiscount or Mixed");
   }
   if (input.purchaseDiscountType === PurchaseDiscountType.FixedAmountOff) {
     if (input.purchaseDiscountAmount === undefined || input.purchaseDiscountAmount === null) {
-      throw new Error("purchaseDiscountAmount is required when purchaseDiscountType is FixedAmountOff");
+      throw new Error(
+        "purchaseDiscountAmount is required when purchaseDiscountType is FixedAmountOff"
+      );
     }
     if (input.purchaseDiscountAmount <= 0) {
       throw new Error("purchaseDiscountAmount must be greater than 0");
@@ -558,7 +555,9 @@ function assertPromoFields(input: {
       throw new Error("purchaseDiscountType must be null when promoType is FinanceChargeDiscount");
     }
     if (input.purchaseDiscountAmount != null) {
-      throw new Error("purchaseDiscountAmount must be null when promoType is FinanceChargeDiscount");
+      throw new Error(
+        "purchaseDiscountAmount must be null when promoType is FinanceChargeDiscount"
+      );
     }
     if (input.purchaseDiscountPercentage != null) {
       throw new Error(
@@ -571,10 +570,7 @@ function assertPromoFields(input: {
     input.promoType === CampaignPromoType.FinanceChargeDiscount ||
     input.promoType === CampaignPromoType.Mixed
   ) {
-    assertFinanceChargeDiscountPairing(
-      input.financingProducts,
-      input.productFinanceChargeDiscount
-    );
+    assertFinanceChargeDiscountPairing(input.financingProducts, input.productFinanceChargeDiscount);
   } else if (input.productFinanceChargeDiscount.length > 0) {
     throw new Error(
       "productFinanceChargeDiscount must be empty when promoType is PurchaseDiscount"
@@ -693,6 +689,7 @@ export class CampaignService {
     const where: Prisma.CampaignWhereInput = {
       id: { in: rows.map((row) => row.id) },
     };
+    console.log(where);
     if (filters?.status) where.status = filters.status;
     if (filters?.initiatedBy) where.initiatedBy = filters.initiatedBy;
     if (filters?.q) {
@@ -702,12 +699,13 @@ export class CampaignService {
         { campaignCode: { contains: filters.q } },
       ];
     }
-
+    console.log(where);
     const records = await prisma.campaign.findMany({
       where,
       include: campaignInclude,
       orderBy: { createdAt: "desc" },
     });
+    console.log(await mapCampaigns(records));
     return mapCampaigns(records);
   }
 
@@ -820,7 +818,8 @@ export class CampaignService {
         initiatedBy,
         name: requireText(input.name, "name"),
         description: optionalText(input.description, "description") ?? null,
-        imageName: optionalText(input.imageName, "imageName") ?? null,
+        imageUrl:
+          optionalText(input.imageUrl ?? input.imageName, "imageUrl") ?? null,
         outletIds,
         merchantIds,
         eligibility:
@@ -921,8 +920,7 @@ export class CampaignService {
         ? null
         : existing.merchantId;
     if (input.merchantId !== undefined) {
-      merchantId =
-        input.merchantId === null ? null : requireText(input.merchantId, "merchantId");
+      merchantId = input.merchantId === null ? null : requireText(input.merchantId, "merchantId");
       if (merchantId) await assertMerchant(merchantId);
       data.merchant = merchantId ? { connect: { id: merchantId } } : { disconnect: true };
     }
@@ -937,8 +935,9 @@ export class CampaignService {
     if (input.description !== undefined) {
       data.description = optionalText(input.description, "description") ?? null;
     }
-    if (input.imageName !== undefined) {
-      data.imageName = optionalText(input.imageName, "imageName") ?? null;
+    if (input.imageUrl !== undefined || input.imageName !== undefined) {
+      data.imageUrl =
+        optionalText(input.imageUrl ?? input.imageName, "imageUrl") ?? null;
     }
     if (input.productScope !== undefined) {
       data.productScope = optionalText(input.productScope, "productScope") ?? "All products";
@@ -947,9 +946,7 @@ export class CampaignService {
       data.eligibility = parseEnum(input.eligibility, "eligibility", ELIGIBILITY);
     }
     const funding =
-      input.funding !== undefined
-        ? parseEnum(input.funding, "funding", FUNDING)
-        : existing.funding;
+      input.funding !== undefined ? parseEnum(input.funding, "funding", FUNDING) : existing.funding;
     if (input.funding !== undefined) {
       assertCanChangeFunding(actor, funding);
       data.funding = funding;
@@ -984,9 +981,7 @@ export class CampaignService {
 
     if (input.funding !== undefined || input.splittingRatio !== undefined) {
       const ratioInput =
-        input.splittingRatio !== undefined
-          ? input.splittingRatio
-          : existing.splittingRatio;
+        input.splittingRatio !== undefined ? input.splittingRatio : existing.splittingRatio;
       data.splittingRatio = resolveSplittingRatioForFunding(funding, ratioInput);
     }
 
@@ -1242,9 +1237,7 @@ export class CampaignService {
     }
 
     const remark =
-      remarkRaw === undefined || remarkRaw === null
-        ? "Resumed"
-        : requireRemark(remarkRaw);
+      remarkRaw === undefined || remarkRaw === null ? "Resumed" : requireRemark(remarkRaw);
 
     await prisma.$transaction(async (tx) => {
       await tx.campaign.update({

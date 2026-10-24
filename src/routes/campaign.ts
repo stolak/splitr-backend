@@ -81,9 +81,10 @@ const controller = campaignController;
  *         description:
  *           type: string
  *           example: Seasonal financing promotion for qualifying purchases.
- *         imageName:
+ *         imageUrl:
  *           type: string
- *           example: campaign.png
+ *           example: https://cdn.example.com/campaigns/campaign.png
+ *           description: Public URL of the campaign image (not a filename).
  *         outletIds:
  *           type: array
  *           items:
@@ -275,7 +276,7 @@ const controller = campaignController;
  *                 initiatedBy: Splitr
  *                 name: Back to School with Splitr
  *                 description: Seasonal financing promotion for qualifying purchases.
- *                 imageName: campaign.png
+ *                 imageUrl: https://cdn.example.com/campaigns/campaign.png
  *                 outletIds: []
  *                 merchantIds: []
  *                 eligibility: AllCustomers
