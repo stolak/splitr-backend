@@ -28,6 +28,38 @@ import {
   isMerchantActor,
   requireRemark,
 } from "./campaignRules";
+import { productConfigurationService } from "./productConfigurationService";
+
+/** Maps CampaignFinancingOption → ProductConfiguration + display name. */
+const FINANCING_OPTION_PRODUCT_MAP: Array<{
+  product: CampaignFinancingOption;
+  name: string;
+  code: string;
+  productType: "BI_WEEKLY" | "MONTHLY_FLEX";
+  tenure: number;
+}> = [
+  // {
+  //   product: CampaignFinancingOption.PayIn4,
+  //   name: "Pay in 4 (P4)",
+  //   code: "PAY_IN_4",
+  //   productType: "BI_WEEKLY",
+  //   tenure: 4,
+  // },
+  {
+    product: CampaignFinancingOption.PayIn6,
+    name: "Pay in 6 (P6)",
+    code: "PAY_IN_6",
+    productType: "BI_WEEKLY",
+    tenure: 6,
+  },
+  {
+    product: CampaignFinancingOption.MonthlyFlex,
+    name: "MonthlyFlex (MF)",
+    code: "MONTHLY_FLEX_3",
+    productType: "MONTHLY_FLEX",
+    tenure: 3,
+  },
+];
 
 const INITIATED_BY: CampaignInitiatedBy[] = Object.values(CampaignInitiatedBy);
 const ELIGIBILITY: CampaignEligibility[] = Object.values(CampaignEligibility);
@@ -634,6 +666,33 @@ async function generateCampaignCode(): Promise<string> {
 }
 
 export class CampaignService {
+  /**
+   * Campaign financing options with ProductConfiguration rates.
+   * - PayIn4 → PAY_IN_4
+   * - PayIn6 → PAY_IN_6
+   * - MonthlyFlex → MONTHLY_FLEX_3
+   *
+   * Response shape: [{ product, name, rate }, ...]
+   */
+  async getFinancingOptionsWithRates() {
+    const configs = await productConfigurationService.getProductConfigurations();
+    const byCode = new Map(configs.map((c) => [c.code.toUpperCase(), c]));
+    const byTypeTenure = new Map(configs.map((c) => [`${c.productType}:${c.tenure}`, c]));
+
+    return FINANCING_OPTION_PRODUCT_MAP.map((entry) => {
+      const config =
+        byCode.get(entry.code.toUpperCase()) ??
+        byTypeTenure.get(`${entry.productType}:${entry.tenure}`) ??
+        null;
+
+      return {
+        product: entry.product,
+        name: entry.name,
+        rate: config?.rate ?? null,
+      };
+    });
+  }
+
   async list(filters?: {
     merchantId?: string;
     status?: CampaignStatus;
@@ -818,8 +877,7 @@ export class CampaignService {
         initiatedBy,
         name: requireText(input.name, "name"),
         description: optionalText(input.description, "description") ?? null,
-        imageUrl:
-          optionalText(input.imageUrl ?? input.imageName, "imageUrl") ?? null,
+        imageUrl: optionalText(input.imageUrl ?? input.imageName, "imageUrl") ?? null,
         outletIds,
         merchantIds,
         eligibility:
@@ -936,8 +994,7 @@ export class CampaignService {
       data.description = optionalText(input.description, "description") ?? null;
     }
     if (input.imageUrl !== undefined || input.imageName !== undefined) {
-      data.imageUrl =
-        optionalText(input.imageUrl ?? input.imageName, "imageUrl") ?? null;
+      data.imageUrl = optionalText(input.imageUrl ?? input.imageName, "imageUrl") ?? null;
     }
     if (input.productScope !== undefined) {
       data.productScope = optionalText(input.productScope, "productScope") ?? "All products";

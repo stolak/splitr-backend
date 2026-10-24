@@ -51,6 +51,15 @@ export class CampaignController {
     return res.status(status).json({ success: false, message });
   }
 
+  async listFinancingOptions(_req: Request, res: Response) {
+    try {
+      const data = await campaignService.getFinancingOptionsWithRates();
+      return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async list(req: Request, res: Response) {
     try {
       const actor = actorFromRequest(req);

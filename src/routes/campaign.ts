@@ -553,6 +553,41 @@ router.post("/", auth, controller.create.bind(controller));
 
 /**
  * @swagger
+ * /api/v1/campaigns/financing-options:
+ *   get:
+ *     summary: Campaign financing options with rates
+ *     description: |
+ *       Returns exactly three items:
+ *       - PayIn4 → PAY_IN_4 rate
+ *       - PayIn6 → PAY_IN_6 rate
+ *       - MonthlyFlex → MONTHLY_FLEX_3 rate
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Financing options with rates
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               data:
+ *                 - product: PayIn4
+ *                   name: Pay in 4
+ *                   rate: 0
+ *                 - product: PayIn6
+ *                   name: Pay in 6
+ *                   rate: 5
+ *                 - product: MonthlyFlex
+ *                   name: MonthlyFlex
+ *                   rate: 12.99
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/financing-options", auth, controller.listFinancingOptions.bind(controller));
+
+/**
+ * @swagger
  * /api/v1/campaigns/merchant/{merchantId}:
  *   get:
  *     summary: List campaigns related to a merchant
