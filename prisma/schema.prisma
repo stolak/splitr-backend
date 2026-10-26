@@ -133,6 +133,11 @@ model User {
   isPhoneVerified Boolean  @default(false)
   isDeleted       Boolean  @default(false)
 
+  // security
+  twoFactorEnabled  Boolean   @default(false)
+  biometricEnabled  Boolean   @default(false)
+  passwordChangedAt DateTime?
+
   createdById  String?
   approvedById String?
   modifiedById String?

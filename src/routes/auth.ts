@@ -1,5 +1,17 @@
 import express from "express";
-import { register, login, registerBuyer, registerMerchantUser, getUsersByMerchant, forgotPassword, resetPassword, changePassword, loginWithFirebase } from "../controllers/authController";
+import {
+  register,
+  login,
+  registerBuyer,
+  registerMerchantUser,
+  getUsersByMerchant,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+  loginWithFirebase,
+  getSecuritySettings,
+  updateSecuritySettings,
+} from "../controllers/authController";
 import { authenticateJWT } from "../middlewares/auth";
 const router = express.Router();
 /**
@@ -156,5 +168,7 @@ router.post("/forgot-password", forgotPassword);
  */
 router.post("/reset-password", resetPassword);
 router.post("/change-password", authenticateJWT, changePassword);
+router.get("/security", authenticateJWT, getSecuritySettings);
+router.patch("/security", authenticateJWT, updateSecuritySettings);
 
 export = router;

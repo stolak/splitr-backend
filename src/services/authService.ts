@@ -797,7 +797,7 @@ export class AuthService {
       await prisma.$transaction([
         prisma.user.update({
           where: { id: user.id },
-          data: { password: hashedPassword },
+          data: { password: hashedPassword, passwordChangedAt: new Date() },
         }),
         prisma.passwordResetToken.update({
           where: { id: resetToken.id },
@@ -814,6 +814,24 @@ export class AuthService {
     }
   }
 
+  private assertPasswordStrength(password: string) {
+    if (password.length < 8) {
+      throw new Error("Password must be at least 8 characters long");
+    }
+    if (!/[A-Z]/.test(password)) {
+      throw new Error("Password must include at least one uppercase letter");
+    }
+    if (!/[a-z]/.test(password)) {
+      throw new Error("Password must include at least one lowercase letter");
+    }
+    if (!/[0-9]/.test(password)) {
+      throw new Error("Password must include at least one number");
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      throw new Error("Password must include at least one special character");
+    }
+  }
+
   /**
    * Change password for an authenticated user
    */
@@ -822,7 +840,7 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
     confirmPassword: string
-  ): Promise<{ success: boolean; message: string }> {
+  ): Promise<{ success: boolean; message: string; passwordChangedAt: string }> {
     try {
       if (!userId) {
         throw new Error("User not found");
@@ -836,9 +854,7 @@ export class AuthService {
         throw new Error("Passwords do not match");
       }
 
-      if (newPassword.length < 6) {
-        throw new Error("Password must be at least 6 characters long");
-      }
+      this.assertPasswordStrength(newPassword);
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
@@ -860,19 +876,87 @@ export class AuthService {
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
+      const passwordChangedAt = new Date();
 
       await prisma.user.update({
         where: { id: userId },
-        data: { password: hashedPassword },
+        data: { password: hashedPassword, passwordChangedAt },
       });
 
       return {
         success: true,
         message: "Password changed successfully",
+        passwordChangedAt: passwordChangedAt.toISOString(),
       };
     } catch (error: any) {
       throw new Error(error.message || "Failed to change password");
     }
+  }
+
+  async getSecuritySettings(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        twoFactorEnabled: true,
+        biometricEnabled: true,
+        passwordChangedAt: true,
+        isPhoneVerified: true,
+      },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    return {
+      success: true,
+      data: {
+        twoFactorEnabled: user.twoFactorEnabled,
+        biometricEnabled: user.biometricEnabled,
+        passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
+        isPhoneVerified: user.isPhoneVerified,
+      },
+    };
+  }
+
+  async updateSecuritySettings(
+    userId: string,
+    input: { twoFactorEnabled?: boolean; biometricEnabled?: boolean }
+  ) {
+    if (input.twoFactorEnabled === undefined && input.biometricEnabled === undefined) {
+      throw new Error("Provide twoFactorEnabled and/or biometricEnabled");
+    }
+
+    const data: { twoFactorEnabled?: boolean; biometricEnabled?: boolean } = {};
+    if (typeof input.twoFactorEnabled === "boolean") {
+      data.twoFactorEnabled = input.twoFactorEnabled;
+    }
+    if (typeof input.biometricEnabled === "boolean") {
+      data.biometricEnabled = input.biometricEnabled;
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        twoFactorEnabled: true,
+        biometricEnabled: true,
+        passwordChangedAt: true,
+        isPhoneVerified: true,
+      },
+    });
+
+    return {
+      success: true,
+      message: "Security settings updated",
+      data: {
+        twoFactorEnabled: user.twoFactorEnabled,
+        biometricEnabled: user.biometricEnabled,
+        passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
+        isPhoneVerified: user.isPhoneVerified,
+      },
+    };
   }
 }
 

@@ -685,6 +685,79 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * @openapi
+ * /api/v1/auth/security:
+ *   get:
+ *     summary: Get security settings for the authenticated user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Security settings
+ *       401:
+ *         description: Unauthorized
+ *   patch:
+ *     summary: Update two-factor and biometric preferences
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               twoFactorEnabled:
+ *                 type: boolean
+ *               biometricEnabled:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Security settings updated
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ */
+export const getSecuritySettings = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    const result = await authService.getSecuritySettings(userId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Failed to load security settings",
+    });
+  }
+};
+
+export const updateSecuritySettings = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    const { twoFactorEnabled, biometricEnabled } = req.body ?? {};
+    const result = await authService.updateSecuritySettings(userId, {
+      twoFactorEnabled,
+      biometricEnabled,
+    });
+    return res.status(200).json(result);
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Failed to update security settings",
+    });
+  }
+};
+
 export const getUsersByMerchant = async (req: Request, res: Response) => {
   try {
     const { merchantId, userType, role, isActive, page, limit } = req.query;
