@@ -165,12 +165,12 @@ model User {
   merchantsTermsAgreed Merchant[] @relation("MerchantTermsAgreedBy")
 
   // Password reset tokens
-  passwordResetTokens PasswordResetToken[]
-  linkedUsers         LinkedUser[]
-  outlets             Outlet[]
-  campaignsCreated       Campaign[]             @relation("CampaignCreatedBy")
-  campaignsApproved      Campaign[]             @relation("CampaignApprovedBy")
-  campaignStatusRemarks  CampaignStatusRemark[] @relation("CampaignStatusRemarkPerformedBy")
+  passwordResetTokens   PasswordResetToken[]
+  linkedUsers           LinkedUser[]
+  outlets               Outlet[]
+  campaignsCreated      Campaign[]             @relation("CampaignCreatedBy")
+  campaignsApproved     Campaign[]             @relation("CampaignApprovedBy")
+  campaignStatusRemarks CampaignStatusRemark[] @relation("CampaignStatusRemarkPerformedBy")
 
   @@map("user")
 }
@@ -280,6 +280,13 @@ model Buyer {
   createdAt                         DateTime                            @default(now())
   updatedAt                         DateTime                            @updatedAt
   stripeCardholder                  StripeCardholder?
+
+  // notifications
+  paymentReminders     Boolean @default(false)
+  paymentConfirmations Boolean @default(false)
+  planApprovals        Boolean @default(false)
+  creditScoreUpdates   Boolean @default(false)
+  promotionAlerts      Boolean @default(false)
 
   @@map("buyer")
 }
@@ -1789,19 +1796,19 @@ enum CampaignStatusRemarkAction {
 }
 
 model CampaignStatusRemark {
-  id              String                      @id @default(uuid())
+  id              String                     @id @default(uuid())
   campaignId      String
-  campaign        Campaign                    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign        Campaign                   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   action          CampaignStatusRemarkAction
   previousStatus  CampaignStatus
   newStatus       CampaignStatus
-  remark          String                      @db.Text
+  remark          String                     @db.Text
   performedById   String
-  performedBy     User                        @relation("CampaignStatusRemarkPerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
-  performedByRole String                      @db.VarChar(50)
+  performedBy     User                       @relation("CampaignStatusRemarkPerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
+  performedByRole String                     @db.VarChar(50)
   fundingType     CampaignFunding
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 
   @@index([campaignId])
   @@index([createdAt])

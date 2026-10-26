@@ -45,6 +45,11 @@ export interface UpdateBuyerInput {
   city?: string;
   houseNo?: string;
   postalCode?: string;
+  paymentReminders?: boolean;
+  paymentConfirmations?: boolean;
+  planApprovals?: boolean;
+  creditScoreUpdates?: boolean;
+  promotionAlerts?: boolean;
 }
 
 const buyerSelect = {
@@ -85,6 +90,11 @@ const buyerSelect = {
   isPhoneVerified: true,
   status: true,
   IsTermsAndConditionAccepted: true,
+  paymentReminders: true,
+  paymentConfirmations: true,
+  planApprovals: true,
+  creditScoreUpdates: true,
+  promotionAlerts: true,
 } as const;
 
 function mapBuyer<T extends { province: { gstRate: unknown; psrRate: unknown } | null }>(buyer: T): T {
@@ -271,8 +281,13 @@ export class BuyerService {
       }
     }
 
-    const { profileImageUrl: _profileImageUrl, provinceCode, province, ...buyerFields } = data;
+    const { profileImageUrl, provinceCode, province, ...buyerFields } = data;
     const resolvedProvinceCode = await resolveProvinceInput(provinceCode, province);
+    const nextPhoto = data.photo !== undefined ? data.photo : profileImageUrl;
+    if (nextPhoto !== undefined) {
+      buyerFields.photo = nextPhoto;
+    }
+
     const buyer = await prisma.buyer.update({
       where: { id },
       data: {
@@ -281,6 +296,15 @@ export class BuyerService {
       },
       select: buyerSelect,
     });
+
+    // Keep User.profileImageUrl in sync with buyer photo / avatar URL.
+    if (nextPhoto !== undefined && existing.userId) {
+      await prisma.user.update({
+        where: { id: existing.userId },
+        data: { profileImageUrl: nextPhoto || null },
+      });
+    }
+
     return mapBuyer(buyer);
   }
 

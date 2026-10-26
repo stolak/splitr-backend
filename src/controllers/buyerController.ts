@@ -289,6 +289,16 @@ import { authService } from "../services/authService";
  *           type: string
  *         postalCode:
  *           type: string
+ *         paymentReminders:
+ *           type: boolean
+ *         paymentConfirmations:
+ *           type: boolean
+ *         planApprovals:
+ *           type: boolean
+ *         creditScoreUpdates:
+ *           type: boolean
+ *         promotionAlerts:
+ *           type: boolean
  */
 export const buyerController = {
   create: async (req: Request, res: Response) => {

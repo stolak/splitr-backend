@@ -23,7 +23,8 @@
   },
   "[prisma]": {
     "editor.defaultFormatter": "Prisma.prisma",
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "file"
   },
 
   "prettier.requireConfig": true
