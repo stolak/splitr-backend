@@ -628,6 +628,43 @@ router.get("/merchant/:merchantId", auth, controller.listByMerchant.bind(control
 
 /**
  * @swagger
+ * /api/v1/campaigns/generate-image:
+ *   post:
+ *     summary: Generate a campaign image with OpenAI and store it on S3
+ *     description: |
+ *       Uses campaign name and short description to generate a landscape hero image,
+ *       uploads it to AWS S3 (or local fallback), and returns the public URL for imageUrl.
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, description]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 maxLength: 200
+ *                 example: Back to School with Splitr
+ *               description:
+ *                 type: string
+ *                 maxLength: 500
+ *                 example: 0% APR Pay-in-4 on school essentials this month
+ *     responses:
+ *       200:
+ *         description: Image generated and uploaded
+ *       400:
+ *         description: Validation or generation failure
+ *       401:
+ *         description: Unauthorized
+ */
+router.post("/generate-image", auth, controller.generateImage.bind(controller));
+
+/**
+ * @swagger
  * /api/v1/campaigns/validate-code:
  *   post:
  *     summary: Validate a campaign code for a purchase

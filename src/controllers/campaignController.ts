@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 import { Request, Response } from "express";
 import { campaignService } from "../services/campaignService";
+import { campaignImageService } from "../services/campaignImageService";
 import {
   CampaignActor,
   isAdminActor,
@@ -172,6 +173,32 @@ export class CampaignController {
         return res.status(404).json({ success: false, message: "Campaign not found" });
       }
       return this.ok(res, data);
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
+  async generateImage(req: Request, res: Response) {
+    try {
+      const actor = actorFromRequest(req);
+      if (!actor) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const result = await campaignImageService.generateAndUpload({
+        name: req.body?.name,
+        description: req.body?.description,
+      });
+
+      if (!result.success || !result.data) {
+        return res.status(400).json({
+          success: false,
+          message: result.message,
+          error: result.error,
+        });
+      }
+
+      return this.ok(res, result.data, result.message);
     } catch (error) {
       return this.fail(res, error);
     }
