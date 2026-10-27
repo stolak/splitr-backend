@@ -982,6 +982,11 @@ model Invoice {
   nonRefundableReason String?
   virtualInvoiceExtra VirtualInvoiceExtra?
 
+  promotionalCode      String?
+  promotionalAmount    Decimal?
+  promotionalStartDate DateTime?
+  promotionalEndDate   DateTime?
+
   @@map("invoice")
 }
 

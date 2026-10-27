@@ -562,6 +562,13 @@ export interface BuyerProductFinanceQuoteInput {
   tenure: number;
   purchaseAmount: number;
   partPayment?: number;
+  promotionalOptions?: {
+    payIn4?: number | null;
+    payIn6: number | null;
+    monthlyFlex: number | null;
+    discountPurchaseAmount: number | null;
+    discountPurchasePercentage: number | null;
+  };
 }
 
 export interface BuyerProductFinanceQuoteResult {
@@ -3213,7 +3220,15 @@ export class ScoringService {
     if (partPayment > purchaseAmount) {
       throw new Error("partPayment cannot be greater than purchaseAmount");
     }
+    //
+    const discountPurchaseAmount =
+      input?.promotionalOptions?.discountPurchaseAmount ||
+      (input?.promotionalOptions?.discountPurchasePercentage || 0) *
+        purchaseAmount *
+        input?.purchaseAmount ||
+      0;
 
+    //
     const financeAmount = purchaseAmount - partPayment;
     const scored = await this.buyerScoreForProduct(buyerId, productType, tenure);
     const parameters = PLACEHOLDER_BUYER_SCORE_PARAMETERS;

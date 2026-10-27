@@ -8,6 +8,7 @@ import {
   CampaignPromoType,
   CampaignStatus,
   CampaignStatusRemarkAction,
+  InvoiceStatus,
   Prisma,
   PurchaseDiscountType,
 } from "@prisma/client";
@@ -186,6 +187,13 @@ function requireDate(value: unknown, field: string): Date {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new Error(`${field} must be a valid date`);
   return date;
+}
+
+/** YYYY-MM-DD in UTC for inclusive campaign date-window checks. */
+function utcDateOnly(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
 function parseEnum<T extends string>(
@@ -798,6 +806,162 @@ export class CampaignService {
     });
     if (!record) throw new Error("Campaign not found");
     return await mapCampaign(record);
+  }
+
+  /**
+   * Validate whether a campaign code can be applied to a purchase.
+   * Returns campaign details when valid; otherwise a reason (never throws for rule failures).
+   *
+   * Customer identity: prefer `buyerId`. If omitted, use `email` and resolve returning/new
+   * status from invoice.customerEmail (buyer table membership is not required).
+   */
+  async validateCode(input: {
+    campaignCode: string;
+    merchantId: string;
+    purchaseAmount: number | string;
+    buyerId?: string | null;
+    email?: string | null;
+  }): Promise<
+    | {
+        valid: true;
+        campaign: Awaited<ReturnType<typeof mapCampaign>>;
+        buyerType: "NewCustomer" | "ReturningCustomer";
+        identifiedBy: "buyerId" | "email";
+      }
+    | { valid: false; reason: string; code: string }
+  > {
+    const campaignCode = requireText(input.campaignCode, "campaignCode");
+    const merchantId = requireText(input.merchantId, "merchantId");
+    const purchaseAmount = requireNumber(input.purchaseAmount, "purchaseAmount");
+    if (purchaseAmount < 0) {
+      throw new Error("purchaseAmount must be greater than or equal to 0");
+    }
+
+    const buyerId =
+      input.buyerId === undefined || input.buyerId === null || input.buyerId === ""
+        ? null
+        : requireText(input.buyerId, "buyerId");
+    const emailRaw =
+      input.email === undefined || input.email === null || input.email === ""
+        ? null
+        : requireText(input.email, "email");
+    const email = emailRaw ? emailRaw.toLowerCase() : null;
+
+    if (!buyerId && !email) {
+      throw new Error("buyerId or email is required");
+    }
+
+    const [merchant, buyer, record] = await Promise.all([
+      prisma.merchant.findUnique({ where: { id: merchantId }, select: { id: true } }),
+      buyerId
+        ? prisma.buyer.findUnique({ where: { id: buyerId }, select: { id: true } })
+        : Promise.resolve(null),
+      prisma.campaign.findUnique({
+        where: { campaignCode },
+        include: campaignInclude,
+      }),
+    ]);
+
+    if (!merchant) {
+      return { valid: false, code: "MERCHANT_NOT_FOUND", reason: "Merchant not found" };
+    }
+    if (buyerId && !buyer) {
+      return { valid: false, code: "BUYER_NOT_FOUND", reason: "Buyer not found" };
+    }
+    if (!record) {
+      return {
+        valid: false,
+        code: "CAMPAIGN_NOT_FOUND",
+        reason: "Campaign code is invalid or does not exist",
+      };
+    }
+
+    const campaign = await mapCampaign(record);
+
+    if (campaign.status !== CampaignStatus.Active) {
+      return {
+        valid: false,
+        code: "CAMPAIGN_NOT_ACTIVE",
+        reason: `Campaign is not active (status: ${campaign.status})`,
+      };
+    }
+
+    const today = utcDateOnly(new Date());
+    const start = utcDateOnly(campaign.startDate);
+    const end = utcDateOnly(campaign.endDate);
+    if (today < start || today > end) {
+      return {
+        valid: false,
+        code: "OUTSIDE_CAMPAIGN_DATES",
+        reason: `Current date is outside the campaign period (${start} – ${end})`,
+      };
+    }
+
+    if (!this.isMerchantApplicable(campaign, merchantId)) {
+      return {
+        valid: false,
+        code: "MERCHANT_NOT_APPLICABLE",
+        reason: "Campaign code does not apply to this merchant",
+      };
+    }
+
+    if (campaign.minPurchase != null) {
+      const minPurchase = Number(campaign.minPurchase);
+      if (Number.isFinite(minPurchase) && purchaseAmount < minPurchase) {
+        return {
+          valid: false,
+          code: "MIN_PURCHASE_NOT_MET",
+          reason: `Purchase amount must be at least ${minPurchase}`,
+        };
+      }
+    }
+
+    const identifiedBy: "buyerId" | "email" = buyerId ? "buyerId" : "email";
+    // Email path: do not require a Buyer row — resolve history from invoice.customerEmail only.
+    const priorPaidCount = buyerId
+      ? await prisma.invoice.count({
+          where: { merchantId, status: InvoiceStatus.Paid, buyerId },
+        })
+      : await prisma.invoice.count({
+          where: {
+            merchantId,
+            status: InvoiceStatus.Paid,
+            customerEmail: email!,
+          },
+        });
+    const buyerType: "NewCustomer" | "ReturningCustomer" =
+      priorPaidCount > 0 ? "ReturningCustomer" : "NewCustomer";
+
+    if (campaign.eligibility === CampaignEligibility.NewCustomer && buyerType !== "NewCustomer") {
+      return {
+        valid: false,
+        code: "BUYER_NOT_ELIGIBLE",
+        reason: "Campaign is limited to new customers of this merchant",
+      };
+    }
+    if (
+      campaign.eligibility === CampaignEligibility.ReturningCustomer &&
+      buyerType !== "ReturningCustomer"
+    ) {
+      return {
+        valid: false,
+        code: "BUYER_NOT_ELIGIBLE",
+        reason: "Campaign is limited to returning customers of this merchant",
+      };
+    }
+
+    return { valid: true, campaign, buyerType, identifiedBy };
+  }
+
+  /** Merchant owns the campaign, or is listed in merchantIds and has approved participation. */
+  private isMerchantApplicable(
+    campaign: { merchantId?: string | null; merchantIds?: MerchantCampaignEntry[] },
+    merchantId: string
+  ) {
+    if (campaign.merchantId === merchantId) return true;
+    return (campaign.merchantIds ?? []).some(
+      (entry) => entry.merchantId === merchantId && entry.approved === true
+    );
   }
 
   async create(input: Record<string, unknown>, actor: CampaignActor) {

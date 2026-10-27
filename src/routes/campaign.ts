@@ -628,6 +628,62 @@ router.get("/merchant/:merchantId", auth, controller.listByMerchant.bind(control
 
 /**
  * @swagger
+ * /api/v1/campaigns/validate-code:
+ *   post:
+ *     summary: Validate a campaign code for a purchase
+ *     description: |
+ *       Checks whether a campaign code can be applied given merchant, buyer, and purchase amount.
+ *
+ *       Fails when:
+ *       - campaign code does not exist
+ *       - campaign status is not Active
+ *       - current date is outside startDate–endDate (inclusive, UTC calendar days)
+ *       - purchaseAmount is below minPurchase (when set)
+ *       - merchant is not the campaign owner and is not an approved merchantIds entry
+ *       - buyer eligibility does not match (NewCustomer = no prior Paid invoice with merchant;
+ *         ReturningCustomer = at least one prior Paid invoice with merchant)
+ *
+ *       Customer identity: provide `buyerId` when known. If `buyerId` is omitted, provide `email`.
+ *       With email, returning/new is determined from `invoice.customerEmail` only — the email does
+ *       not need to exist in the buyer table.
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [campaignCode, merchantId, purchaseAmount]
+ *             properties:
+ *               campaignCode:
+ *                 type: string
+ *                 example: CMP-2610-A1B2C3
+ *               merchantId:
+ *                 type: string
+ *               purchaseAmount:
+ *                 type: number
+ *                 example: 350
+ *               buyerId:
+ *                 type: string
+ *                 description: Preferred customer id. If omitted, email is required.
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Used when buyerId is omitted. Matched against invoice.customerEmail.
+ *     responses:
+ *       200:
+ *         description: Validation result (valid true/false). Failed rules return success=false with reason.
+ *       400:
+ *         description: Missing or invalid input parameters
+ *       401:
+ *         description: Unauthorized
+ */
+router.post("/validate-code", auth, controller.validateCode.bind(controller));
+
+/**
+ * @swagger
  * /api/v1/campaigns/code/{campaignCode}:
  *   get:
  *     summary: Get a campaign by campaignCode

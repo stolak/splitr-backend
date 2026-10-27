@@ -12,7 +12,7 @@
     "seed": "node prisma/seed.js",
     "create-tables": "node scripts/create-tables.js",
     "migrate": "npx prisma migrate",
-    "migrate:init": "npx prisma migrate dev --name init",
+    "migrate:dev": "npx prisma migrate dev --name init",
     "init:ids": "node scripts/setup-splitr-simple.js",
     "test-splitr-ids": "node scripts/test-splitr-ids.js",
     "test-validate-account": "node scripts/test-validate-and-create-account.js",

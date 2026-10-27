@@ -177,6 +177,42 @@ export class CampaignController {
     }
   }
 
+  async validateCode(req: Request, res: Response) {
+    try {
+      const body = req.body ?? {};
+      const data = await campaignService.validateCode({
+        campaignCode: body.campaignCode,
+        merchantId: body.merchantId,
+        purchaseAmount: body.purchaseAmount,
+        buyerId: body.buyerId,
+        email: body.email,
+      });
+
+      if (!data.valid) {
+        return res.status(200).json({
+          success: false,
+          valid: false,
+          code: data.code,
+          message: data.reason,
+          reason: data.reason,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        valid: true,
+        message: "Campaign code is valid",
+        data: {
+          campaign: data.campaign,
+          buyerType: data.buyerType,
+          identifiedBy: data.identifiedBy,
+        },
+      });
+    } catch (error) {
+      return this.fail(res, error);
+    }
+  }
+
   async create(req: Request, res: Response) {
     try {
       const actor = actorFromRequest(req);
