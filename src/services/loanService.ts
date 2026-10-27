@@ -2188,24 +2188,142 @@ export class LoanService {
   }
 
   /**
-   * Get buyer's loan history
+   * Buyer transaction history from LoanTransaction rows on loans that have an
+   * invoice attached to this buyer.
    */
   async getBuyerLoanHistory(buyerId: string) {
     try {
+      const buyer = await prisma.buyer.findUnique({
+        where: { id: buyerId },
+        select: { id: true },
+      });
+      if (!buyer) {
+        throw new Error("Buyer not found");
+      }
+
       const loans = await prisma.loan.findMany({
-        where: { buyerId },
+        where: {
+          buyerId,
+          invoiceId: { not: null },
+        },
         include: {
-          loanTransactions: {
-            where: {
-              transactionStatus: TransactionStatus.Completed,
+          merchant: {
+            select: {
+              id: true,
+              splitrId: true,
+              businessName: true,
+              businessEmail: true,
             },
           },
-          loanSchedules: true,
+          product: {
+            select: {
+              id: true,
+              code: true,
+              productName: true,
+              productType: true,
+              tenure: true,
+            },
+          },
+          invoice: {
+            select: {
+              id: true,
+              splitrId: true,
+              amount: true,
+              note: true,
+              status: true,
+              customerName: true,
+              items: {
+                select: { id: true, description: true, quantity: true, amount: true },
+                take: 5,
+              },
+            },
+          },
+          loanTransactions: {
+            orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
+          },
         },
         orderBy: { createdAt: "desc" },
       });
 
-      return { success: true, data: loans };
+      const transactions = loans.flatMap((loan) => {
+        const invoiceItems =
+          loan.invoice?.items
+            ?.map((item) => item.description)
+            .filter(Boolean)
+            .join(", ") || null;
+        const planLabel =
+          loan.product?.productName ||
+          loan.product?.code ||
+          String(loan.loanInstallmentType || "Plan");
+
+        return loan.loanTransactions.map((tx) => {
+          const credit = Number(tx.creditAmount);
+          const debit = Number(tx.debitAmount);
+          const amount = debit > 0 ? debit : credit;
+          return {
+            id: tx.id,
+            splitrId: tx.splitrId,
+            loanId: loan.id,
+            loanSplitrId: loan.splitrId,
+            transactionType: tx.transactionType,
+            transactionStatus: tx.transactionStatus,
+            paymentType: tx.paymentType,
+            creditAmount: credit,
+            debitAmount: debit,
+            amount,
+            description: tx.description,
+            referenceNumber: tx.referenceNumber,
+            transactReference: tx.transactReference,
+            transactionDate: tx.transactionDate,
+            createdAt: tx.createdAt,
+            merchant: loan.merchant
+              ? {
+                  id: loan.merchant.id,
+                  splitrId: loan.merchant.splitrId,
+                  businessName: loan.merchant.businessName,
+                }
+              : null,
+            invoice: loan.invoice
+              ? {
+                  id: loan.invoice.id,
+                  splitrId: loan.invoice.splitrId,
+                  amount: Number(loan.invoice.amount),
+                  note: loan.invoice.note,
+                  status: loan.invoice.status,
+                  itemsLabel: invoiceItems,
+                }
+              : null,
+            plan: planLabel,
+            productType: loan.product?.productType ?? null,
+          };
+        });
+      });
+
+      transactions.sort(
+        (a, b) =>
+          new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime()
+      );
+
+      const completedDebits = transactions.filter(
+        (t) => t.transactionStatus === TransactionStatus.Completed && t.debitAmount > 0
+      );
+      const totalPaid = completedDebits.reduce((sum, t) => sum + t.debitAmount, 0);
+      const transactionCount = transactions.length;
+      const avgPayment =
+        completedDebits.length > 0 ? totalPaid / completedDebits.length : 0;
+
+      return {
+        success: true,
+        data: {
+          transactions,
+          summary: {
+            totalPaid: roundUpTo2Decimals(totalPaid) ?? 0,
+            transactionCount,
+            avgPayment: roundUpTo2Decimals(avgPayment) ?? 0,
+            completedPayments: completedDebits.length,
+          },
+        },
+      };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
