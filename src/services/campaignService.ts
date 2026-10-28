@@ -809,6 +809,71 @@ export class CampaignService {
   }
 
   /**
+   * Resolve finance-quote promotional options from a campaign code
+   * (finance-charge % by product + purchase discount fields).
+   */
+  async getPromotionalOptions(campaignCode: string): Promise<{
+    payIn4: number | null;
+    payIn6: number | null;
+    monthlyFlex: number | null;
+    discountPurchaseAmount: number | null;
+    discountPurchasePercentage: number | null;
+  }> {
+    const code = requireText(campaignCode, "campaignCode");
+    const record = await prisma.campaign.findUnique({
+      where: { campaignCode: code },
+      select: {
+        purchaseDiscountType: true,
+        purchaseDiscountAmount: true,
+        purchaseDiscountPercentage: true,
+        productFinanceChargeDiscount: true,
+        financingProducts: true,
+        promoType: true,
+      },
+    });
+    if (!record) {
+      throw new Error("Promotional code not found");
+    }
+
+    const chargeDiscounts = Array.isArray(record.productFinanceChargeDiscount)
+      ? (record.productFinanceChargeDiscount as ProductFinanceChargeDiscountEntry[])
+      : [];
+    const pctFor = (product: CampaignFinancingOption): number | null => {
+      const entry = chargeDiscounts.find((d) => d?.product === product);
+      const pct = entry?.financeChargeDiscountPercentage;
+      return typeof pct === "number" && Number.isFinite(pct) ? pct : null;
+    };
+
+    const amount =
+      record.purchaseDiscountAmount === null ? null : Number(record.purchaseDiscountAmount);
+    const percentage =
+      record.purchaseDiscountPercentage === null
+        ? null
+        : Number(record.purchaseDiscountPercentage);
+
+    const isPurchaseDiscount =
+      record.promoType === CampaignPromoType.PurchaseDiscount ||
+      record.promoType === CampaignPromoType.Mixed;
+    const isFinanceCharge =
+      record.promoType === CampaignPromoType.FinanceChargeDiscount ||
+      record.promoType === CampaignPromoType.Mixed;
+
+    return {
+      payIn4: isFinanceCharge ? pctFor(CampaignFinancingOption.PayIn4) : null,
+      payIn6: isFinanceCharge ? pctFor(CampaignFinancingOption.PayIn6) : null,
+      monthlyFlex: isFinanceCharge ? pctFor(CampaignFinancingOption.MonthlyFlex) : null,
+      discountPurchaseAmount:
+        isPurchaseDiscount && record.purchaseDiscountType === PurchaseDiscountType.FixedAmountOff
+          ? amount
+          : null,
+      discountPurchasePercentage:
+        isPurchaseDiscount && record.purchaseDiscountType === PurchaseDiscountType.PercentageOff
+          ? percentage
+          : null,
+    };
+  }
+
+  /**
    * Validate whether a campaign code can be applied to a purchase.
    * Returns campaign details when valid; otherwise a reason (never throws for rule failures).
    *

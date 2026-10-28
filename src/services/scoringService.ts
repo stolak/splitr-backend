@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { productConfigurationService } from "./productConfigurationService";
+import { campaignService } from "./campaignService";
 
 export interface IncomeRecurrentInput {
   incomeMonths: number;
@@ -526,10 +527,21 @@ export interface BuyerScoreResult {
   products: BuyerScoreProductOutcome[];
 }
 
+export interface PromotionalOptions {
+  payIn4?: number | null;
+  payIn6?: number | null;
+  monthlyFlex?: number | null;
+  discountPurchaseAmount?: number | null;
+  discountPurchasePercentage?: number | null;
+}
+
 export interface BuyerFinanceQuoteInput {
   buyerId: string;
   purchaseAmount: number;
   partPayment?: number;
+  promotionalCode?: string;
+  merchantId?: string;
+  promotionalOptions?: PromotionalOptions;
 }
 
 export interface BuyerFinanceQuoteProductOutcome extends FinanceResult {
@@ -538,8 +550,10 @@ export interface BuyerFinanceQuoteProductOutcome extends FinanceResult {
   productName: string;
   tenure: number;
 
-  /** Product configuration rate used for this quote */
+  /** Original product configuration rate */
   productRate?: number;
+  /** Promotional rate used for finance when a campaign rate applies */
+  promotionalProductRate?: number;
 
   /** The spending power this product was checked against */
   availableSpendingPower: number;
@@ -551,8 +565,12 @@ export interface BuyerFinanceQuoteProductOutcome extends FinanceResult {
 export interface BuyerFinanceQuoteResult {
   buyerId: string;
   purchaseAmount: number;
+  /** Present when a purchase discount reduced the amount used for finance */
+  discountedPurchaseAmount?: number;
   partPayment: number;
   parameters: BuyerScoreParameters;
+  promotionalCode?: string | null;
+  promotionalOptions?: PromotionalOptions | null;
   products: BuyerFinanceQuoteProductOutcome[];
 }
 
@@ -562,13 +580,9 @@ export interface BuyerProductFinanceQuoteInput {
   tenure: number;
   purchaseAmount: number;
   partPayment?: number;
-  promotionalOptions?: {
-    payIn4?: number | null;
-    payIn6: number | null;
-    monthlyFlex: number | null;
-    discountPurchaseAmount: number | null;
-    discountPurchasePercentage: number | null;
-  };
+  promotionalCode?: string;
+  merchantId?: string;
+  promotionalOptions?: PromotionalOptions;
 }
 
 export interface BuyerProductFinanceQuoteResult {
@@ -576,14 +590,21 @@ export interface BuyerProductFinanceQuoteResult {
   productType: FinancingProductType;
   tenure: number;
   purchaseAmount: number;
+  /** Present when a purchase discount reduced the amount used for finance */
+  discountedPurchaseAmount?: number;
   partPayment: number;
   parameters: BuyerScoreParameters;
+  promotionalCode?: string | null;
+  promotionalOptions?: PromotionalOptions | null;
   product: BuyerFinanceQuoteProductOutcome;
 }
 
 export interface FinanceResult {
   status: "passed" | "failed";
+  /** Original (pre-discount) purchase amount */
   purchaseAmount: number;
+  /** Present when a purchase discount reduced the amount used for finance */
+  discountedPurchaseAmount?: number;
   partPayment: number;
   financeAmount: number;
 
@@ -3048,10 +3069,23 @@ export class ScoringService {
    * against what this buyer can actually take on for that product.
    */
   async buyerFinanceQuote(input: BuyerFinanceQuoteInput): Promise<BuyerFinanceQuoteResult> {
-    const { buyerId, purchaseAmount } = input;
+    const { buyerId, purchaseAmount, promotionalCode, merchantId } = input;
     const partPayment = input.partPayment ?? 0;
 
     const score = await this.buyerScore(buyerId);
+
+    const promotionalOptions = await this.resolvePromotionalOptions({
+      promotionalCode,
+      merchantId,
+      buyerId,
+      purchaseAmount,
+      promotionalOptions: input.promotionalOptions,
+    });
+    const effectivePurchaseAmount = this.applyPurchaseDiscount(purchaseAmount, promotionalOptions);
+    const purchaseAmountFields = this.purchaseAmountResponseFields(
+      purchaseAmount,
+      effectivePurchaseAmount
+    );
 
     const productConfigurations = await productConfigurationService.getProductConfigurations();
     const configurationById = new Map(
@@ -3065,6 +3099,15 @@ export class ScoringService {
 
     for (const scored of score.products) {
       const productConfiguration = configurationById.get(scored.productConfigurationId);
+      const productType = scored.productType as FinancingProductType;
+      const promotionalRate = this.financeChargeDiscountForProduct(
+        productType,
+        scored.tenure,
+        promotionalOptions
+      );
+      const baseRate = productConfiguration?.rate;
+      const rateFields = this.productRateResponseFields(baseRate, promotionalRate);
+      const rateForCalc = rateFields.promotionalProductRate ?? rateFields.productRate;
 
       const productDetails = {
         productConfigurationId: scored.productConfigurationId,
@@ -3074,17 +3117,17 @@ export class ScoringService {
         availableSpendingPower: scored.availableSpendingPower,
         spendingPowerStatus: scored.status,
         spendingPowerMessage: scored.message,
+        ...rateFields,
       };
 
       // A buyer with no spending power for a product cannot finance on it at all, so
       // report that as the reason rather than running the finance checks
       if (scored.status === "failed") {
-        const financeAmount = purchaseAmount - partPayment;
-        const productType = scored.productType as FinancingProductType;
+        const financeAmount = effectivePurchaseAmount - partPayment;
         const availabilityFields = this.buildFinanceAvailability({
           productType,
           tenor: scored.tenure,
-          purchaseAmount,
+          purchaseAmount: effectivePurchaseAmount,
           financeAmount,
           minSp: scored.productMini,
           spendingCapacity: scored.availableSpendingPower,
@@ -3095,7 +3138,7 @@ export class ScoringService {
 
         products.push({
           status: "failed",
-          purchaseAmount,
+          ...purchaseAmountFields,
           partPayment,
           financeAmount,
           productType,
@@ -3109,11 +3152,11 @@ export class ScoringService {
       const finance = await this.calculateFinanceByProduct({
         productType: scored.productType!,
         tenor: scored.tenure as Tenor | MonthlyFlexTenor,
-        purchaseAmount,
+        purchaseAmount: effectivePurchaseAmount,
         partPayment,
         spendingCapacity: scored.availableSpendingPower,
         ...(productConfiguration && {
-          rate: productConfiguration.rate,
+          rate: rateForCalc ?? productConfiguration.rate,
           minSp: productConfiguration.minimumFinance,
           maxSp: productConfiguration.maximumFinance,
         }),
@@ -3121,6 +3164,7 @@ export class ScoringService {
 
       products.push({
         ...finance,
+        ...purchaseAmountFields,
         ...productDetails,
         productType: scored.productType as FinancingProductType,
       });
@@ -3128,9 +3172,11 @@ export class ScoringService {
 
     return {
       buyerId,
-      purchaseAmount,
+      ...purchaseAmountFields,
       partPayment,
       parameters: score.parameters,
+      promotionalCode: promotionalCode?.trim() || null,
+      promotionalOptions: promotionalOptions ?? null,
       products,
     };
   }
@@ -3205,9 +3251,8 @@ export class ScoringService {
   async buyerFinanceQuoteForProduct(
     input: BuyerProductFinanceQuoteInput
   ): Promise<BuyerProductFinanceQuoteResult> {
-    const { buyerId, productType, tenure, purchaseAmount } = input;
+    const { buyerId, productType, tenure, purchaseAmount, promotionalCode, merchantId } = input;
     const partPayment = input.partPayment ?? 0;
-
     if (!buyerId) {
       throw new Error("buyerId is required");
     }
@@ -3220,21 +3265,38 @@ export class ScoringService {
     if (partPayment > purchaseAmount) {
       throw new Error("partPayment cannot be greater than purchaseAmount");
     }
-    //
-    const discountPurchaseAmount =
-      input?.promotionalOptions?.discountPurchaseAmount ||
-      (input?.promotionalOptions?.discountPurchasePercentage || 0) *
-        purchaseAmount *
-        input?.purchaseAmount ||
-      0;
 
-    //
-    const financeAmount = purchaseAmount - partPayment;
+    const promotionalOptions = await this.resolvePromotionalOptions({
+      promotionalCode,
+      merchantId,
+      buyerId,
+      purchaseAmount,
+      promotionalOptions: input.promotionalOptions,
+    });
+    const effectivePurchaseAmount = this.applyPurchaseDiscount(purchaseAmount, promotionalOptions);
+    const purchaseAmountFields = this.purchaseAmountResponseFields(
+      purchaseAmount,
+      effectivePurchaseAmount
+    );
+    if (partPayment > effectivePurchaseAmount) {
+      throw new Error("partPayment cannot be greater than the discounted purchase amount");
+    }
+
+    const financeAmount = effectivePurchaseAmount - partPayment;
     const scored = await this.buyerScoreForProduct(buyerId, productType, tenure);
     const parameters = PLACEHOLDER_BUYER_SCORE_PARAMETERS;
 
     const productConfiguration =
       await productConfigurationService.getProductConfigurationByTypeAndTenure(productType, tenure);
+
+    const promotionalRate = this.financeChargeDiscountForProduct(
+      productType,
+      tenure,
+      promotionalOptions
+    );
+    const baseRate = productConfiguration?.rate;
+    const rateFields = this.productRateResponseFields(baseRate, promotionalRate);
+    const rateForCalc = rateFields.promotionalProductRate ?? rateFields.productRate;
 
     const productDetails = {
       productConfigurationId: scored.productConfigurationId,
@@ -3244,14 +3306,14 @@ export class ScoringService {
       availableSpendingPower: scored.availableSpendingPower,
       spendingPowerStatus: scored.status,
       spendingPowerMessage: scored.message,
-      productRate: productConfiguration?.rate,
+      ...rateFields,
     };
 
     if (scored.status === "failed") {
       const availabilityFields = this.buildFinanceAvailability({
         productType,
         tenor: tenure,
-        purchaseAmount,
+        purchaseAmount: effectivePurchaseAmount,
         financeAmount,
         minSp: scored.productMini,
         spendingCapacity: scored.availableSpendingPower,
@@ -3264,12 +3326,14 @@ export class ScoringService {
         buyerId,
         productType,
         tenure,
-        purchaseAmount,
+        ...purchaseAmountFields,
         partPayment,
         parameters,
+        promotionalCode: promotionalCode?.trim() || null,
+        promotionalOptions: promotionalOptions ?? null,
         product: {
           status: "failed",
-          purchaseAmount,
+          ...purchaseAmountFields,
           partPayment,
           financeAmount,
           productType,
@@ -3283,11 +3347,11 @@ export class ScoringService {
     const finance = await this.calculateFinanceByProduct({
       productType,
       tenor: tenure as Tenor | MonthlyFlexTenor,
-      purchaseAmount,
+      purchaseAmount: effectivePurchaseAmount,
       partPayment,
       spendingCapacity: scored.availableSpendingPower,
       ...(productConfiguration && {
-        rate: productConfiguration.rate,
+        rate: rateForCalc ?? productConfiguration.rate,
         minSp: productConfiguration.minimumFinance,
         maxSp: productConfiguration.maximumFinance,
       }),
@@ -3297,12 +3361,113 @@ export class ScoringService {
       buyerId,
       productType,
       tenure,
-      purchaseAmount,
+      ...purchaseAmountFields,
       partPayment,
       parameters,
-      product: { ...finance, ...productDetails, productType: productType as FinancingProductType },
+      promotionalCode: promotionalCode?.trim() || null,
+      promotionalOptions: promotionalOptions ?? null,
+      product: {
+        ...finance,
+        ...purchaseAmountFields,
+        ...productDetails,
+        productType: productType as FinancingProductType,
+      },
     };
   }
+
+  private async resolvePromotionalOptions(input: {
+    promotionalCode?: string;
+    merchantId?: string;
+    buyerId: string;
+    purchaseAmount: number;
+    promotionalOptions?: PromotionalOptions;
+  }): Promise<PromotionalOptions | undefined> {
+    const code = input.promotionalCode?.trim();
+    if (!code) {
+      return input.promotionalOptions;
+    }
+
+    if (input.merchantId?.trim()) {
+      const validated = await campaignService.validateCode({
+        campaignCode: code,
+        merchantId: input.merchantId.trim(),
+        purchaseAmount: input.purchaseAmount,
+        buyerId: input.buyerId,
+      });
+      if (!validated.valid) {
+        throw new Error(validated.reason || "Promotional code is not valid for this purchase");
+      }
+    }
+
+    const fromCode = await campaignService.getPromotionalOptions(code);
+    return {
+      ...fromCode,
+      ...input.promotionalOptions,
+    };
+  }
+
+  private applyPurchaseDiscount(
+    purchaseAmount: number,
+    promotionalOptions?: PromotionalOptions | null
+  ): number {
+    if (!promotionalOptions) return purchaseAmount;
+    const fixed = Number(promotionalOptions.discountPurchaseAmount ?? 0);
+    const pct = Number(promotionalOptions.discountPurchasePercentage ?? 0);
+    const discount = fixed > 0 ? fixed : pct > 0 ? purchaseAmount * (pct / 100) : 0;
+    return Math.max(0, purchaseAmount - discount);
+  }
+
+  /** Keep original purchaseAmount; expose discounted amount only when it differs. */
+  private purchaseAmountResponseFields(
+    originalPurchaseAmount: number,
+    effectivePurchaseAmount: number
+  ): { purchaseAmount: number; discountedPurchaseAmount?: number } {
+    if (effectivePurchaseAmount === originalPurchaseAmount) {
+      return { purchaseAmount: originalPurchaseAmount };
+    }
+    return {
+      purchaseAmount: originalPurchaseAmount,
+      discountedPurchaseAmount: effectivePurchaseAmount,
+    };
+  }
+
+  /** Keep original productRate; expose promotionalProductRate when a promo rate applies. */
+  private productRateResponseFields(
+    originalRate: number | null | undefined,
+    promotionalRate: number | null | undefined
+  ): { productRate?: number; promotionalProductRate?: number } {
+    const fields: { productRate?: number; promotionalProductRate?: number } = {};
+    if (originalRate != null && Number.isFinite(originalRate)) {
+      fields.productRate = originalRate;
+    }
+    if (
+      promotionalRate != null &&
+      Number.isFinite(promotionalRate) &&
+      promotionalRate !== originalRate
+    ) {
+      fields.promotionalProductRate = Math.max(0, promotionalRate);
+    }
+    return fields;
+  }
+
+  private financeChargeDiscountForProduct(
+    productType: FinancingProductType,
+    tenure: number,
+    promotionalOptions?: PromotionalOptions | null
+  ): number | null {
+    if (!promotionalOptions) return null;
+    if (productType === "BI_WEEKLY" && tenure === 4) {
+      return promotionalOptions.payIn4 ?? null;
+    }
+    if (productType === "BI_WEEKLY" && tenure === 6) {
+      return promotionalOptions.payIn6 ?? null;
+    }
+    if (productType === "MONTHLY_FLEX") {
+      return promotionalOptions.monthlyFlex ?? null;
+    }
+    return null;
+  }
+
   nextSchedule(rate: number, openingBalance: number, monthlyRepayment: number) {
     const interest = openingBalance * rate * 0.01;
     const calculatedPrincipal = monthlyRepayment - interest;

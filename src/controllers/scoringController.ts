@@ -51,6 +51,13 @@ import {
  *                 type: number
  *                 description: Optional; defaults to 0 and is added to the first installment
  *                 example: 2300
+ *               promotionalCode:
+ *                 type: string
+ *                 description: Optional campaign code; resolves purchase/finance-charge discounts for the quote
+ *                 example: "CMP-ABC123"
+ *               merchantId:
+ *                 type: string
+ *                 description: Required with promotionalCode when campaign eligibility should be validated for a merchant
  *     responses:
  *       200:
  *         description: Purchase quoted against all products
@@ -70,6 +77,12 @@ import {
  *                       type: number
  *                     partPayment:
  *                       type: number
+ *                     promotionalCode:
+ *                       type: string
+ *                       nullable: true
+ *                     promotionalOptions:
+ *                       type: object
+ *                       nullable: true
  *                     parameters:
  *                       type: object
  *                       description: The affordability metrics the spending power was derived from
@@ -181,6 +194,13 @@ import {
  *                 type: number
  *                 description: Optional upfront payment; defaults to 0
  *                 example: 200
+ *               promotionalCode:
+ *                 type: string
+ *                 description: Optional campaign code; resolves purchase/finance-charge discounts for the quote
+ *                 example: "CMP-ABC123"
+ *               merchantId:
+ *                 type: string
+ *                 description: Required with promotionalCode when campaign eligibility should be validated for a merchant
  *     responses:
  *       200:
  *         description: Purchase quoted against the selected product
@@ -207,6 +227,12 @@ import {
  *                       type: number
  *                     partPayment:
  *                       type: number
+ *                     promotionalCode:
+ *                       type: string
+ *                       nullable: true
+ *                     promotionalOptions:
+ *                       type: object
+ *                       nullable: true
  *                     parameters:
  *                       type: object
  *                       description: The affordability metrics the spending power was derived from
@@ -3119,7 +3145,7 @@ export class ScoringController {
 
   async buyerFinanceQuote(req: Request, res: Response) {
     try {
-      const { buyerId, purchaseAmount, partPayment } = req.body ?? {};
+      const { buyerId, purchaseAmount, partPayment, promotionalCode, merchantId } = req.body ?? {};
 
       if (typeof buyerId !== "string" || !buyerId.trim()) {
         return res.status(400).json({
@@ -3156,10 +3182,31 @@ export class ScoringController {
         });
       }
 
+      if (
+        promotionalCode !== undefined &&
+        promotionalCode !== null &&
+        typeof promotionalCode !== "string"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "promotionalCode must be a string when provided",
+        });
+      }
+
+      if (merchantId !== undefined && merchantId !== null && typeof merchantId !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "merchantId must be a string when provided",
+        });
+      }
+
       const result = await scoreService.buyerFinanceQuote({
         buyerId: buyerId.trim(),
         purchaseAmount,
         ...(partPayment !== undefined && { partPayment }),
+        ...(typeof promotionalCode === "string" &&
+          promotionalCode.trim() && { promotionalCode: promotionalCode.trim() }),
+        ...(typeof merchantId === "string" && merchantId.trim() && { merchantId: merchantId.trim() }),
       });
 
       return res.status(200).json({
@@ -3169,16 +3216,27 @@ export class ScoringController {
       });
     } catch (error: any) {
       console.error("Error quoting buyer finance:", error);
-      return res.status(500).json({
+      const message = error.message || "Failed to quote buyer finance";
+      const status =
+        /not found|must be|required|greater than|not valid|promotional/i.test(message) ? 400 : 500;
+      return res.status(status).json({
         success: false,
-        message: error.message || "Failed to quote buyer finance",
+        message,
       });
     }
   }
 
   async buyerFinanceQuoteForProduct(req: Request, res: Response) {
     try {
-      const { buyerId, tenure, productType, purchaseAmount, partPayment } = req.body ?? {};
+      const {
+        buyerId,
+        tenure,
+        productType,
+        purchaseAmount,
+        partPayment,
+        promotionalCode,
+        merchantId,
+      } = req.body ?? {};
 
       if (typeof buyerId !== "string" || !buyerId.trim()) {
         return res.status(400).json({
@@ -3251,12 +3309,33 @@ export class ScoringController {
         });
       }
 
+      if (
+        promotionalCode !== undefined &&
+        promotionalCode !== null &&
+        typeof promotionalCode !== "string"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "promotionalCode must be a string when provided",
+        });
+      }
+
+      if (merchantId !== undefined && merchantId !== null && typeof merchantId !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "merchantId must be a string when provided",
+        });
+      }
+
       const result = await scoreService.buyerFinanceQuoteForProduct({
         buyerId: buyerId.trim(),
         productType: normalisedProductType,
         tenure,
         purchaseAmount,
         ...(partPayment !== undefined && { partPayment }),
+        ...(typeof promotionalCode === "string" &&
+          promotionalCode.trim() && { promotionalCode: promotionalCode.trim() }),
+        ...(typeof merchantId === "string" && merchantId.trim() && { merchantId: merchantId.trim() }),
       });
 
       return res.status(200).json({
@@ -3268,7 +3347,9 @@ export class ScoringController {
       console.error("Error quoting buyer finance for product:", error);
       const message = error.message || "Failed to quote buyer finance for product";
       const status =
-        /not found|must be|required|greater than/i.test(message) ? 400 : 500;
+        /not found|must be|required|greater than|not valid|promotional|discounted/i.test(message)
+          ? 400
+          : 500;
       return res.status(status).json({
         success: false,
         message,
