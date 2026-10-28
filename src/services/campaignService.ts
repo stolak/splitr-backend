@@ -457,6 +457,9 @@ function mapMoneyFields<
 }
 
 type CampaignRecordForMap = {
+  campaignCode: string;
+  startDate: Date;
+  endDate: Date;
   purchaseDiscountAmount: Prisma.Decimal | null;
   purchaseDiscountPercentage: Prisma.Decimal | null;
   minPurchase: Prisma.Decimal | null;

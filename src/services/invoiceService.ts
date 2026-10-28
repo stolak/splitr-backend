@@ -32,6 +32,7 @@ import { paystackMerchantTransferRecipientService } from "./paystackMerchantTran
 import { paystackTransferService } from "./paystackTransferService";
 import { paystackService } from "./paystackService";
 import { scoreService } from "./scoringService";
+import { campaignService } from "./campaignService";
 import { roundUpTo2Decimals } from "../utils/helper";
 import { stripeService } from "./stripeService";
 export const FIRST_INSTALLMENT_NOW = process.env.FIRST_INSTALLMENT_NOW === "true";
@@ -97,6 +98,7 @@ export interface CreateInvoiceInput {
   items: CreateItemInput[];
   status?: InvoiceStatus;
   type?: InvoiceType;
+  promotionalCode?: string | null;
   virtualInvoiceExtra?: VirtualInvoiceExtraInput | null;
 }
 
@@ -114,6 +116,7 @@ export interface UpdateInvoiceInput {
   status?: InvoiceStatus;
   type?: InvoiceType;
   items?: UpdateItemInput[];
+  promotionalCode?: string | null;
   returnStatus?: LoanReturnStatus;
   returnReference?: string;
   returnReason?: string;
@@ -176,6 +179,10 @@ const invoiceSelect = {
   returnInitiatedBy: true,
   returnApprovedBy: true,
   returnApprovedDate: true,
+  promotionalCode: true,
+  promotionalAmount: true,
+  promotionalStartDate: true,
+  promotionalEndDate: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -235,6 +242,69 @@ function optionalNullableDate(value: Date | string | null | undefined, field: st
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) throw new Error(`${field} must be a valid date`);
   return date;
+}
+
+/**
+ * Validate campaignCode against Campaign rules, then map fields onto Invoice.promotional*.
+ * Empty/null clears promotional fields. Undefined means leave unchanged (updates).
+ */
+async function resolveInvoicePromotionalFields(input: {
+  promotionalCode?: string | null;
+  merchantId: string;
+  purchaseAmount: number;
+  buyerId?: string | null;
+  email?: string | null;
+}): Promise<
+  | undefined
+  | {
+      promotionalCode: string | null;
+      promotionalAmount: number | null;
+      promotionalStartDate: Date | null;
+      promotionalEndDate: Date | null;
+    }
+> {
+  if (input.promotionalCode === undefined) return undefined;
+
+  const code =
+    input.promotionalCode === null ? "" : String(input.promotionalCode).trim().toUpperCase();
+  if (!code) {
+    return {
+      promotionalCode: null,
+      promotionalAmount: null,
+      promotionalStartDate: null,
+      promotionalEndDate: null,
+    };
+  }
+
+  if (!input.buyerId && !input.email) {
+    throw new Error("buyerId or customer email is required to validate a promotional code");
+  }
+
+  const validated = await campaignService.validateCode({
+    campaignCode: code,
+    merchantId: input.merchantId,
+    purchaseAmount: input.purchaseAmount,
+    buyerId: input.buyerId,
+    email: input.email,
+  });
+
+  if (!validated.valid) {
+    throw new Error(validated.reason || "Campaign code is not valid for this invoice");
+  }
+
+  const campaign = validated.campaign;
+  const promotionalAmount =
+    campaign.purchaseDiscountAmount != null &&
+    Number.isFinite(Number(campaign.purchaseDiscountAmount))
+      ? Number(campaign.purchaseDiscountAmount)
+      : null;
+
+  return {
+    promotionalCode: campaign.campaignCode || code,
+    promotionalAmount,
+    promotionalStartDate: campaign.startDate ? new Date(campaign.startDate) : null,
+    promotionalEndDate: campaign.endDate ? new Date(campaign.endDate) : null,
+  };
 }
 
 function buildVirtualInvoiceExtraData(input: VirtualInvoiceExtraInput) {
@@ -395,6 +465,15 @@ export class InvoiceService {
               0
             )
           : input.amount;
+
+      const promotionalFields = await resolveInvoicePromotionalFields({
+        promotionalCode: input.promotionalCode,
+        merchantId,
+        purchaseAmount: amount,
+        buyerId: input.buyerId,
+        email: customerEmail,
+      });
+
       // Create invoice with items
       const invoice = await prisma.invoice.create({
         data: {
@@ -412,6 +491,7 @@ export class InvoiceService {
           ...(provinceCode ? { provinceCode } : {}),
           status: input.status || InvoiceStatus.Pending,
           type: input.type || InvoiceType.Purchase,
+          ...(promotionalFields ?? {}),
           items: {
             create: input.items.map((item) => ({
               description: item.description,
@@ -1181,6 +1261,34 @@ export class InvoiceService {
       }
       if (input.status !== undefined) updateData.status = input.status;
       if (input.type !== undefined) updateData.type = input.type;
+
+      if (input.promotionalCode !== undefined) {
+        if (existingInvoice.status === InvoiceStatus.Paid) {
+          throw new Error("Promotional code cannot be changed on a paid invoice");
+        }
+        if (!existingInvoice.merchantId) {
+          throw new Error("Invoice merchant is required to validate a promotional code");
+        }
+        const purchaseAmount =
+          input.amount !== undefined
+            ? Number(input.amount)
+            : input.items && input.items.length > 0
+              ? input.items.reduce((acc, item) => {
+                  const lineAmount = Number(item.amount ?? 0);
+                  const qty = Number(item.quantity ?? 0);
+                  return acc + lineAmount * qty;
+                }, 0)
+              : Number(existingInvoice.amount);
+        const promotionalFields = await resolveInvoicePromotionalFields({
+          promotionalCode: input.promotionalCode,
+          merchantId: existingInvoice.merchantId,
+          purchaseAmount,
+          buyerId: input.buyerId ?? existingInvoice.buyerId,
+          email: input.customerEmail ?? existingInvoice.customerEmail,
+        });
+        if (promotionalFields) Object.assign(updateData, promotionalFields);
+      }
+
       if (input.returnStatus !== undefined) updateData.returnStatus = input.returnStatus;
       if (input.returnReference !== undefined) updateData.returnReference = input.returnReference;
       if (input.returnReason !== undefined) updateData.returnReason = input.returnReason;
@@ -2474,6 +2582,7 @@ export class InvoiceService {
     downPaymentAmount: number,
     buyerId: string
   ) {
+    console.log("idcccccccc33333333333333", id);
     const installmentType =
       productType === ProductType.MONTHLY_FLEX
         ? LoanInstallmentType.Monthly
@@ -2623,6 +2732,7 @@ export class InvoiceService {
     loanAmount: number,
     buyerId: string
   ) {
+    console.log("invoiceccccccccccvdr");
     const buyer = await prisma.buyer.findUnique({
       where: { id: buyerId },
     });
