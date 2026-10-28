@@ -2582,7 +2582,6 @@ export class InvoiceService {
     downPaymentAmount: number,
     buyerId: string
   ) {
-    console.log("idcccccccc33333333333333", id);
     const installmentType =
       productType === ProductType.MONTHLY_FLEX
         ? LoanInstallmentType.Monthly
@@ -2600,8 +2599,11 @@ export class InvoiceService {
         amount: true,
         merchantId: true,
         customerPhoneNumber: true,
+        customerEmail: true,
         status: true,
         type: true,
+        promotionalCode: true,
+        promotionalAmount: true,
         virtualInvoiceExtra: {
           select: { invoiceAmount: true },
         },
@@ -2613,7 +2615,10 @@ export class InvoiceService {
 
     // Todo verify the payment was successful
 
-    const updateData = {
+    const originalPurchaseAmount = Number(invoice.amount);
+    const promotionalCode = invoice.promotionalCode?.trim() || undefined;
+
+    const updateData: Record<string, unknown> = {
       status: InvoiceStatus.Paid,
       paymentDate: new Date(),
       fulfillStatus: FulfillStatus.AwaitingFulfillment,
@@ -2626,16 +2631,34 @@ export class InvoiceService {
       installmentType: installmentType,
     };
 
-    // Verify the buyer qualifies based on spending power and finance for the chosen product
-    const buyerFinanceQuote = await scoreService.buyerFinanceQuoteForProduct({
-      buyerId,
-      productType,
-      tenure: loanTenure,
-      purchaseAmount: Number(invoice.amount),
-      partPayment: downPaymentAmount,
-    });
+    // Verify the buyer qualifies based on spending power and finance for the chosen product.
+    // Optional invoice.promotionalCode is applied when present (purchase discount / promo rate).
+    let buyerFinanceQuote: Awaited<
+      ReturnType<typeof scoreService.buyerFinanceQuoteForProduct>
+    >;
+    try {
+      buyerFinanceQuote = await scoreService.buyerFinanceQuoteForProduct({
+        buyerId,
+        productType,
+        tenure: loanTenure,
+        purchaseAmount: originalPurchaseAmount,
+        partPayment: downPaymentAmount,
+        ...(promotionalCode && {
+          promotionalCode,
+          ...(invoice.merchantId ? { merchantId: invoice.merchantId } : {}),
+        }),
+      });
+    } catch (error: any) {
+      return {
+        success: false,
+        message:
+          error?.message ||
+          (promotionalCode
+            ? "Promotional code could not be applied for this purchase"
+            : "Could not quote finance for this purchase"),
+      };
+    }
     if (buyerFinanceQuote.product.status === "failed") {
-      // return failed response
       return {
         success: false,
         message: buyerFinanceQuote.product.message,
@@ -2648,6 +2671,28 @@ export class InvoiceService {
     if (product.status === "failed") {
       throw new Error(product.message);
     }
+
+    const effectivePurchaseAmount =
+      product.discountedPurchaseAmount != null &&
+      Number.isFinite(product.discountedPurchaseAmount)
+        ? Number(product.discountedPurchaseAmount)
+        : Number(product.purchaseAmount ?? originalPurchaseAmount);
+    const loanInterestRate =
+      product.promotionalProductRate != null && Number.isFinite(product.promotionalProductRate)
+        ? Number(product.promotionalProductRate)
+        : (product.productRate ?? Number(INTERST_RATE));
+
+    // Persist promo savings on the invoice when a purchase discount was applied
+    if (
+      promotionalCode &&
+      effectivePurchaseAmount < originalPurchaseAmount &&
+      invoice.promotionalAmount == null
+    ) {
+      updateData.promotionalAmount = roundUpTo2Decimals(
+        originalPurchaseAmount - effectivePurchaseAmount
+      );
+    }
+
     const updatedInvoice = await prisma.invoice.update({
       where: { id: id },
       data: updateData,
@@ -2669,9 +2714,9 @@ export class InvoiceService {
       loanStartDate: new Date(),
       loanStatus: LoanStatus.Active,
       loanType: LoanType.Personal,
-      loanInterestRate: product.productRate ?? Number(INTERST_RATE),
+      loanInterestRate: loanInterestRate,
       loanPurpose: "Loan",
-      purchaseAmount: Number(invoice.amount),
+      purchaseAmount: effectivePurchaseAmount,
       downPaymentAmount: downPaymentAmount,
       merchantId: invoice.merchantId ?? undefined,
       referenceNumber: referenceId,
